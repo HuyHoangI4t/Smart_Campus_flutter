@@ -1,0 +1,507 @@
+/* ==========================================================================
+   Admin Portal Stylesheet - Truong Dai Hoc Tay Nguyen
+   SaaS Modern Dashboard Template Style (Apex / Adminto / Sneat Aesthetic)
+   ========================================================================== */
+
+:root {
+  --brand-50: #EFF6FF;
+  --brand-100: #DBEAFE;
+  --brand-200: #BFDBFE;
+  --brand-500: #3B82F6;
+  --brand-600: #2563EB;
+  --brand-700: #1D4ED8;
+  --brand-800: #1E40AF;
+  --brand-900: #1E3A8A;
+  
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 76px;
+  --topbar-height: 70px;
+  --bg-main: #F4F7FC;
+}
+
+html {
+  zoom: 80%;
+}
+
+html.zoom-80 {
+  zoom: 80%;
+}
+
+html.zoom-90 {
+  zoom: 90%;
+}
+
+html.zoom-100 {
+  zoom: 100%;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-main);
+  color: #1E293B;
+}
+
+/* ==========================================================================
+   LAYOUT CONTAINERS (Vertical & Detached Sidebar)
+   ========================================================================== */
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--bg-main);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* 1. Standard Vertical Sidebar */
+.app-sidebar {
+  width: var(--sidebar-width);
+  background: #FFFFFF;
+  border-right: 1px solid #E2E8F0;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 2. Detached Sidebar Mode */
+.app-layout.mode-detached {
+  padding: 1rem;
+  gap: 1rem;
+}
+
+.app-layout.mode-detached .app-sidebar {
+  top: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  height: calc(100vh - 2rem);
+  border-radius: 1.5rem;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
+}
+
+.app-layout.mode-detached .app-main-content {
+  margin-left: calc(var(--sidebar-width) + 1rem);
+}
+
+.app-layout.mode-detached .app-topbar {
+  margin-bottom: 1rem;
+  border-radius: 1.25rem;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 15px -3px rgba(15, 23, 42, 0.04);
+}
+
+/* Main Content Area */
+.app-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: var(--sidebar-width);
+  min-width: 0;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Mobile Sidebar Drawer */
+@media (max-width: 1024px) {
+  .app-sidebar {
+    transform: translateX(-100%);
+  }
+  .app-sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  }
+  .app-main-content {
+    margin-left: 0 !important;
+  }
+  .app-layout.mode-detached {
+    padding: 0.5rem;
+  }
+}
+
+/* Overlay for Mobile Drawer */
+#mobileSidebarOverlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 45;
+  transition: opacity 0.2s;
+}
+
+/* ==========================================================================
+   SIDEBAR NAVIGATION ELEMENTS
+   ========================================================================== */
+
+.nav-section-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94A3B8;
+  padding: 0.75rem 1rem 0.35rem 1rem;
+}
+
+.nav-link-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #64748B;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+  border: 1px solid transparent;
+}
+
+.nav-link-btn:hover {
+  background-color: #F8FAFC;
+  color: #1E293B;
+}
+
+.nav-link-btn.active {
+  background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+  color: #FFFFFF !important;
+  box-shadow: 0 8px 16px -4px rgba(37, 99, 235, 0.3);
+}
+
+.nav-link-btn.active svg {
+  color: #FFFFFF !important;
+}
+
+.nav-link-btn.active .nav-badge-count {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  color: #FFFFFF !important;
+}
+
+/* ==========================================================================
+   TOPBAR
+   ========================================================================== */
+
+.app-topbar {
+  height: var(--topbar-height);
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+/* ==========================================================================
+   KPI CARDS WITH RING INDICATOR (Matching Apex Template)
+   ========================================================================== */
+
+.kpi-card {
+  background: #FFFFFF;
+  border-radius: 1.25rem;
+  border: 1px solid #E2E8F0;
+  padding: 1.25rem;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.02);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -5px rgba(15, 23, 42, 0.06);
+  border-color: #CBD5E1;
+}
+
+.kpi-ring {
+  width: 44px;
+  height: 44px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==========================================================================
+   DATA TABLES & BADGES
+   ========================================================================== */
+
+.admin-table th {
+  letter-spacing: 0.05em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748B;
+  background-color: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 0.85rem 1rem;
+}
+
+.admin-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #F1F5F9;
+  font-size: 0.84rem;
+  vertical-align: middle;
+}
+
+.admin-table tr:hover td {
+  background-color: #F8FAFC;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-student {
+  background-color: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #DBEAFE;
+}
+
+.badge-admin {
+  background-color: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+
+.badge-sos-active {
+  background-color: #FEE2E2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
+}
+
+.badge-sos-resolved {
+  background-color: #ECFDF5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+/* ==========================================================================
+   SCROLLBAR & UTILITIES
+   ========================================================================== */
+
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.sos-pulse {
+  animation: pulseRed 2s infinite;
+}
+
+/* Toast Container */
+#toastContainer {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 380px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  border-radius: 1rem;
+  background: #FFFFFF;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #E2E8F0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-overlay {
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ==========================================================================
+   DEDICATED FULL-SCREEN APEX/SAAS LOGIN VIEW
+   ========================================================================== */
+
+#loginView {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0B1120;
+  background: radial-gradient(circle at 15% 20%, rgba(30, 58, 138, 0.45) 0%, transparent 45%),
+              radial-gradient(circle at 85% 80%, rgba(37, 99, 235, 0.35) 0%, transparent 45%),
+              radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.95) 0%, #060913 100%);
+}
+
+#loginView.hidden {
+  display: none !important;
+}
+
+body:has(#loginView:not(.hidden)) {
+  overflow: hidden !important;
+  background-color: #0B1120 !important;
+}
+
+.login-glass-card {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.login-hero-glow {
+  position: absolute;
+  filter: blur(60px);
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* ==========================================================================
+   SOS REALTIME BEACON MARKER (Hiệu ứng chớp đỏ khẩn cấp trong khuôn viên)
+   ========================================================================== */
+
+@keyframes sosBeaconPulse {
+  0% {
+    transform: scale(0.65);
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes sosBeaconFlash {
+  0%, 100% {
+    transform: scale(1);
+    background-color: #DC2626;
+    box-shadow: 0 0 10px 3px rgba(220, 38, 38, 0.85);
+  }
+  50% {
+    transform: scale(1.22);
+    background-color: #EF4444;
+    box-shadow: 0 0 22px 8px rgba(239, 68, 68, 1);
+  }
+}
+
+.sos-custom-leaflet-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.sos-beacon-wrapper {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.sos-beacon-ring {
+  position: absolute;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: rgba(239, 68, 68, 0.35);
+  border: 2px solid #EF4444;
+  animation: sosBeaconPulse 1.4s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+  pointer-events: none;
+}
+
+.sos-beacon-ring.delayed {
+  animation-delay: 0.7s;
+}
+
+.sos-beacon-core {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: #DC2626;
+  border: 2.5px solid #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  box-shadow: 0 0 15px rgba(220, 38, 38, 0.9);
+  animation: sosBeaconFlash 1s ease-in-out infinite;
+  z-index: 5;
+}
+
+.sos-beacon-label {
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #DC2626;
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  border: 1.5px solid #FFFFFF;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+
