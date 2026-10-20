@@ -11,6 +11,7 @@ import '../../../core/utils/dijkstra.dart';
 
 class MapState {
   final List<CampusLocationItem> locations;
+  final List<CampusGate> gates;
   final String selectedCategory;
   final String searchQuery;
   final CampusLocationItem? selectedLocation;
@@ -22,6 +23,7 @@ class MapState {
 
   const MapState({
     this.locations = CampusConstants.campusLocations,
+    this.gates = CampusConstants.gates,
     this.selectedCategory = 'Tất cả',
     this.searchQuery = '',
     this.selectedLocation,
@@ -45,6 +47,7 @@ class MapState {
 
   MapState copyWith({
     List<CampusLocationItem>? locations,
+    List<CampusGate>? gates,
     String? selectedCategory,
     String? searchQuery,
     CampusLocationItem? selectedLocation,
@@ -56,6 +59,7 @@ class MapState {
   }) {
     return MapState(
       locations: locations ?? this.locations,
+      gates: gates ?? this.gates,
       selectedCategory: selectedCategory ?? this.selectedCategory,
       searchQuery: searchQuery ?? this.searchQuery,
       selectedLocation: selectedLocation ?? this.selectedLocation,
@@ -125,8 +129,8 @@ class MapNotifier extends Notifier<MapState> {
   }
 
   Future<void> fetchLocationsFromBackend() async {
+    final dio = ref.read(dioProvider);
     try {
-      final dio = ref.read(dioProvider);
       final response = await dio.get(ApiEndpoints.campusLocations);
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
@@ -146,6 +150,25 @@ class MapNotifier extends Notifier<MapState> {
         print('Backend fetch locations fallback to offline constants: $e');
       }
     }
+
+    try {
+      final gatesResponse = await dio.get(ApiEndpoints.campusGates);
+      if (gatesResponse.statusCode == 200 && gatesResponse.data != null) {
+        final gData = gatesResponse.data;
+        final rawGates = (gData is Map<String, dynamic>)
+            ? (gData['gates'] ?? gData['data'])
+            : null;
+        if (rawGates is List && rawGates.isNotEmpty) {
+          final parsedGates = rawGates
+              .map((g) => CampusGate.fromJson(g as Map<String, dynamic>))
+              .where((g) => g.lat != 0.0 && g.lng != 0.0)
+              .toList();
+          if (parsedGates.isNotEmpty) {
+            state = state.copyWith(gates: parsedGates);
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   void selectCategory(String category) {

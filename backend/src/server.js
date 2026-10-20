@@ -219,10 +219,17 @@ async function startServer() {
 
   server.listen(PORT, '0.0.0.0', () => {
     const localIP = getLocalIPv4();
-    console.log(`🚀 LTDDDNT Backend server đang chạy tại cổng ${PORT} (0.0.0.0)`);
-    console.log(`📱 Expo Go / Mobile API: http://${localIP}:${PORT}/api`);
-    console.log(`📄 Swagger UI sẵn sàng tại http://localhost:${PORT}/api-docs`);
-    console.log(`⚡ [Socket.IO] Realtime Engine sẵn sàng tại ws://${localIP}:${PORT}`);
+    const dbName = process.env.DB_NAME || 'flutter_campus';
+    console.log('\n' + '='.repeat(64));
+    console.log(' 🎓 SMART CAMPUS TTN - BACKEND SERVER (ĐH TÂY NGUYÊN)');
+    console.log('='.repeat(64));
+    console.log(` 🚀 Cổng dịch vụ (Port)   : ${PORT} (0.0.0.0)`);
+    console.log(` 📱 Flutter Mobile API    : http://${localIP}:${PORT}/api`);
+    console.log(` 💻 Localhost API         : http://localhost:${PORT}/api`);
+    console.log(` 📄 Swagger API Docs      : http://localhost:${PORT}/api-docs`);
+    console.log(` ⚡ Socket.IO Realtime    : ws://${localIP}:${PORT}`);
+    console.log(` 🗄️  MySQL Database        : ${dbName}`);
+    console.log('='.repeat(64) + '\n');
     
     // Khởi động tiến trình đồng bộ dữ liệu tự động 3 lần/ngày
     cronService.startCronJobs();

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const studentController = require('../controllers/studentController');
+const campusController = require('../controllers/campusController');
 
 /**
  * @swagger
@@ -270,5 +271,8 @@ router.get('/profile/:mssv', studentController.getProfile);
  *         description: Cập nhật thành công
  */
 router.put('/profile', studentController.updateProfile);
+
+// Route alias cho frontend SOS
+router.post('/sos', campusController.submitSos);
 
 module.exports = router;

@@ -1,7 +1,10 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/api_endpoints.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/network/api_client.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -13,6 +16,7 @@ class ForgotPasswordScreen extends ConsumerStatefulWidget {
 class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   final _emailController = TextEditingController();
   bool _submitted = false;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -20,8 +24,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _handleSubmit() {
-    if (_emailController.text.trim().isEmpty) {
+  Future<void> _handleSubmit() async {
+    final input = _emailController.text.trim();
+    if (input.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Vui lòng nhập MSSV hoặc Email sinh viên'),
@@ -31,7 +36,37 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
       return;
     }
 
-    setState(() => _submitted = true);
+    setState(() => _loading = true);
+
+    try {
+      final dio = ref.read(dioProvider);
+      final response = await dio.post(
+        ApiEndpoints.forgotPassword,
+        data: {
+          'mssv': input,
+          'email': input,
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        setState(() => _submitted = true);
+      } else {
+        final msg = response.data['message'] ?? 'Không tìm thấy tài khoản sinh viên';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: AppColors.danger),
+        );
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = e.response?.data?['message'] ?? 'Lỗi kết nối máy chủ';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: AppColors.danger),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -70,8 +105,14 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: _handleSubmit,
-                  child: const Text('Gửi hướng dẫn khôi phục'),
+                  onPressed: _loading ? null : _handleSubmit,
+                  child: _loading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Gửi hướng dẫn khôi phục'),
                 ),
               ] else ...[
                 Container(

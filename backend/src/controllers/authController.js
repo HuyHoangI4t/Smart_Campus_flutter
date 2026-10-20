@@ -222,8 +222,8 @@ exports.login = async (req, res) => {
 
   try {
     const queryStr = loginKey.includes('@') 
-      ? 'SELECT id, mssv, ho_ten, email, password, role, avatar FROM users WHERE email = ? LIMIT 1' 
-      : 'SELECT id, mssv, ho_ten, email, password, role, avatar FROM users WHERE mssv = ? LIMIT 1';
+      ? 'SELECT id, mssv, ho_ten, email, password, role, avatar, so_dien_thoai, lop, khoa FROM users WHERE email = ? LIMIT 1' 
+      : 'SELECT id, mssv, ho_ten, email, password, role, avatar, so_dien_thoai, lop, khoa FROM users WHERE mssv = ? LIMIT 1';
     const [rows] = await db.query(queryStr, [loginKey]);
     
     if (rows.length === 0) {
@@ -269,11 +269,20 @@ exports.login = async (req, res) => {
       success: true,
       message: 'Đăng nhập thành công',
       user: {
+        id: user.id,
         mssv: user.mssv,
+        student_id: user.mssv,
         fullName: name,
         ho_ten: name,
         email: user.email,
         role: user.role || 'sinh_vien',
+        phone: user.so_dien_thoai || '',
+        so_dien_thoai: user.so_dien_thoai || '',
+        studentClass: user.lop || 'K23',
+        lop: user.lop || 'K23',
+        class_name: user.lop || 'K23',
+        faculty: user.khoa || 'Công nghệ Thông tin',
+        khoa: user.khoa || 'Công nghệ Thông tin',
         avatar: user.avatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
       },
       token: generateAuthToken(user.mssv, user.role || 'sinh_vien')
@@ -348,7 +357,8 @@ const getMssvFromReq = async (req) => {
 // Change Password
 exports.changePassword = async (req, res) => {
   const mssv = await getMssvFromReq(req);
-  const { currentPassword, newPassword } = req.body;
+  const currentPassword = req.body.currentPassword || req.body.old_password || req.body.oldPassword;
+  const newPassword = req.body.newPassword || req.body.new_password;
 
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ success: false, message: 'Vui lòng cung cấp mật khẩu hiện tại và mật khẩu mới.' });

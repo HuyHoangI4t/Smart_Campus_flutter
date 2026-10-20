@@ -593,14 +593,15 @@ function formatDbSchedulesResponse(dbSchedules, customItems, req, res, mssv, isD
     if (!row.is_custom) {
       const wRange = row.week_range || row.hoc_ky || "Lịch học đã lưu từ cổng đào tạo";
       if (!weekMap[wRange]) {
-        weekMap[wRange] = [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên"]];
+        weekMap[wRange] = [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]];
       }
       weekMap[wRange].push([
         row.thu || "Thứ 2",
         row.ten_hp || "Môn học",
         row.tiet || "1-4",
         row.phong || "Khu giảng đường",
-        row.giang_vien || "Giảng viên bộ môn"
+        row.giang_vien || "Giảng viên bộ môn",
+        row.ngay_hoc || null
       ]);
     }
   }

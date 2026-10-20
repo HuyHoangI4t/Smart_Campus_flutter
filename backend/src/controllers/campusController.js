@@ -32,16 +32,15 @@ exports.submitFeedback = async (req, res) => {
   const { title, content, category, rating } = req.body;
   const mssv = getMssvFromReq(req);
 
-  if (!title || typeof title !== 'string' || !title.trim()) {
-    return res.status(400).json({ success: false, message: 'Tiêu đề phản hồi là bắt buộc.' });
-  }
   if (!content || typeof content !== 'string' || !content.trim()) {
     return res.status(400).json({ success: false, message: 'Nội dung phản hồi là bắt buộc.' });
   }
 
-  const cleanTitle = title.trim().slice(0, 255);
-  const cleanContent = content.trim().slice(0, 3000);
   const cleanCat = (category && typeof category === 'string') ? category.trim().slice(0, 50) : 'Cơ sở vật chất';
+  const cleanTitle = (title && typeof title === 'string' && title.trim())
+    ? title.trim().slice(0, 255)
+    : `Ý kiến đóng góp về ${cleanCat}`;
+  const cleanContent = content.trim().slice(0, 3000);
   const cleanRating = Math.min(5, Math.max(1, parseInt(rating, 10) || 5));
 
   try {
@@ -394,5 +393,35 @@ exports.getCampusPaths = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: 'Lỗi tải mạng lưới đường nội bộ: ' + error.message });
   }
+};
+
+// Lấy danh sách các cổng ra vào khuôn viên trường
+exports.getCampusGates = (req, res) => {
+  res.json({
+    success: true,
+    gates: [
+      {
+        id: 'front_gate',
+        name: 'Cổng trước (Lê Duẩn)',
+        shortName: '(Lê Duẩn)',
+        lat: 12.651536,
+        lng: 108.023856
+      },
+      {
+        id: 'back_gate',
+        name: 'Cổng sau (Y Wang)',
+        shortName: '(Y Wang)',
+        lat: 12.648372,
+        lng: 108.028044
+      },
+      {
+        id: 'hospital_gate',
+        name: 'Cổng Bệnh viện (Yersin)',
+        shortName: 'Bệnh viện',
+        lat: 12.650645,
+        lng: 108.022990
+      }
+    ]
+  });
 };
 

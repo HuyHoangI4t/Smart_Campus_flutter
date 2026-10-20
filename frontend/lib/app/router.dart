@@ -11,6 +11,7 @@ import '../features/grades/screens/grades_detail_screen.dart';
 import '../features/grades/screens/grades_screen.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/home/screens/news_detail_screen.dart';
+import '../features/home/screens/news_screen.dart';
 import '../features/map/screens/campus_map_screen.dart';
 import '../features/profile/screens/change_password_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
@@ -140,11 +141,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const GradesDetailScreen(),
       ),
       GoRoute(
+        path: '/home/news',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const NewsScreen(),
+      ),
+      GoRoute(
+        path: '/home/news/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? state.uri.queryParameters['id'] ?? '1';
+          return NewsDetailScreen(id: id);
+        },
+      ),
+      GoRoute(
         path: '/home/news/detail',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final idStr = state.uri.queryParameters['id'] ?? '1';
-          return NewsDetailScreen(id: int.tryParse(idStr) ?? 1);
+          final id = state.uri.queryParameters['id'] ?? '1';
+          return NewsDetailScreen(id: id);
         },
       ),
     ],

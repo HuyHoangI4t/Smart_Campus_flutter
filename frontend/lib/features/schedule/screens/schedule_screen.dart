@@ -15,9 +15,6 @@ class ScheduleScreen extends ConsumerStatefulWidget {
 }
 
 class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
-  int _selectedWeekIndex = 1; // 0: Tuần này, 1: Tuần sau
-  int _selectedDayIndex = 0; // 0: Thứ 2 ... 6: CN
-
   final List<Map<String, dynamic>> _weeks = [
     {
       'label': 'Tuần này (05/10 - 11/10)',
@@ -51,6 +48,9 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   Widget build(BuildContext context) {
     final scheduleState = ref.watch(scheduleProvider);
     final items = scheduleState.filteredItems;
+    final weekSubtitle = scheduleState.weekRange.isNotEmpty
+        ? scheduleState.weekRange
+        : 'Từ ngày 19/10/2026 đến ngày 25/10/2026';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -59,11 +59,9 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           // ─── 1. NAVHEADER (Navy #132F73) ───
           NavHeader(
             title: 'Thời khóa biểu',
-            subtitle: _selectedWeekIndex == 1
-                ? 'Từ ngày 12/10/2026 đến ngày 18/10/2026'
-                : 'Từ ngày 05/10/2026 đến ngày 11/10/2026',
+            subtitle: weekSubtitle,
             rightElement: GestureDetector(
-              onTap: () => _showAddScheduleModal(context, ref),
+              onTap: () => _showAddScheduleModal(context, ref, scheduleState),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
@@ -94,13 +92,13 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           ),
 
           // ─── 2. WEEK SELECTOR BAR ───
-          _buildWeekBar(),
+          _buildWeekBar(scheduleState),
 
           // ─── 3. SUNDAY / NEXT WEEK ALERT ───
-          if (_selectedWeekIndex == 1) _buildSundayAlert(),
+          if (scheduleState.isSunday) _buildSundayAlert(),
 
           // ─── 4. DAY SELECTOR BAR ───
-          _buildDayBar(),
+          _buildDayBar(scheduleState),
 
           // ─── 5. SCHEDULE LIST CONTENT ───
           Expanded(
@@ -110,19 +108,13 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
                 children: [
-                  if (items.isEmpty)
-                    _buildEmptySchedule()
-                  else
+                  if (items.isEmpty) ...[
+                    _buildEmptySchedule(),
+                  ] else
                     for (final item in items) ...[
-                      _buildScheduleCard(context, item),
+                      _buildScheduleCard(context, item, scheduleState),
                       const SizedBox(height: 14),
                     ],
-
-                  // Default sample class if list is empty to match screenshot
-                  if (items.isEmpty) ...[
-                    _buildSampleScheduleCard(context),
-                    const SizedBox(height: 14),
-                  ],
 
                   // Information note box
                   _buildNoticeBox(),
@@ -136,7 +128,9 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   }
 
   // ─── WEEK SELECTOR BAR ───
-  Widget _buildWeekBar() {
+  Widget _buildWeekBar(ScheduleState scheduleState) {
+    final weeks = scheduleState.availableWeeks.isNotEmpty ? scheduleState.availableWeeks : _weeks;
+
     return Container(
       color: AppColors.background,
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -144,15 +138,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
-          children: List.generate(_weeks.length, (index) {
-            final w = _weeks[index];
-            final isSelected = index == _selectedWeekIndex;
+          children: List.generate(weeks.length, (index) {
+            final w = weeks[index];
+            final wIdx = w['index'] is int ? w['index'] as int : index;
+            final isSelected = wIdx == scheduleState.selectedWeekIndex;
 
             return GestureDetector(
               onTap: () {
-                setState(() {
-                  _selectedWeekIndex = index;
-                });
+                ref.read(scheduleProvider.notifier).selectWeek(wIdx);
               },
               child: Container(
                 margin: const EdgeInsets.only(right: 8),
@@ -232,9 +225,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           ),
           GestureDetector(
             onTap: () {
-              setState(() {
-                _selectedWeekIndex = 0;
-              });
+              ref.read(scheduleProvider.notifier).selectWeek(0);
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -259,7 +250,9 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   }
 
   // ─── DAY SELECTOR BAR ───
-  Widget _buildDayBar() {
+  Widget _buildDayBar(ScheduleState scheduleState) {
+    final days = scheduleState.days.isNotEmpty ? scheduleState.days : _days;
+
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -267,16 +260,16 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
-          children: List.generate(_days.length, (index) {
-            final d = _days[index];
-            final isSelected = index == _selectedDayIndex;
+          children: List.generate(days.length, (index) {
+            final d = days[index];
+            final dayName = d['day'] ?? 'Thứ 2';
+            final isSelected = dayName == scheduleState.selectedDay ||
+                scheduleState.selectedDay.contains(dayName) ||
+                (dayName == 'CN' && (scheduleState.selectedDay == 'Chủ nhật' || scheduleState.selectedDay == 'CN'));
 
             return GestureDetector(
               onTap: () {
-                setState(() {
-                  _selectedDayIndex = index;
-                });
-                ref.read(scheduleProvider.notifier).selectDay(d['day']!);
+                ref.read(scheduleProvider.notifier).selectDay(dayName);
               },
               child: Container(
                 margin: const EdgeInsets.only(right: 8),
@@ -301,7 +294,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      d['day']!,
+                      dayName,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w900,
@@ -311,7 +304,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      d['date']!,
+                      d['date'] ?? '',
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
@@ -330,204 +323,48 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     );
   }
 
-  // ─── SAMPLE SCHEDULE CARD MATCHING SCREENSHOT ───
-  Widget _buildSampleScheduleCard(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.cardBorder, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            offset: const Offset(0, 2),
-            blurRadius: 6,
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: Day Tag + Status Pill + Date + Period
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.muted,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'Thứ 2 12/10',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textForeground,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.info.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: AppColors.info.withValues(alpha: 0.3),
-                    width: 0.8,
-                  ),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.access_time, size: 10, color: AppColors.info),
-                    SizedBox(width: 3),
-                    Text(
-                      'Sắp tới',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.info,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 10, color: AppColors.primary),
-                  SizedBox(width: 3),
-                  Text(
-                    '12/10/2026',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              const Row(
-                children: [
-                  Icon(Icons.schedule, size: 12, color: AppColors.textSecondary),
-                  SizedBox(width: 4),
-                  Text(
-                    'Tiết 1-4',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Course Title
-          const Text(
-            'LS Đảng CS VN',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-              color: AppColors.textForeground,
-              letterSpacing: -0.2,
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 12),
-
-          // Bottom Row: Room + Lecturer + Navigation Button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
-                      SizedBox(width: 4),
-                      Text(
-                        '2.21 (CLC)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textForeground,
-                        ),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(Icons.info_outline, size: 12, color: AppColors.textMuted),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.person_outline, size: 14, color: AppColors.textMuted),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Đoàn Văn Kỳ',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              GestureDetector(
-                onTap: () => ScheduleRoomDirectionModal.show(
-                  context,
-                  item: const ScheduleItem(
-                    id: 1,
-                    courseName: 'LS Đảng CS VN',
-                    room: '2.21 (CLC)',
-                    dayOfWeek: 'Thứ 2',
-                    timeSlot: 'Tiết 1-4',
-                    lecturer: 'Đoàn Văn Kỳ',
-                  ),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFFBFDBFE), width: 1),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.near_me, size: 14, color: AppColors.primary),
-                      SizedBox(width: 6),
-                      Text(
-                        'Chỉ đường',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   // ─── SCHEDULE CARD FOR REAL ITEMS ───
-  Widget _buildScheduleCard(BuildContext context, ScheduleItem item) {
+  Widget _buildScheduleCard(BuildContext context, ScheduleItem item, ScheduleState scheduleState) {
+    final activeDays = scheduleState.days.isNotEmpty ? scheduleState.days : _days;
+    final dayInfo = activeDays.firstWhere(
+      (d) => item.matchesDay(d['day'] ?? ''),
+      orElse: () => activeDays.isNotEmpty ? activeDays.first : <String, String>{},
+    );
+    final dateDisplay = item.dateShort ?? dayInfo['date'] ?? '';
+    final fullDateDisplay = item.date ?? dayInfo['fullDate'] ?? (dateDisplay.isNotEmpty ? '$dateDisplay/2026' : '');
+    final dayLabel = item.dayOfWeek.contains('/') ? item.dayOfWeek : '${item.cleanDay} $dateDisplay';
+
+    final schedStatus = item.getScheduleStatus(targetDateStr: fullDateDisplay);
+    final Color statusBg;
+    final Color statusBorder;
+    final Color statusColor;
+    final IconData statusIcon;
+    final String statusText;
+
+    switch (schedStatus) {
+      case ScheduleStatus.ongoing:
+        statusBg = AppColors.success.withValues(alpha: 0.12);
+        statusBorder = AppColors.success.withValues(alpha: 0.35);
+        statusColor = AppColors.success;
+        statusIcon = Icons.radio_button_checked;
+        statusText = 'Đang diễn ra';
+        break;
+      case ScheduleStatus.completed:
+        statusBg = const Color(0xFFF1F5F9);
+        statusBorder = const Color(0xFFE2E8F0);
+        statusColor = AppColors.textSecondary;
+        statusIcon = Icons.check_circle_outline;
+        statusText = 'Đã kết thúc';
+        break;
+      case ScheduleStatus.upcoming:
+        statusBg = AppColors.info.withValues(alpha: 0.1);
+        statusBorder = AppColors.info.withValues(alpha: 0.3);
+        statusColor = AppColors.info;
+        statusIcon = Icons.access_time;
+        statusText = 'Sắp tới';
+        break;
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -554,7 +391,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  '${item.dayOfWeek} ${_days[_selectedDayIndex]['date']}',
+                  dayLabel.trim(),
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
@@ -566,24 +403,24 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.info.withValues(alpha: 0.1),
+                  color: statusBg,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: AppColors.info.withValues(alpha: 0.3),
+                    color: statusBorder,
                     width: 0.8,
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.access_time, size: 10, color: AppColors.info),
-                    SizedBox(width: 3),
+                    Icon(statusIcon, size: 10, color: statusColor),
+                    const SizedBox(width: 3),
                     Text(
-                      'Sắp tới',
+                      statusText,
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.info,
+                        color: statusColor,
                       ),
                     ),
                   ],
@@ -595,7 +432,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   const Icon(Icons.calendar_today, size: 10, color: AppColors.primary),
                   const SizedBox(width: 3),
                   Text(
-                    '${_days[_selectedDayIndex]['date']}/2026',
+                    fullDateDisplay.isNotEmpty ? fullDateDisplay : item.cleanDay,
                     style: const TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
@@ -708,7 +545,50 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
 
   // ─── EMPTY SCHEDULE STATE ───
   Widget _buildEmptySchedule() {
-    return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.cardBorder, width: 1),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.event_available_outlined,
+              size: 32,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Không có lịch học trong ngày này',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textForeground,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Bạn có thể nghỉ ngơi hoặc bấm "Thêm lịch" để thêm lịch cá nhân.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ─── NOTICE BOX ───
@@ -753,9 +633,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     );
   }
 
-  void _showAddScheduleModal(BuildContext context, WidgetRef ref) {
+  void _showAddScheduleModal(BuildContext context, WidgetRef ref, ScheduleState scheduleState) {
     ScheduleAddCustomModal.show(
       context,
+      days: scheduleState.days,
       onSave: (newItem) {
         ref.read(scheduleProvider.notifier).addCustomSchedule(newItem);
       },

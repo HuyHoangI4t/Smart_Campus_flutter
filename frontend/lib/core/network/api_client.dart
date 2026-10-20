@@ -11,10 +11,7 @@ final storageServiceProvider = Provider<StorageService>((ref) {
 class ServerUrlNotifier extends Notifier<String> {
   @override
   String build() {
-    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows) {
-      return ApiEndpoints.webBaseUrl;
-    }
-    return ApiEndpoints.defaultBaseUrl;
+    return ApiEndpoints.activeBaseUrl;
   }
 
   void setUrl(String url) {
@@ -46,6 +43,15 @@ final dioProvider = Provider<Dio>((ref) {
         final token = await storage.getToken();
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
+        }
+        final userData = await storage.getUserData();
+        if (userData != null && userData.isNotEmpty) {
+          try {
+            final mssv = RegExp(r'"(?:student_id|mssv)"\s*:\s*"([^"]+)"').firstMatch(userData)?.group(1);
+            if (mssv != null && mssv.isNotEmpty) {
+              options.headers['x-mssv'] = mssv;
+            }
+          } catch (_) {}
         }
         return handler.next(options);
       },

@@ -544,8 +544,8 @@ async function getAnnouncementsWithFallback(forceRefresh = false) {
   // 3. Chỉ cào Live RSS khi DB trống hoặc khi có yêu cầu reload (forceRefresh = true)
   const live = await fetchAnnouncementsFromRss();
   if (live.length > 0) {
+    enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
     const sorted = sortByNewestDate(live);
-    saveItemsToDb(sorted).catch(() => {});
     announcementsMemCache = sorted;
     announcementsCacheTime = now;
     return sorted;
@@ -583,8 +583,8 @@ async function getNewsWithFallback(forceRefresh = false) {
   // 3. Chỉ cào Live RSS khi DB trống hoặc khi có yêu cầu reload (forceRefresh = true)
   const live = await fetchNewsFromRss();
   if (live.length > 0) {
+    enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
     const sorted = sortByNewestDate(live);
-    saveItemsToDb(sorted).catch(() => {});
     newsMemCache = sorted;
     newsCacheTime = now;
     return sorted;
@@ -751,10 +751,35 @@ async function fetchFullArticleDetail(articleUrl) {
   }
 }
 
+// Làm giàu dữ liệu chi tiết toàn văn, ảnh và tệp đính kèm cho danh sách bài viết
+async function enrichItemsWithDetails(items) {
+  if (!Array.isArray(items) || items.length === 0) return items;
+  for (const it of items) {
+    if (it.link && it.link.startsWith('http')) {
+      try {
+        const detail = await fetchFullArticleDetail(it.link);
+        if (detail) {
+          if (detail.fullContent && detail.fullContent.trim().length > 10) {
+            it.content = detail.fullContent.trim();
+          }
+          if (detail.attachments && detail.attachments.length > 0) {
+            it.attachments = detail.attachments;
+          }
+          if ((!it.imageUrl || !it.imageUrl.startsWith('http')) && detail.images && detail.images.length > 0) {
+            it.imageUrl = detail.images[0];
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  return items;
+}
+
 module.exports = {
   fetchAnnouncementsFromRss,
   fetchNewsFromRss,
   saveItemsToDb,
+  enrichItemsWithDetails,
   getItemsFromDb,
   getAnnouncementsWithFallback,
   getNewsWithFallback,

@@ -102,6 +102,23 @@ class CampusGate {
   });
 
   LatLng get coordinate => LatLng(lat, lng);
+
+  factory CampusGate.fromJson(Map<String, dynamic> json) {
+    return CampusGate(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      shortName: json['shortName']?.toString() ??
+          json['short_name']?.toString() ??
+          json['name']?.toString() ??
+          '',
+      lat: (json['lat'] is num)
+          ? (json['lat'] as num).toDouble()
+          : double.tryParse(json['lat']?.toString() ?? '0') ?? 0.0,
+      lng: (json['lng'] is num)
+          ? (json['lng'] as num).toDouble()
+          : double.tryParse(json['lng']?.toString() ?? '0') ?? 0.0,
+    );
+  }
 }
 
 class CampusConstants {

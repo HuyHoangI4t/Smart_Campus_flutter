@@ -4,18 +4,24 @@ import '../models/schedule_model.dart';
 
 class ScheduleAddCustomModal extends StatefulWidget {
   final Function(ScheduleItem) onSave;
+  final List<Map<String, String>>? days;
 
   const ScheduleAddCustomModal({
     super.key,
     required this.onSave,
+    this.days,
   });
 
-  static Future<void> show(BuildContext context, {required Function(ScheduleItem) onSave}) {
+  static Future<void> show(
+    BuildContext context, {
+    required Function(ScheduleItem) onSave,
+    List<Map<String, String>>? days,
+  }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => ScheduleAddCustomModal(onSave: onSave),
+      builder: (ctx) => ScheduleAddCustomModal(onSave: onSave, days: days),
     );
   }
 
@@ -36,6 +42,7 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
   bool _periodDropdownOpen = false;
   bool _isCustomTime = false;
   final TextEditingController _customTimeController = TextEditingController();
+  late List<Map<String, String>> _weekDays;
 
   final List<Map<String, dynamic>> _types = [
     {
@@ -72,16 +79,6 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
     },
   ];
 
-  final List<Map<String, String>> _weekDays = [
-    {'day': 'Thứ 2', 'date': '12/10', 'fullDate': '12/10/2026', 'dayLabel': 'Thứ 2, ngày 12/10/2026'},
-    {'day': 'Thứ 3', 'date': '13/10', 'fullDate': '13/10/2026', 'dayLabel': 'Thứ 3, ngày 13/10/2026'},
-    {'day': 'Thứ 4', 'date': '14/10', 'fullDate': '14/10/2026', 'dayLabel': 'Thứ 4, ngày 14/10/2026'},
-    {'day': 'Thứ 5', 'date': '15/10', 'fullDate': '15/10/2026', 'dayLabel': 'Thứ 5, ngày 15/10/2026'},
-    {'day': 'Thứ 6', 'date': '16/10', 'fullDate': '16/10/2026', 'dayLabel': 'Thứ 6, ngày 16/10/2026'},
-    {'day': 'Thứ 7', 'date': '17/10', 'fullDate': '17/10/2026', 'dayLabel': 'Thứ 7, ngày 17/10/2026'},
-    {'day': 'CN', 'date': '18/10', 'fullDate': '18/10/2026', 'dayLabel': 'Chủ nhật, ngày 18/10/2026'},
-  ];
-
   final List<Map<String, String>> _periodOptions = [
     {'label': 'Tiết 1-2', 'desc': '07:00 – 08:40'},
     {'label': 'Tiết 1-4', 'desc': '07:00 – 10:40'},
@@ -96,6 +93,36 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
   @override
   void initState() {
     super.initState();
+    if (widget.days != null && widget.days!.isNotEmpty) {
+      _weekDays = widget.days!.map((d) {
+        final day = d['day'] ?? 'Thứ 2';
+        final date = d['date'] ?? '';
+        final fullDate = d['fullDate'] ?? date;
+        return {
+          'day': day,
+          'date': date,
+          'fullDate': fullDate,
+          'dayLabel': '$day, ngày $fullDate',
+        };
+      }).toList();
+    } else {
+      final now = DateTime.now();
+      final distToMon = (now.weekday - 1) % 7;
+      final mon = now.subtract(Duration(days: distToMon));
+      final dayNames = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
+      String pad(int n) => n.toString().padLeft(2, '0');
+      _weekDays = List.generate(7, (i) {
+        final d = mon.add(Duration(days: i));
+        final dateStr = '${pad(d.day)}/${pad(d.month)}';
+        final fullDateStr = '${pad(d.day)}/${pad(d.month)}/${d.year}';
+        return {
+          'day': dayNames[i],
+          'date': dateStr,
+          'fullDate': fullDateStr,
+          'dayLabel': '${dayNames[i]}, ngày $fullDateStr',
+        };
+      });
+    }
     _dateInputController.text = _weekDays[_selectedDayIndex]['fullDate']!;
   }
 

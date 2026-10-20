@@ -147,6 +147,9 @@ exports.proxyImage = async (req, res) => {
     const contentType = response.headers['content-type'] || 'image/jpeg';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     return res.send(Buffer.from(response.data));
   } catch (error) {
     console.warn(`[Image Proxy] Lỗi tải ảnh (${targetUrl}):`, error.message);

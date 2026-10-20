@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/news_card_image.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../grades/providers/grades_provider.dart';
 import '../models/news_model.dart';
@@ -49,7 +50,7 @@ class HomeScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
 
                   // 6. ALERTS & NOTIFICATIONS
-                  _buildAlertsSection(context),
+                  _buildAlertsSection(context, homeState.alerts),
                   const SizedBox(height: 24),
 
                   // 7. ANNOUNCEMENTS SECTION
@@ -255,9 +256,11 @@ class HomeScreen extends ConsumerWidget {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            const Text(
-                              'NGÀY MAI (THỨ HAI)',
-                              style: TextStyle(
+                            Text(
+                              info.capsuleLabel.isNotEmpty
+                                  ? info.capsuleLabel
+                                  : 'NGÀY MAI (THỨ HAI)',
+                              style: const TextStyle(
                                 color: indicatorColor,
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w900,
@@ -482,9 +485,9 @@ class HomeScreen extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(width: 5),
-                          const Text(
-                            'Khá',
-                            style: TextStyle(
+                          Text(
+                            gradesState.academicRank.isNotEmpty ? gradesState.academicRank : 'Khá',
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
                               color: rankColor,
@@ -539,7 +542,7 @@ class HomeScreen extends ConsumerWidget {
                   Expanded(
                     child: _buildGpaStatCol(
                       label: 'TÍN CHỈ',
-                      value: gradesState.totalCredits > 0 ? '${gradesState.totalCredits}' : '106',
+                      value: gradesState.accumulatedCredits > 0 ? '${gradesState.accumulatedCredits}' : '106',
                       scale: 'TC',
                       valueColor: AppColors.success,
                     ),
@@ -710,7 +713,11 @@ class HomeScreen extends ConsumerWidget {
   }
 
   // ─── 5. ALERTS & NOTIFICATIONS ───
-  Widget _buildAlertsSection(BuildContext context) {
+  Widget _buildAlertsSection(BuildContext context, List<HomeAlertItem> alerts) {
+    if (alerts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -726,7 +733,7 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             Text(
-              '2 tin mới',
+              '${alerts.length} tin mới',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -737,129 +744,121 @@ class HomeScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
 
-        // Alert 1 (Yellow)
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFFBEB),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFFDE68A), width: 1),
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.warning_amber_rounded,
-                    color: Color(0xFFD97706),
-                    size: 20,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Phản hồi: [Cơ sở vật chất] ÁDASD (Chờ tiếp nhận)',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF92400E),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      '10/10/2026',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: Color(0xFFB45309),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                color: Color(0xFFD97706),
-                size: 18,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        // Alert 2 (Green)
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFECFDF5),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFA7F3D0), width: 1),
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD1FAE5),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.check_circle_outline,
-                    color: Color(0xFF10B981),
-                    size: 20,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tín hiệu SOS: Đã được xử lý an toàn',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF065F46),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      '10/10/2026',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: Color(0xFF047857),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                color: Color(0xFF10B981),
-                size: 18,
-              ),
-            ],
-          ),
-        ),
+        for (int i = 0; i < alerts.length; i++) ...[
+          _buildAlertCard(context, alerts[i]),
+          if (i < alerts.length - 1) const SizedBox(height: 10),
+        ],
       ],
+    );
+  }
+
+  Widget _buildAlertCard(BuildContext context, HomeAlertItem alert) {
+    final isSuccess = alert.variant == 'success';
+    final isWarning = alert.variant == 'warning' || alert.type == 'sos';
+
+    final Color bgColor = isSuccess
+        ? const Color(0xFFECFDF5)
+        : (isWarning ? const Color(0xFFFFFBEB) : const Color(0xFFEFF6FF));
+    final Color borderColor = isSuccess
+        ? const Color(0xFFA7F3D0)
+        : (isWarning ? const Color(0xFFFDE68A) : const Color(0xFFBFDBFE));
+    final Color iconBg = isSuccess
+        ? const Color(0xFFD1FAE5)
+        : (isWarning ? const Color(0xFFFEF3C7) : const Color(0xFFDBEAFE));
+    final Color iconColor = isSuccess
+        ? const Color(0xFF10B981)
+        : (isWarning ? const Color(0xFFD97706) : const Color(0xFF2563EB));
+    final Color titleColor = isSuccess
+        ? const Color(0xFF065F46)
+        : (isWarning ? const Color(0xFF92400E) : const Color(0xFF1E40AF));
+    final Color dateColor = isSuccess
+        ? const Color(0xFF047857)
+        : (isWarning ? const Color(0xFFB45309) : const Color(0xFF1D4ED8));
+    final IconData icon = isSuccess
+        ? Icons.check_circle_outline
+        : (isWarning ? Icons.warning_amber_rounded : Icons.info_outline);
+
+    return GestureDetector(
+      onTap: () {
+        if (alert.actionScreen == 'feedback') {
+          context.push('/feedback');
+        } else if (alert.actionScreen == 'sos') {
+          context.push('/sos');
+        } else {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(alert.title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              content: Text(alert.content.isNotEmpty ? alert.content : alert.subtitle),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Đóng'),
+                ),
+              ],
+            ),
+          );
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor, width: 1),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: iconColor,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    alert.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: titleColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    alert.date.isNotEmpty ? alert.date : (alert.subtitle.isNotEmpty ? alert.subtitle : 'Hôm nay'),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: dateColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: iconColor,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1129,19 +1128,12 @@ class HomeScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Banner Image
-                    SizedBox(
+                    NewsCardImage(
+                      imageUrl: item.imageUrl,
+                      fallbackIndex: item.id,
                       height: 155,
                       width: double.infinity,
-                      child: Image.asset(
-                        'assets/images.jpg',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: AppColors.muted,
-                          child: const Center(
-                            child: Icon(Icons.image, size: 40, color: AppColors.textSubtle),
-                          ),
-                        ),
-                      ),
+                      fit: BoxFit.cover,
                     ),
 
                     Padding(

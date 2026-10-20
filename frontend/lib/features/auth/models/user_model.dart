@@ -24,13 +24,13 @@ class UserModel {
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
-      studentId: json['student_id'] ?? json['studentId'] ?? '',
-      fullName: json['full_name'] ?? json['fullName'] ?? '',
+      studentId: json['student_id'] ?? json['studentId'] ?? json['mssv'] ?? json['masv'] ?? '',
+      fullName: json['full_name'] ?? json['fullName'] ?? json['ho_ten'] ?? '',
       email: json['email'],
-      phone: json['phone'],
-      studentClass: json['class_name'] ?? json['class'] ?? json['studentClass'],
-      faculty: json['faculty'],
-      avatarUrl: json['avatar_url'] ?? json['avatarUrl'],
+      phone: json['phone'] ?? json['so_dien_thoai'],
+      studentClass: json['class_name'] ?? json['class'] ?? json['studentClass'] ?? json['lop'],
+      faculty: json['faculty'] ?? json['khoa'],
+      avatarUrl: json['avatar_url'] ?? json['avatarUrl'] ?? json['avatar'],
       role: json['role'] ?? 'student',
     );
   }
@@ -39,12 +39,18 @@ class UserModel {
     return {
       'id': id,
       'student_id': studentId,
+      'mssv': studentId,
       'full_name': fullName,
+      'ho_ten': fullName,
       'email': email,
       'phone': phone,
+      'so_dien_thoai': phone,
       'class_name': studentClass,
+      'lop': studentClass,
       'faculty': faculty,
+      'khoa': faculty,
       'avatar_url': avatarUrl,
+      'avatar': avatarUrl,
       'role': role,
     };
   }

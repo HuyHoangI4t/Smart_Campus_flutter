@@ -19,6 +19,12 @@ async function runFullSync(triggerSource = 'AUTOMATED_CRON') {
       newsService.fetchNewsFromRss()
     ]);
 
+    // Tự động cào toàn văn và tệp đính kèm chi tiết trước khi lưu DB
+    await Promise.all([
+      newsService.enrichItemsWithDetails(liveAnnouncements),
+      newsService.enrichItemsWithDetails(liveNews)
+    ]);
+
     const savedAnnouncements = await newsService.saveItemsToDb(liveAnnouncements);
     const savedNews = await newsService.saveItemsToDb(liveNews);
 

@@ -15,8 +15,6 @@ class GradesScreen extends ConsumerStatefulWidget {
 }
 
 class _GradesScreenState extends ConsumerState<GradesScreen> {
-  int _selectedSemesterIndex = 0;
-
   final List<String> _semesters = [
     'Tất cả',
     'HK1 (2026)',
@@ -84,16 +82,16 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                   const SizedBox(height: 18),
 
                   // 4. SEMESTER FILTER PILLS
-                  _buildSemesterFilter(),
+                  _buildSemesterFilter(gradesState),
                   const SizedBox(height: 18),
 
                   // 5. LIST HEADER
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Học phần đã có điểm (54)',
-                        style: TextStyle(
+                      Text(
+                        'Học phần đã có điểm (${items.isNotEmpty ? items.length : 54})',
+                        style: const TextStyle(
                           fontSize: 15.5,
                           fontWeight: FontWeight.w900,
                           color: AppColors.textForeground,
@@ -159,7 +157,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
   }
 
   // ─── OVERVIEW CARD (Navy #132F73) ───
-  Widget _buildOverviewCard(BuildContext context, dynamic gradesState) {
+  Widget _buildOverviewCard(BuildContext context, GradesState gradesState) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.primary,
@@ -198,14 +196,14 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                   color: Colors.white.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.military_tech, color: Colors.white, size: 14),
-                    SizedBox(width: 4),
+                    const Icon(Icons.military_tech, color: Colors.white, size: 14),
+                    const SizedBox(width: 4),
                     Text(
-                      'Khá',
-                      style: TextStyle(
+                      gradesState.academicRank.isNotEmpty ? gradesState.academicRank : 'Khá',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11.5,
                         fontWeight: FontWeight.w800,
@@ -274,8 +272,8 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
               Column(
                 children: [
                   Text(
-                    gradesState.totalCredits > 0
-                        ? '${gradesState.totalCredits}'
+                    gradesState.accumulatedCredits > 0
+                        ? '${gradesState.accumulatedCredits}'
                         : '106',
                     style: const TextStyle(
                       fontSize: 24,
@@ -296,7 +294,50 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // Strip: Tín chỉ đã tích lũy vs Tín chỉ chưa học / đang học
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle_outline, color: Color(0xFF34D399), size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Đã tích lũy: ${gradesState.accumulatedCredits} TC',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.pending_outlined, color: Color(0xFFFCD34D), size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Chưa học: ${gradesState.inProgressCredits} TC',
+                      style: const TextStyle(
+                        color: Color(0xFFFCD34D),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
 
           // Bottom Button: "Xem bảng điểm chi tiết thành phần >"
           GestureDetector(
@@ -337,24 +378,21 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
   }
 
   // ─── SEMESTER FILTER PILLS ───
-  Widget _buildSemesterFilter() {
+  Widget _buildSemesterFilter(GradesState gradesState) {
+    final semesters = gradesState.availableSemesters.isNotEmpty
+        ? gradesState.availableSemesters
+        : _semesters;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: List.generate(_semesters.length, (index) {
-          final isSelected = index == _selectedSemesterIndex;
-          final title = _semesters[index];
+        children: List.generate(semesters.length, (index) {
+          final title = semesters[index];
+          final isSelected = title == gradesState.selectedSemester;
 
           return GestureDetector(
             onTap: () {
-              setState(() {
-                _selectedSemesterIndex = index;
-              });
-              if (index == 0) {
-                ref.read(gradesProvider.notifier).selectSemester('Tất cả');
-              } else {
-                ref.read(gradesProvider.notifier).selectSemester(title);
-              }
+              ref.read(gradesProvider.notifier).selectSemester(title);
             },
             child: Container(
               margin: const EdgeInsets.only(right: 8),

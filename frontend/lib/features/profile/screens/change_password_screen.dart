@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -166,7 +167,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
       final response = await dio.post(
         ApiEndpoints.changePassword,
         data: {
+          'currentPassword': currentPassword,
           'old_password': currentPassword,
+          'newPassword': newPassword,
           'new_password': newPassword,
         },
       );
@@ -189,6 +192,14 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
           isSuccess: false,
         );
       }
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final serverMsg = e.response?.data?['message']?.toString();
+      _showNoticeDialog(
+        title: 'Không thể đổi mật khẩu',
+        message: serverMsg ?? 'Mật khẩu hiện tại không chính xác. Vui lòng kiểm tra lại.',
+        isSuccess: false,
+      );
     } catch (e) {
       if (!mounted) return;
       _showNoticeDialog(

@@ -33,6 +33,7 @@ const newsController = require('../controllers/newsController');
  *         description: Danh sách tin tức và thông báo
  */
 router.get('/', newsController.getAllNewsAndAnnouncements);
+router.get('/all', newsController.getAllNewsAndAnnouncements);
 
 /**
  * @swagger

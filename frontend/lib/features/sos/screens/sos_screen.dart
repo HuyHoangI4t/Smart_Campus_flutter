@@ -7,6 +7,7 @@ import '../../../core/constants/api_endpoints.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/widgets/nav_header.dart';
+import '../../auth/providers/auth_provider.dart';
 
 class SosScreen extends ConsumerStatefulWidget {
   const SosScreen({super.key});
@@ -92,8 +93,10 @@ class _SosScreenState extends ConsumerState<SosScreen> {
           'incidentType': _selectedIncidentType,
           'location': _locationController.text.trim(),
           'description': _noteController.text.trim(),
+          'message': _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : 'Yêu cầu hỗ trợ SOS khẩn cấp',
           'latitude': position?.latitude ?? 12.6515,
           'longitude': position?.longitude ?? 108.0245,
+          'phone': ref.read(authProvider).user?.phone ?? '',
         },
       );
 

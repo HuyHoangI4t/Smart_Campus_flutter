@@ -42,26 +42,30 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> checkAuthSession() async {
-    final storage = ref.read(storageServiceProvider);
-    final isGuest = await storage.isGuestMode();
+    try {
+      final storage = ref.read(storageServiceProvider);
+      final isGuest = await storage.isGuestMode();
 
-    if (isGuest) {
-      state = AuthState(user: UserModel.guest(), isLoading: false);
-      return;
-    }
-
-    final token = await storage.getToken();
-    final userJson = await storage.getUserData();
-
-    if (token != null && userJson != null) {
-      try {
-        final Map<String, dynamic> data = jsonDecode(userJson);
-        state = AuthState(user: UserModel.fromJson(data), isLoading: false);
+      if (isGuest) {
+        state = AuthState(user: UserModel.guest(), isLoading: false);
         return;
-      } catch (_) {}
-    }
+      }
 
-    state = const AuthState(user: null, isLoading: false);
+      final token = await storage.getToken();
+      final userJson = await storage.getUserData();
+
+      if (token != null && userJson != null) {
+        try {
+          final Map<String, dynamic> data = jsonDecode(userJson);
+          state = AuthState(user: UserModel.fromJson(data), isLoading: false);
+          return;
+        } catch (_) {}
+      }
+
+      state = const AuthState(user: null, isLoading: false);
+    } catch (e) {
+      state = const AuthState(user: null, isLoading: false);
+    }
   }
 
   Future<bool> login(String studentId, String password) async {
@@ -208,6 +212,22 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> updateUser(UserModel updatedUser) async {
     final storage = ref.read(storageServiceProvider);
+    try {
+      await _dio.put(
+        ApiEndpoints.updateProfile,
+        data: {
+          'mssv': updatedUser.studentId,
+          'fullName': updatedUser.fullName,
+          'ho_ten': updatedUser.fullName,
+          'email': updatedUser.email,
+          'phone': updatedUser.phone,
+          'so_dien_thoai': updatedUser.phone,
+          'lop': updatedUser.studentClass,
+          'khoa': updatedUser.faculty,
+          'avatar': updatedUser.avatarUrl,
+        },
+      );
+    } catch (_) {}
     await storage.saveUserData(jsonEncode(updatedUser.toJson()));
     state = state.copyWith(user: updatedUser);
   }

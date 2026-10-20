@@ -160,11 +160,18 @@ function calculateStats(items) {
   const gpa4 = gpa4Num.toFixed(2);
   const academicRank = getAcademicRank(gpa4Num);
 
+  const unlearnedCredits = Math.max(0, totalCredits - accumulatedCredits);
+
   return {
     totalCredits,
     accumulatedCredits,
     gradedCredits,
     inProgressCredits,
+    unlearnedCredits,
+    remainingCredits: unlearnedCredits,
+    tin_chi_chua_hoc: unlearnedCredits,
+    tin_chi_tich_luy: accumulatedCredits,
+    tong_tin_chi: totalCredits,
     gpa10,
     gpa4,
     academicRank,

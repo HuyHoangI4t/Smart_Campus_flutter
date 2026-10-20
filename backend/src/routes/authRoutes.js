@@ -180,6 +180,7 @@ router.get('/profile', authController.getMe);
  *         description: Đổi mật khẩu thành công
  */
 router.put('/change-password', authController.changePassword);
+router.post('/change-password', authController.changePassword);
 
 /**
  * @swagger

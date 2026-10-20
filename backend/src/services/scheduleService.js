@@ -286,7 +286,9 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
     if (rows.length > 1) {
       rows.slice(1).forEach((r, idx) => {
         if (Array.isArray(r) && r.length >= 5) {
-          const dayStr = r[0] || 'Thứ 2';
+          const rawDay = (r[0] || 'Thứ 2').trim();
+          const dayMatch = rawDay.match(/^(Thứ\s+\d+|CN|Chủ\s+nhật)/i);
+          const dayStr = dayMatch ? dayMatch[1].replace(/chủ\s+nhật/i, 'CN').replace(/\s+/g, ' ').trim() : rawDay;
           const dayNum = getDayNumber(dayStr);
           const course = r[1] || 'Môn học';
           const time = r[2] ? (String(r[2]).startsWith('Tiết') ? r[2] : `Tiết ${r[2]}`) : 'Ca học tiêu chuẩn';
@@ -296,19 +298,25 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
           const direction = parseRoomDirections(room);
 
           const dayMeta = daysWithDates.find((d) => d.num === dayNum);
-          const itemDate = dayMeta?.date || null;
-          const itemDateShort = dayMeta?.dateShort || null;
+          const rawRowDate = r[5] ? normalizeDateVN(r[5]) : null;
+          const itemDate = rawRowDate || dayMeta?.date || null;
+          const itemDateShort = itemDate ? itemDate.substring(0, 5) : (dayMeta?.dateShort || null);
+          const dayFormatted = itemDateShort ? `${dayStr} ${itemDateShort}` : dayStr;
 
           const item = {
             id: `sc-${idx + 1}`,
             course,
-            code: dayStr,
+            subject: course,
+            courseName: course,
+            code: dayFormatted,
             time,
+            timeSlot: time,
             room,
-            day: dayStr,
+            day: dayFormatted,
             dayNum,
             date: itemDate,
             dateShort: itemDateShort,
+            ngay_hoc: itemDate,
             lecturer,
             direction,
             isCustom: false,
@@ -327,7 +335,9 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
   const filteredCustom = filterCustomItemsForWeek(customItems, weekRangeText, options.isCurrentWeek ?? false);
   if (Array.isArray(filteredCustom) && filteredCustom.length > 0) {
     filteredCustom.forEach((c) => {
-      const dayStr = c.thu || c.day || 'Thứ 2';
+      const rawDay = (c.thu || c.day || 'Thứ 2').trim();
+      const dayMatch = rawDay.match(/^(Thứ\s+\d+|CN|Chủ\s+nhật)/i);
+      const dayStr = dayMatch ? dayMatch[1].replace(/chủ\s+nhật/i, 'CN').replace(/\s+/g, ' ').trim() : rawDay;
       const dayNum = c.dayNum || getDayNumber(dayStr);
       const course = c.ten_hp || c.course || 'Lịch thực hành đột xuất';
       let rawTime = String(c.tiet || c.time || 'Ca thực hành').trim();
@@ -342,23 +352,27 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
       const dayMeta = daysWithDates.find((d) => d.num === dayNum);
       const itemDate = c.ngay_hoc ? normalizeDateVN(c.ngay_hoc) : (dayMeta?.date || null);
       const itemDateShort = itemDate ? itemDate.substring(0, 5) : (dayMeta?.dateShort || null);
+      const dayFormatted = itemDateShort ? `${dayStr} ${itemDateShort}` : dayStr;
 
       const item = {
         id: c.id,
         course,
-        code: dayStr,
+        subject: course,
+        courseName: course,
+        code: dayFormatted,
         time,
+        timeSlot: time,
         room,
-        day: dayStr,
+        day: dayFormatted,
         dayNum,
         date: itemDate,
         dateShort: itemDateShort,
+        ngay_hoc: itemDate,
         lecturer,
         direction,
         isCustom: true,
         note: c.ghi_chu || c.note || '',
         type: c.loai_lich || c.type || 'dot_xuat',
-        ngay_hoc: itemDate,
         week_range: c.week_range || weekRangeText || null,
       };
 
@@ -368,6 +382,25 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
       }
     });
   }
+
+  // Bảng thời gian các tiết học chuẩn Trường ĐH Tây Nguyên (TTN)
+  // Sáng: Tiết 1 bắt đầu 06:45, Tiết 4 kết thúc 10:30, Tiết 5 kết thúc 11:25
+  // Chiều: Tiết 7 bắt đầu 13:45, Tiết 10 kết thúc 16:30, Buổi tối từ 17:30
+  const PERIOD_TIMES = {
+    1: { start: 6 * 60 + 45, end: 7 * 60 + 35 },
+    2: { start: 7 * 60 + 40, end: 8 * 60 + 30 },
+    3: { start: 8 * 60 + 40, end: 9 * 60 + 30 },
+    4: { start: 9 * 60 + 35, end: 10 * 60 + 30 },
+    5: { start: 10 * 60 + 35, end: 11 * 60 + 25 },
+    6: { start: 12 * 60 + 50, end: 13 * 60 + 40 },
+    7: { start: 13 * 60 + 45, end: 14 * 60 + 35 },
+    8: { start: 14 * 60 + 40, end: 15 * 60 + 30 },
+    9: { start: 15 * 60 + 40, end: 16 * 60 + 30 },
+    10: { start: 16 * 60 + 35, end: 17 * 60 + 25 },
+    11: { start: 17 * 60 + 30, end: 18 * 60 + 20 },
+    12: { start: 18 * 60 + 25, end: 19 * 60 + 15 },
+    13: { start: 19 * 60 + 20, end: 20 * 60 + 10 },
+  };
 
   const parseTimeRange = (timeStr) => {
     const str = timeStr || '';
@@ -382,13 +415,80 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
     if (range) {
       const s = parseInt(range[1], 10);
       const e = parseInt(range[2], 10);
+      const startMin = PERIOD_TIMES[s]?.start ?? (s >= 6 ? 13 * 60 + 45 : 6 * 60 + 45);
+      const endMin = PERIOD_TIMES[e]?.end ?? (e >= 6 ? 16 * 60 + 30 : 10 * 60 + 30);
+      return { startMin, endMin };
+    }
+    const single = str.match(/tiết\s*(\d+)/i);
+    if (single) {
+      const p = parseInt(single[1], 10);
       return {
-        startMin: s >= 6 ? 13 * 60 + 30 : 7 * 60,
-        endMin: e >= 6 ? 17 * 60 : 10 * 60 + 40,
+        startMin: PERIOD_TIMES[p]?.start ?? 6 * 60 + 45,
+        endMin: PERIOD_TIMES[p]?.end ?? 10 * 60 + 30,
       };
     }
-    return { startMin: 6 * 60 + 45 , endMin: 11 * 60 + 30 };
+    return { startMin: 6 * 60 + 45, endMin: 10 * 60 + 30 };
   };
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const todayJsDay = now.getDay(); // 0 là CN, 1 là T2, ...
+  const currentDayNum = todayJsDay === 0 ? 1 : todayJsDay + 1; // 1: CN, 2: T2, 3: T3, ...
+  const tomorrowDayNum = (currentDayNum % 7) + 1;
+  const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Gán status và start/end minutes chuẩn cho từng môn học
+  parsed.forEach((item) => {
+    const t = parseTimeRange(item.time || item.timeSlot);
+    item.startMinutes = t.startMin;
+    item.endMinutes = t.endMin;
+
+    let itemDateObj = null;
+    if (item.date) {
+      itemDateObj = parseDateVN(item.date);
+    }
+
+    if (itemDateObj) {
+      const itemZero = new Date(itemDateObj.getFullYear(), itemDateObj.getMonth(), itemDateObj.getDate());
+      if (itemZero < todayZero) {
+        item.status = 'COMPLETED';
+        item.statusLabel = 'Đã kết thúc';
+      } else if (itemZero > todayZero) {
+        item.status = 'UPCOMING';
+        item.statusLabel = 'Sắp tới';
+      } else {
+        if (currentMinutes < t.startMin) {
+          item.status = 'UPCOMING';
+          item.statusLabel = 'Sắp tới';
+        } else if (currentMinutes <= t.endMin) {
+          item.status = 'IN_PROGRESS';
+          item.statusLabel = 'Đang diễn ra';
+        } else {
+          item.status = 'COMPLETED';
+          item.statusLabel = 'Đã kết thúc';
+        }
+      }
+    } else {
+      if (item.dayNum < currentDayNum) {
+        item.status = 'COMPLETED';
+        item.statusLabel = 'Đã kết thúc';
+      } else if (item.dayNum > currentDayNum) {
+        item.status = 'UPCOMING';
+        item.statusLabel = 'Sắp tới';
+      } else {
+        if (currentMinutes < t.startMin) {
+          item.status = 'UPCOMING';
+          item.statusLabel = 'Sắp tới';
+        } else if (currentMinutes <= t.endMin) {
+          item.status = 'IN_PROGRESS';
+          item.statusLabel = 'Đang diễn ra';
+        } else {
+          item.status = 'COMPLETED';
+          item.statusLabel = 'Đã kết thúc';
+        }
+      }
+    }
+  });
 
   // Sắp xếp các tiết học trong ngày theo thứ tự thời gian
   for (let d = 1; d <= 7; d++) {
@@ -398,13 +498,6 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
       return ta.startMin - tb.startMin;
     });
   }
-
-  // Xác định tiết học hôm nay và tiết học kế tiếp (bao gồm logic ngày mai)
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const todayJsDay = now.getDay(); // 0 là CN, 1 là T2, ...
-  const currentDayNum = todayJsDay === 0 ? 1 : todayJsDay + 1; // 1: CN, 2: T2, 3: T3, ...
-  const tomorrowDayNum = (currentDayNum % 7) + 1;
 
   const todaySchedule = groupedByDay[currentDayNum] || [];
   const inProgress = todaySchedule.find((c) => {

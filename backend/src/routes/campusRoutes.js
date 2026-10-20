@@ -189,4 +189,7 @@ router.post('/notifications', generalController.createNotification);
  */
 router.delete('/notifications/:id', generalController.deleteNotification);
 
+// Cổng ra vào khuôn viên trường
+router.get('/gates', campusController.getCampusGates);
+
 module.exports = router;

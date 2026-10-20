@@ -43,8 +43,10 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
       await dio.post(
         ApiEndpoints.feedback,
         data: {
+          'title': '[$_category] Góp ý từ ứng dụng sinh viên',
           'category': _category,
           'content': _contentController.text.trim(),
+          'rating': 5,
         },
       );
 

@@ -147,7 +147,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                     MarkerLayer(
                       markers: [
                         // Cổng trường (3 cổng dạng Pill đen viền phát sáng)
-                        for (final gate in CampusConstants.gates)
+                        for (final gate in mapState.gates)
                           Marker(
                             point: gate.coordinate,
                             width: 140,

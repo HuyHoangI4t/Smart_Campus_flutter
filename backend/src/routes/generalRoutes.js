@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const generalController = require('../controllers/generalController');
+const campusController = require('../controllers/campusController');
 const { verifyToken, requireRole } = require('../middlewares/authMiddleware');
 
 /**
@@ -77,5 +78,8 @@ router.post('/notifications', verifyToken, requireRole('admin'), generalControll
  */
 router.get('/notifications/:id', generalController.getNotificationById);
 router.delete('/notifications/:id', verifyToken, requireRole('admin'), generalController.deleteNotification);
+
+// Route alias cho frontend Feedback
+router.post('/feedback', campusController.submitFeedback);
 
 module.exports = router;

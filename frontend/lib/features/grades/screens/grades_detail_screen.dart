@@ -122,10 +122,11 @@ class _GradesDetailScreenState extends ConsumerState<GradesDetailScreen> {
                   height: 34,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: _semesters.length,
+                    itemCount: (gradesState.availableSemesters.isNotEmpty ? gradesState.availableSemesters : _semesters).length,
                     separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (context, index) {
-                      final sem = _semesters[index];
+                      final sems = gradesState.availableSemesters.isNotEmpty ? gradesState.availableSemesters : _semesters;
+                      final sem = sems[index];
                       final isSelected = sem == _selectedSemester;
                       return GestureDetector(
                         onTap: () => setState(() => _selectedSemester = sem),
@@ -148,6 +149,46 @@ class _GradesDetailScreenState extends ConsumerState<GradesDetailScreen> {
                         ),
                       );
                     },
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Credit summary banner: Tích lũy vs Chưa học
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Đã tích lũy: ${gradesState.accumulatedCredits} TC',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF059669),
+                        ),
+                      ),
+                      Text(
+                        'Chưa học: ${gradesState.inProgressCredits} TC',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFD97706),
+                        ),
+                      ),
+                      Text(
+                        'Tổng: ${gradesState.summary.totalCredits} TC',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
