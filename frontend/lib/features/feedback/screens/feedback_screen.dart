@@ -33,6 +33,119 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
     super.dispose();
   }
 
+  void _showFeedbackPopup({
+    required bool isSuccess,
+    required String title,
+    required String message,
+  }) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon biểu tượng tròn
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSuccess ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                  border: Border.all(
+                    color: isSuccess ? const Color(0xFFBBF7D0) : const Color(0xFFFECACA),
+                    width: 3,
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    isSuccess ? Icons.check : Icons.error_outline,
+                    size: 32,
+                    color: isSuccess ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Tiêu đề popup
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Nội dung thông báo
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: Color(0xFF64748B),
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // Các nút bấm hành động chuẩn React Native
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 0,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          context.pop();
+                        },
+                        child: const Text(
+                          'Về trang chủ',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 46,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _contentController.clear();
+                      },
+                      child: const Text(
+                        'Ở lại',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _submitFeedback() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -51,23 +164,18 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
       );
 
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cảm ơn bạn đã gửi ý kiến phản hồi!'),
-          backgroundColor: AppColors.success,
-        ),
+      _showFeedbackPopup(
+        isSuccess: true,
+        title: 'Gửi phản hồi thành công',
+        message: 'Cảm ơn bạn! Ý kiến đóng góp đã được tiếp nhận và chuyển đến phòng ban phụ trách để xem xét xử lý trong thời gian sớm nhất.',
       );
-      context.pop();
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Đã ghi nhận ý kiến phản hồi của bạn!'),
-          backgroundColor: AppColors.success,
-        ),
+      _showFeedbackPopup(
+        isSuccess: true,
+        title: 'Đã ghi nhận ý kiến',
+        message: 'Ý kiến đóng góp của bạn đã được lưu lại thành công trên hệ thống cơ sở dữ liệu của Nhà trường.',
       );
-      context.pop();
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

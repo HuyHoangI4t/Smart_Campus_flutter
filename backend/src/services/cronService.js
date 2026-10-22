@@ -13,20 +13,29 @@ async function runFullSync(triggerSource = 'AUTOMATED_CRON') {
   console.log(`\n⏳ [Cron Sync] Bắt đầu đồng bộ dữ liệu từ trường TTN (${triggerSource}) lúc ${startTime.toLocaleTimeString('vi-VN')}...`);
 
   try {
-    // 1. Đồng bộ Thông báo & Tin tức từ RSS trường vào bảng news_cache
-    const [liveAnnouncements, liveNews] = await Promise.all([
-      newsService.fetchAnnouncementsFromRss(),
-      newsService.fetchNewsFromRss()
-    ]);
+    // 1. Đồng bộ Thông báo & Tin tức từ RSS trường tuần tự (tránh quá tải kết nối đến server trường)
+    let liveAnnouncements = [];
+    try {
+      liveAnnouncements = await newsService.fetchAnnouncementsFromRss();
+      if (liveAnnouncements.length > 0) {
+        await newsService.saveItemsToDb(liveAnnouncements);
+      }
+    } catch (e) {
+      console.warn('Lỗi cào RSS Thông báo trong cron:', e.message);
+    }
 
-    // Tự động cào toàn văn và tệp đính kèm chi tiết trước khi lưu DB
-    await Promise.all([
-      newsService.enrichItemsWithDetails(liveAnnouncements),
-      newsService.enrichItemsWithDetails(liveNews)
-    ]);
+    let liveNews = [];
+    try {
+      liveNews = await newsService.fetchNewsFromRss();
+      if (liveNews.length > 0) {
+        await newsService.saveItemsToDb(liveNews);
+      }
+    } catch (e) {
+      console.warn('Lỗi cào RSS Tin tức trong cron:', e.message);
+    }
 
-    const savedAnnouncements = await newsService.saveItemsToDb(liveAnnouncements);
-    const savedNews = await newsService.saveItemsToDb(liveNews);
+    const savedAnnouncements = liveAnnouncements.length;
+    const savedNews = liveNews.length;
 
     // 2. Đồng bộ Điểm và Thời khóa biểu của toàn bộ sinh viên đang hoạt động trong hệ thống
     const studentSyncResult = await studentSyncService.syncAllActiveStudents();

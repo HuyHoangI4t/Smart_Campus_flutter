@@ -11,7 +11,26 @@ final storageServiceProvider = Provider<StorageService>((ref) {
 class ServerUrlNotifier extends Notifier<String> {
   @override
   String build() {
+    _initFromStorage();
     return ApiEndpoints.activeBaseUrl;
+  }
+
+  Future<void> _initFromStorage() async {
+    try {
+      final storage = ref.read(storageServiceProvider);
+      final saved = await storage.getServerUrl();
+      if (saved != null && saved.isNotEmpty) {
+        if (saved.contains('192.168.1.') && !saved.contains(ApiEndpoints.lanHost)) {
+          final updated = saved.replaceAll(RegExp(r'192\.168\.1\.\d+'), ApiEndpoints.lanHost);
+          await storage.saveServerUrl(updated);
+          state = updated;
+          return;
+        }
+        if (saved != state) {
+          state = saved;
+        }
+      }
+    } catch (_) {}
   }
 
   void setUrl(String url) {
@@ -28,8 +47,8 @@ final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: activeBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 20),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',

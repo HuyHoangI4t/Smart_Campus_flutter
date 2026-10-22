@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../models/schedule_model.dart';
+import '../models/room_direction_model.dart';
 
 class ScheduleRoomDirectionModal extends StatelessWidget {
   final ScheduleItem item;
@@ -22,10 +23,7 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Extract building code/name from room e.g. "2.21 (CLC)" -> "Nhà 2", "9.2.04" -> "Nhà 9"
-    final roomStr = item.room;
-    final buildingCode = _extractBuildingCode(roomStr);
-    final buildingName = _extractBuildingName(roomStr);
+    final RoomDirectionInfo direction = item.roomDirection;
 
     return Container(
       constraints: BoxConstraints(
@@ -38,7 +36,7 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ─── 1. HEADER ───
+          // ─── 1. MODAL HEADER ───
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
             child: Row(
@@ -85,25 +83,18 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
           ),
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-          // ─── 2. CONTENT ───
+          // ─── 2. MODAL BODY ───
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               children: [
-                // Summary Card
+                // Course Summary Card
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x060F172A),
-                        offset: Offset(0, 3),
-                        blurRadius: 8,
-                      ),
-                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,19 +107,21 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                           color: AppColors.textForeground,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
 
-                      // Badges: Room + Building
-                      Row(
+                      // Tags Row: Room + Floor (if any) + Building
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(999),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              'Phòng $roomStr',
+                              direction.room,
                               style: const TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
@@ -136,15 +129,30 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          if (direction.floor.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                direction.floor,
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(999),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              buildingCode,
+                              direction.buildingCode,
                               style: const TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
@@ -163,7 +171,11 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                           const SizedBox(width: 6),
                           Text(
                             item.timeSlot,
-                            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
@@ -175,7 +187,11 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                             const SizedBox(width: 6),
                             Text(
                               item.lecturer!,
-                              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ],
                         ),
@@ -183,11 +199,17 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          const Icon(Icons.menu_book_outlined, size: 14, color: AppColors.primary),
+                          const Icon(Icons.domain_outlined, size: 14, color: AppColors.primary),
                           const SizedBox(width: 6),
-                          Text(
-                            buildingName,
-                            style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w700),
+                          Expanded(
+                            child: Text(
+                              direction.building,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -207,78 +229,149 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
 
-                // Steps Timeline
-                _buildTimelineStep(
-                  stepNum: 1,
-                  icon: Icons.explore_outlined,
-                  isFirst: true,
-                  isLast: false,
-                  title: '1. Cổng trường',
-                  desc: 'Từ cổng đi thẳng qua trục đường trung tâm hướng về phía $buildingCode.',
-                ),
-                _buildTimelineStep(
-                  stepNum: 2,
-                  icon: Icons.home_outlined,
-                  isFirst: false,
-                  isLast: false,
-                  title: '2. Vào sảnh chính $buildingCode',
-                  desc: 'Bước vào sảnh chính $buildingCode, có thể tra cứu sơ đồ phân phòng tại bảng thông báo sảnh.',
-                ),
-                _buildTimelineStep(
-                  stepNum: 3,
-                  icon: Icons.location_on_outlined,
-                  isFirst: false,
-                  isLast: true,
-                  title: '3. Đến Phòng $roomStr',
-                  desc: 'Đi theo biển chỉ dẫn số phòng tại khu vực $buildingCode, Phòng $roomStr nằm ở vị trí tương ứng.',
-                ),
-                const SizedBox(height: 16),
+                // Steps Timeline (Dựa trên direction.steps đã bóc tách động)
+                Column(
+                  children: List.generate(direction.steps.length, (idx) {
+                    final step = direction.steps[idx];
+                    final isFirst = idx == 0;
+                    final isLast = idx == direction.steps.length - 1;
 
-                // Tiện ích & Lưu ý Green Box
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFBBF7D0)),
-                  ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                    return IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF16A34A)),
-                          SizedBox(width: 8),
-                          Text(
-                            'Tiện ích & Lưu ý',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF16A34A),
+                          // Icon Badge + Vertical Line
+                          Column(
+                            children: [
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: isFirst ? AppColors.primary : const Color(0xFFEEF2FF),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isFirst ? AppColors.primary : const Color(0xFFC7D2FE),
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    step.iconData,
+                                    size: 15,
+                                    color: isFirst ? Colors.white : AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                              if (!isLast)
+                                Expanded(
+                                  child: Container(
+                                    width: 2,
+                                    color: const Color(0xFFE2E8F0),
+                                    margin: const EdgeInsets.symmetric(vertical: 4),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(width: 12),
+
+                          // Content
+                          Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(bottom: isLast ? 0 : 16, top: 4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${step.step}. ${step.title}',
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textForeground,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    step.desc,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B),
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
-                      Text(
-                        '• Nhà xe thường đông vào đầu ca học, bạn có thể thử nhà xe khác để nhanh hơn.',
-                        style: TextStyle(fontSize: 11.5, color: Color(0xFF15803D), height: 1.45),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        '• Nên đến trước giờ vào lớp 5 - 10 phút để ổn định vị trí và điểm danh.',
-                        style: TextStyle(fontSize: 11.5, color: Color(0xFF15803D), height: 1.45),
-                      ),
-                    ],
-                  ),
+                    );
+                  }),
                 ),
+                const SizedBox(height: 16),
+
+                // Tiện ích & Lưu ý Green Box
+                if (direction.tips.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.check_circle_outline, size: 16, color: Color(0xFF16A34A)),
+                            SizedBox(width: 8),
+                            Text(
+                              'Tiện ích & Lưu ý',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF16A34A),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ...direction.tips.map((tip) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '• ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF16A34A),
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      tip,
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        color: Color(0xFF15803D),
+                                        height: 1.45,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 20),
 
-                // Actions: Xem trên Bản đồ trường
+                // Action: Xem trên Bản đồ trường
                 ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    context.push('/map?building=${Uri.encodeComponent(buildingCode)}');
+                    final query = direction.mapQuery.isNotEmpty ? direction.mapQuery : direction.buildingCode;
+                    context.go('/map?building=${Uri.encodeComponent(query)}');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -320,109 +413,4 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildTimelineStep({
-    required int stepNum,
-    required IconData icon,
-    required bool isFirst,
-    required bool isLast,
-    required String title,
-    required String desc,
-  }) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Icon Badge + Vertical Line
-          Column(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: isFirst ? AppColors.primary : const Color(0xFFEEF2FF),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isFirst ? AppColors.primary : const Color(0xFFC7D2FE),
-                  ),
-                ),
-                child: Center(
-                  child: Icon(
-                    icon,
-                    size: 15,
-                    color: isFirst ? Colors.white : AppColors.primary,
-                  ),
-                ),
-              ),
-              if (!isLast)
-                Expanded(
-                  child: Container(
-                    width: 2,
-                    color: const Color(0xFFE2E8F0),
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 12),
-
-          // Content
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 16, top: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textForeground,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    desc,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF64748B),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _extractBuildingCode(String room) {
-    if (room.startsWith('2.') || room.startsWith('2_') || room.contains('Nhà 2')) {
-      return 'Nhà 2';
-    }
-    if (room.startsWith('9.') || room.startsWith('9_') || room.contains('Nhà 9')) {
-      return 'Nhà 9';
-    }
-    if (room.startsWith('7.') || room.startsWith('7_') || room.contains('Nhà 7')) {
-      return 'Nhà 7';
-    }
-    return 'Nhà học';
-  }
-
-  String _extractBuildingName(String room) {
-    if (room.startsWith('2.') || room.startsWith('2_')) {
-      return 'Nhà học số 2';
-    }
-    if (room.startsWith('9.') || room.startsWith('9_')) {
-      return 'Giảng đường Nhà 9';
-    }
-    if (room.startsWith('7.') || room.startsWith('7_')) {
-      return 'Giảng đường Nhà 7';
-    }
-    return 'Khu giảng đường trung tâm';
-  }
 }
-

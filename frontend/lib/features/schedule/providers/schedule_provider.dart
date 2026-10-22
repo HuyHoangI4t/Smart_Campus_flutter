@@ -87,7 +87,9 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
 
     return ScheduleState(
       selectedDay: initialDay,
-      weekRange: defaultWeeks.isNotEmpty ? defaultWeeks[0]['weekRange'] : '',
+      weekRange: defaultWeeks.length > 1 ? defaultWeeks[1]['weekRange'] : (defaultWeeks.isNotEmpty ? defaultWeeks[0]['weekRange'] : ''),
+      selectedWeekIndex: defaultWeeks.length > 1 ? 1 : 0,
+      currentWeekIndex: defaultWeeks.length > 1 ? 1 : 0,
       availableWeeks: defaultWeeks,
       days: defaultDays,
       isLoading: true,
@@ -97,20 +99,32 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
   static List<Map<String, dynamic>> _generateDefaultWeeks(DateTime mon) {
     final weeks = <Map<String, dynamic>>[];
     String pad(int n) => n.toString().padLeft(2, '0');
-    for (int i = 0; i < 4; i++) {
-      final wMon = mon.add(Duration(days: i * 7));
+
+    final config = [
+      {'offset': -1, 'label': 'Tuần trước', 'isCurrent': false, 'isNext': false},
+      {'offset': 0, 'label': 'Tuần này', 'isCurrent': true, 'isNext': false},
+      {'offset': 1, 'label': 'Tuần sau', 'isCurrent': false, 'isNext': true},
+      {'offset': 2, 'label': '2 tuần sau', 'isCurrent': false, 'isNext': false},
+    ];
+
+    for (int i = 0; i < config.length; i++) {
+      final item = config[i];
+      final off = item['offset'] as int;
+      final wMon = mon.add(Duration(days: off * 7));
       final wSun = wMon.add(const Duration(days: 6));
       final sStr = '${pad(wMon.day)}/${pad(wMon.month)}';
       final eStr = '${pad(wSun.day)}/${pad(wSun.month)}';
-      final label = i == 0
-          ? 'Tuần này ($sStr - $eStr)'
-          : (i == 1 ? 'Tuần sau ($sStr - $eStr)' : 'Tuần ${pad(i + 1)} ($sStr - $eStr)');
+      final label = '${item['label']} ($sStr - $eStr)';
+      final weekRange = 'Từ ngày ${pad(wMon.day)}/${pad(wMon.month)}/${wMon.year} đến ngày ${pad(wSun.day)}/${pad(wSun.month)}/${wSun.year}';
+
       weeks.add({
         'index': i,
+        'offset': off,
         'label': label,
-        'weekRange': 'Từ ngày ${pad(wMon.day)}/${pad(wMon.month)}/${wMon.year} đến ngày ${pad(wSun.day)}/${pad(wSun.month)}/${wSun.year}',
-        'isCurrent': i == 0,
-        'isNext': i == 1,
+        'weekRange': weekRange,
+        'isCurrent': item['isCurrent'] == true,
+        'isNext': item['isNext'] == true,
+        'startDate': wMon,
       });
     }
     return weeks;
@@ -130,15 +144,46 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
   }
 
   void selectDay(String day) {
-    state = state.copyWith(selectedDay: day);
+    state = state.copyWith(selectedDay: day.trim());
   }
 
   Future<void> selectWeek(int weekIndex) async {
-    state = state.copyWith(selectedWeekIndex: weekIndex);
+    final wData = state.availableWeeks.firstWhere(
+      (w) => w['index'] == weekIndex,
+      orElse: () => {},
+    );
+
+    if (wData.isNotEmpty && wData['startDate'] is DateTime) {
+      final mon = wData['startDate'] as DateTime;
+      state = state.copyWith(
+        selectedWeekIndex: weekIndex,
+        days: _generateDefaultDays(mon),
+        weekRange: wData['weekRange'] ?? state.weekRange,
+      );
+    } else if (wData.isNotEmpty && wData['weekRange'] is String) {
+      final rangeText = wData['weekRange'] as String;
+      final match = RegExp(r'(\d{1,2})/(\d{1,2})/(\d{4})').allMatches(rangeText).toList();
+      if (match.length >= 2) {
+        final d = int.parse(match[0].group(1)!);
+        final m = int.parse(match[0].group(2)!);
+        final y = int.parse(match[0].group(3)!);
+        final mon = DateTime(y, m, d);
+        state = state.copyWith(
+          selectedWeekIndex: weekIndex,
+          days: _generateDefaultDays(mon),
+          weekRange: rangeText,
+        );
+      } else {
+        state = state.copyWith(selectedWeekIndex: weekIndex);
+      }
+    } else {
+      state = state.copyWith(selectedWeekIndex: weekIndex);
+    }
+
     await fetchSchedule(weekIndex: weekIndex);
   }
 
-  Future<void> fetchSchedule({int? weekIndex}) async {
+  Future<void> fetchSchedule({int? weekIndex, bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
@@ -148,8 +193,10 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
       final Map<String, dynamic> query = {};
       if (mssv != null) query['mssv'] = mssv;
       final targetWeek = weekIndex ?? state.selectedWeekIndex;
-      if (targetWeek > 0) {
-        query['weekIndex'] = targetWeek;
+      query['weekIndex'] = targetWeek;
+      if (forceRefresh) {
+        query['refresh'] = 'true';
+        query['reload'] = 'true';
       }
 
       final response = await _dio.get(
@@ -176,13 +223,10 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
             if (match.length >= 2) {
               final sStr = match[0].group(1)!;
               final eStr = match[1].group(1)!;
-              if (wMap['isCurrent'] == true) {
-                cleanLabel = 'Tuần này ($sStr - $eStr)';
-              } else if (wMap['isNext'] == true) {
-                cleanLabel = 'Tuần sau ($sStr - $eStr)';
-              } else {
-                cleanLabel = '$cleanLabel ($sStr - $eStr)';
+              if (cleanLabel.contains('(')) {
+                cleanLabel = cleanLabel.split('(')[0].trim();
               }
+              cleanLabel = '$cleanLabel ($sStr - $eStr)';
             }
             return {
               'index': wMap['index'] ?? 0,
@@ -196,14 +240,16 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
 
         List<Map<String, String>> daysList = state.days;
         if (response.data['days'] is List && (response.data['days'] as List).isNotEmpty) {
-          daysList = (response.data['days'] as List).map((d) {
-            final dMap = d as Map<String, dynamic>;
-            return {
-              'day': dMap['label']?.toString() ?? dMap['name']?.toString() ?? 'Thứ 2',
-              'date': dMap['dateShort']?.toString() ?? dMap['date']?.toString() ?? '',
-              'fullDate': dMap['date']?.toString() ?? '',
-            };
-          }).toList();
+          daysList = (response.data['days'] as List)
+              .map((d) {
+                final dMap = d as Map<String, dynamic>;
+                return {
+                  'day': dMap['label']?.toString() ?? dMap['name']?.toString() ?? 'Thứ 2',
+                  'date': dMap['dateShort']?.toString() ?? dMap['date']?.toString() ?? '',
+                  'fullDate': dMap['date']?.toString() ?? '',
+                };
+              })
+              .toList();
         }
 
         state = state.copyWith(
@@ -217,66 +263,11 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
           isLoading: false,
         );
       } else {
-        _useFallbackMockData();
+        state = state.copyWith(items: const [], isLoading: false);
       }
     } catch (_) {
-      _useFallbackMockData();
+      state = state.copyWith(items: const [], isLoading: false);
     }
-  }
-
-  void _useFallbackMockData() {
-    final mockItems = [
-      const ScheduleItem(
-        id: 1,
-        courseName: 'LS Đảng CS VN',
-        room: '2.21 (CLC)',
-        dayOfWeek: 'Thứ 2',
-        timeSlot: 'Tiết 1-4',
-        lecturer: 'Đoàn Văn Kỳ',
-      ),
-      const ScheduleItem(
-        id: 2,
-        courseName: 'Lập trình thiết bị di động',
-        room: '9.2.04',
-        dayOfWeek: 'Thứ 2',
-        timeSlot: 'Tiết 7-10',
-        lecturer: 'TS. Hoàng Minh',
-      ),
-      const ScheduleItem(
-        id: 3,
-        courseName: 'Hệ quản trị cơ sở dữ liệu nâng cao',
-        room: 'Nhà học số 7.2.1',
-        dayOfWeek: 'Thứ 3',
-        timeSlot: '07:00 - 09:15',
-        lecturer: 'TS. Lê Thị Hồng Vân',
-      ),
-      const ScheduleItem(
-        id: 4,
-        courseName: 'Phân tích thiết kế hệ thống thông tin',
-        room: 'Nhà học số 8.2.3',
-        dayOfWeek: 'Thứ 4',
-        timeSlot: '13:00 - 15:15',
-        lecturer: 'ThS. Đặng Hữu Phúc',
-      ),
-      const ScheduleItem(
-        id: 5,
-        courseName: 'Trí tuệ nhân tạo & Khai phá dữ liệu',
-        room: 'Nhà học số 9.3.2',
-        dayOfWeek: 'Thứ 5',
-        timeSlot: '07:00 - 09:15',
-        lecturer: 'PGS.TS. Vũ Đình Khang',
-      ),
-      const ScheduleItem(
-        id: 6,
-        courseName: 'Giáo dục thể chất (Bóng đá)',
-        room: 'Sân vận động',
-        dayOfWeek: 'Thứ 6',
-        timeSlot: '06:30 - 08:45',
-        lecturer: 'ThS. Phan Quốc Tuấn',
-      ),
-    ];
-
-    state = state.copyWith(items: mockItems, isLoading: false);
   }
 
   Future<bool> addCustomSchedule(ScheduleItem item) async {
@@ -293,6 +284,43 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
     } catch (_) {}
 
     state = state.copyWith(items: [...state.items, item]);
+    return true;
+  }
+
+  Future<bool> updateCustomSchedule(dynamic id, ScheduleItem updatedItem) async {
+    try {
+      final response = await _dio.put(
+        '${ApiEndpoints.customSchedule}/$id',
+        data: updatedItem.toJson(),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final newItems = state.items.map((i) => i.id == id ? updatedItem : i).toList();
+        state = state.copyWith(items: newItems);
+        return true;
+      }
+    } catch (_) {}
+
+    final newItems = state.items.map((i) => i.id == id ? updatedItem : i).toList();
+    state = state.copyWith(items: newItems);
+    return true;
+  }
+
+  Future<bool> deleteCustomSchedule(dynamic id) async {
+    try {
+      final response = await _dio.delete(
+        '${ApiEndpoints.customSchedule}/$id',
+      );
+
+      if (response.statusCode == 200) {
+        final newItems = state.items.where((i) => i.id != id).toList();
+        state = state.copyWith(items: newItems);
+        return true;
+      }
+    } catch (_) {}
+
+    final newItems = state.items.where((i) => i.id != id).toList();
+    state = state.copyWith(items: newItems);
     return true;
   }
 }

@@ -337,16 +337,28 @@ exports.getSchedule = async (req, res) => {
     const sunThisWeek = new Date(monThisWeek);
     sunThisWeek.setDate(monThisWeek.getDate() + 6);
 
+    const monPrevWeek = new Date(monThisWeek);
+    monPrevWeek.setDate(monThisWeek.getDate() - 7);
+    const sunPrevWeek = new Date(monPrevWeek);
+    sunPrevWeek.setDate(monPrevWeek.getDate() + 6);
+
     const monNextWeek = new Date(monThisWeek);
     monNextWeek.setDate(monThisWeek.getDate() + 7);
     const sunNextWeek = new Date(monNextWeek);
     sunNextWeek.setDate(monNextWeek.getDate() + 6);
 
+    const mon2WeeksLater = new Date(monThisWeek);
+    mon2WeeksLater.setDate(monThisWeek.getDate() + 14);
+    const sun2WeeksLater = new Date(mon2WeeksLater);
+    sun2WeeksLater.setDate(mon2WeeksLater.getDate() + 6);
+
     const pad = (n) => String(n).padStart(2, '0');
     const fmtRange = (s, e) => `Từ ngày ${pad(s.getDate())}/${pad(s.getMonth() + 1)}/${s.getFullYear()} đến ngày ${pad(e.getDate())}/${pad(e.getMonth() + 1)}/${e.getFullYear()}`;
 
+    const weekPrevRange = fmtRange(monPrevWeek, sunPrevWeek);
     const week0Range = fmtRange(monThisWeek, sunThisWeek);
     const week1Range = fmtRange(monNextWeek, sunNextWeek);
+    const week2Range = fmtRange(mon2WeeksLater, sun2WeeksLater);
 
     const week0Rows = [
       ["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên"],
@@ -366,12 +378,22 @@ exports.getSchedule = async (req, res) => {
       ["Thứ 6", "Ngoại ngữ chuyên ngành", "1-4", "2.20", "Khoa Ngoại ngữ"],
     ];
 
+    const processedPrev = scheduleService.processSchedulePayload([{ tableIndex: 1, rows: week0Rows }], weekPrevRange, customItems, { isCurrentWeek: false });
     const processedWeek0 = scheduleService.processSchedulePayload([{ tableIndex: 1, rows: week0Rows }], week0Range, customItems, { isCurrentWeek: true });
     const processedWeek1 = scheduleService.processSchedulePayload([{ tableIndex: 1, rows: week1Rows }], week1Range, customItems, { isCurrentWeek: false });
+    const processedWeek2 = scheduleService.processSchedulePayload([{ tableIndex: 1, rows: week1Rows }], week2Range, customItems, { isCurrentWeek: false });
 
     const availableWeeks = [
       {
         index: 0,
+        weekRange: weekPrevRange,
+        label: 'Tuần trước',
+        isCurrent: false,
+        isNext: false,
+        schedules: processedPrev.schedules
+      },
+      {
+        index: 1,
         weekRange: week0Range,
         label: 'Tuần này',
         isCurrent: true,
@@ -379,29 +401,42 @@ exports.getSchedule = async (req, res) => {
         schedules: processedWeek0.schedules
       },
       {
-        index: 1,
+        index: 2,
         weekRange: week1Range,
         label: 'Tuần sau',
         isCurrent: false,
         isNext: true,
         schedules: processedWeek1.schedules
+      },
+      {
+        index: 3,
+        weekRange: week2Range,
+        label: '2 tuần sau',
+        isCurrent: false,
+        isNext: false,
+        schedules: processedWeek2.schedules
       }
     ];
 
-    let selectedWeekIdx = 0;
+    let selectedWeekIdx = 1;
     const requestedWeek = req.query.week || req.body?.week;
     const requestedWeekOffset = req.query.weekOffset !== undefined ? parseInt(req.query.weekOffset, 10) : undefined;
     const requestedWeekIndex = req.query.weekIndex !== undefined ? parseInt(req.query.weekIndex, 10) : undefined;
 
-    if (requestedWeek === 'next' || requestedWeekOffset === 1 || requestedWeekIndex === 1) {
-      selectedWeekIdx = 1;
-    } else if (requestedWeek === 'current' || requestedWeekOffset === 0 || requestedWeekIndex === 0) {
+    if (requestedWeek === 'prev' || requestedWeekOffset === -1 || requestedWeekIndex === 0) {
       selectedWeekIdx = 0;
-    } else if (isSunday) {
+    } else if (requestedWeek === 'current' || requestedWeekOffset === 0 || requestedWeekIndex === 1) {
       selectedWeekIdx = 1;
+    } else if (requestedWeek === 'next' || requestedWeekOffset === 1 || requestedWeekIndex === 2) {
+      selectedWeekIdx = 2;
+    } else if (requestedWeekOffset === 2 || requestedWeekIndex === 3) {
+      selectedWeekIdx = 3;
+    } else if (isSunday) {
+      selectedWeekIdx = 2;
     }
 
-    const targetProcessed = selectedWeekIdx === 1 ? processedWeek1 : processedWeek0;
+    const processedList = [processedPrev, processedWeek0, processedWeek1, processedWeek2];
+    const targetProcessed = processedList[selectedWeekIdx] || processedWeek0;
 
     return res.json({
       success: true,
@@ -409,8 +444,8 @@ exports.getSchedule = async (req, res) => {
       isGuest: true,
       isSunday,
       selectedWeekIndex: selectedWeekIdx,
-      currentWeekIndex: 0,
-      nextWeekIndex: 1,
+      currentWeekIndex: 1,
+      nextWeekIndex: 2,
       weekRange: availableWeeks[selectedWeekIdx].weekRange,
       availableWeeks,
       ...targetProcessed
@@ -467,10 +502,10 @@ exports.getSchedule = async (req, res) => {
   if (mssv && !isGuestOrEmail(mssv)) {
     try {
       const syncPromise = studentSyncService.syncScheduleForStudent(mssv, studentDk);
-      const syncRes = dbSchedules.length > 0
+      const syncRes = (dbSchedules.length > 0 && !forceRefresh)
         ? await Promise.race([
             syncPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('TTN Crawler timeout 2500ms')), 2500))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('TTN Crawler timeout 15000ms')), 15000))
           ])
         : await syncPromise;
 
@@ -595,14 +630,17 @@ function formatDbSchedulesResponse(dbSchedules, customItems, req, res, mssv, isD
       if (!weekMap[wRange]) {
         weekMap[wRange] = [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]];
       }
-      weekMap[wRange].push([
-        row.thu || "Thứ 2",
-        row.ten_hp || "Môn học",
-        row.tiet || "1-4",
-        row.phong || "Khu giảng đường",
-        row.giang_vien || "Giảng viên bộ môn",
-        row.ngay_hoc || null
-      ]);
+      // Chỉ push vào danh sách môn nếu không phải dòng rỗng đánh dấu tuần
+      if (row.loai_lich !== 'empty_week' && !String(row.ma_hp).startsWith('EMPTY_WEEK') && row.ten_hp && row.ten_hp.trim() !== '') {
+        weekMap[wRange].push([
+          row.thu || "Thứ 2",
+          row.ten_hp || "Môn học",
+          row.tiet || "1-4",
+          row.phong || "Khu giảng đường",
+          row.giang_vien || "Giảng viên bộ môn",
+          row.ngay_hoc || null
+        ]);
+      }
     }
   }
 
@@ -624,20 +662,127 @@ function formatDbSchedulesResponse(dbSchedules, customItems, req, res, mssv, isD
     });
   }
 
+  // Sắp xếp các tuần theo thứ tự thời gian tăng dần
+  dbWeeks.sort((a, b) => {
+    if (a.startDate && b.startDate) return a.startDate.getTime() - b.startDate.getTime();
+    return 0;
+  });
+  dbWeeks.forEach((w, idx) => { w.index = idx; });
+
   let curWeekIdx = dbWeeks.findIndex(w => w.isCurrent);
   if (curWeekIdx === -1) curWeekIdx = 0;
   dbWeeks[curWeekIdx].isCurrent = true;
-  const nextWeekIdx = (curWeekIdx + 1 < dbWeeks.length) ? (curWeekIdx + 1) : curWeekIdx;
-  if (dbWeeks[nextWeekIdx]) dbWeeks[nextWeekIdx].isNext = true;
+
+  // Luôn đảm bảo đủ 4 tuần cốt lõi: Tuần trước (-1), Tuần này (0), Tuần sau (+1), 2 tuần sau (+2)
+  const curWeek = dbWeeks[curWeekIdx];
+  if (curWeek && curWeek.startDate) {
+    const pad = (n) => String(n).padStart(2, '0');
+    const formatRange = (s, e) => `Từ ngày ${pad(s.getDate())}/${pad(s.getMonth() + 1)}/${s.getFullYear()} đến ngày ${pad(e.getDate())}/${pad(e.getMonth() + 1)}/${e.getFullYear()}`;
+
+    // 1. Đảm bảo có 'Tuần trước' (offset -1)
+    const hasPrev = dbWeeks.some(w => {
+      if (!w.startDate) return false;
+      const diffDays = Math.round((curWeek.startDate - w.startDate) / (1000 * 60 * 60 * 24));
+      return diffDays >= 5 && diffDays <= 9;
+    });
+    if (!hasPrev) {
+      const prevStart = new Date(curWeek.startDate);
+      prevStart.setDate(prevStart.getDate() - 7);
+      const prevEnd = new Date(curWeek.endDate || curWeek.startDate);
+      prevEnd.setDate(prevEnd.getDate() - 7);
+      dbWeeks.push({
+        index: -1,
+        weekRange: formatRange(prevStart, prevEnd),
+        startDate: prevStart,
+        endDate: prevEnd,
+        isCurrent: false,
+        rows: [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]]
+      });
+    }
+
+    // 2. Đảm bảo có 'Tuần sau' (offset +1)
+    const hasNext = dbWeeks.some(w => {
+      if (!w.startDate) return false;
+      const diffDays = Math.round((w.startDate - curWeek.startDate) / (1000 * 60 * 60 * 24));
+      return diffDays >= 5 && diffDays <= 9;
+    });
+    if (!hasNext) {
+      const nextStart = new Date(curWeek.startDate);
+      nextStart.setDate(nextStart.getDate() + 7);
+      const nextEnd = new Date(curWeek.endDate || curWeek.startDate);
+      nextEnd.setDate(nextEnd.getDate() + 7);
+      dbWeeks.push({
+        index: 998,
+        weekRange: formatRange(nextStart, nextEnd),
+        startDate: nextStart,
+        endDate: nextEnd,
+        isCurrent: false,
+        rows: [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]]
+      });
+    }
+
+    // 3. Đảm bảo có '2 tuần sau' (offset +2)
+    const hasTwoAfter = dbWeeks.some(w => {
+      if (!w.startDate) return false;
+      const diffDays = Math.round((w.startDate - curWeek.startDate) / (1000 * 60 * 60 * 24));
+      return diffDays >= 12 && diffDays <= 16;
+    });
+    if (!hasTwoAfter) {
+      const twoStart = new Date(curWeek.startDate);
+      twoStart.setDate(twoStart.getDate() + 14);
+      const twoEnd = new Date(curWeek.endDate || curWeek.startDate);
+      twoEnd.setDate(twoEnd.getDate() + 14);
+      dbWeeks.push({
+        index: 999,
+        weekRange: formatRange(twoStart, twoEnd),
+        startDate: twoStart,
+        endDate: twoEnd,
+        isCurrent: false,
+        rows: [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]]
+      });
+    }
+
+    // Sắp xếp lại dbWeeks theo thời gian tăng dần và gán lại index chuẩn
+    dbWeeks.sort((a, b) => {
+      if (a.startDate && b.startDate) return a.startDate.getTime() - b.startDate.getTime();
+      return 0;
+    });
+    dbWeeks.forEach((w, idx) => { w.index = idx; });
+    curWeekIdx = dbWeeks.findIndex(w => w.isCurrent);
+    if (curWeekIdx === -1) curWeekIdx = 0;
+  }
+
+  const nextWeekIdx = (curWeekIdx + 1 < dbWeeks.length) ? (curWeekIdx + 1) : -1;
+  if (nextWeekIdx !== -1 && dbWeeks[nextWeekIdx]) {
+    dbWeeks[nextWeekIdx].isNext = true;
+  }
 
   const processedWeeks = dbWeeks.map(w => {
     const proc = scheduleService.processSchedulePayload([{ tableIndex: 1, rows: w.rows }], w.weekRange, customItems, { isCurrentWeek: w.index === curWeekIdx });
+    const diff = w.index - curWeekIdx;
+    let label = `Tuần ${w.index + 1}`;
+    if (diff === 0) {
+      label = 'Tuần này';
+    } else if (diff === 1) {
+      label = 'Tuần sau';
+    } else if (diff === 2) {
+      label = '2 tuần sau';
+    } else if (diff > 2) {
+      label = `${diff} tuần sau`;
+    } else if (diff === -1) {
+      label = 'Tuần trước';
+    } else if (diff === -2) {
+      label = '2 tuần trước';
+    } else if (diff < -2) {
+      label = `${Math.abs(diff)} tuần trước`;
+    }
+
     return {
       index: w.index,
       weekRange: w.weekRange,
-      label: w.index === curWeekIdx ? 'Tuần này' : (w.index === nextWeekIdx ? 'Tuần sau' : `Tuần ${w.index + 1}`),
+      label,
       isCurrent: w.index === curWeekIdx,
-      isNext: w.index === nextWeekIdx,
+      isNext: nextWeekIdx !== -1 && w.index === nextWeekIdx,
       schedules: proc.schedules
     };
   });

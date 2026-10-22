@@ -7,6 +7,7 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 const RSS_ANNOUNCEMENTS_URL = 'https://www.ttn.edu.vn/index.php/svthongbao?format=feed&type=rss';
 const RSS_NEWS_URL = 'https://www.ttn.edu.vn/index.php/mthongbao/tintuc?format=feed&type=rss';
+const RSS_TIMEOUT_MS = 25000; // 25s timeout cho máy chủ trường TTN
 
 function formatRssDate(dateStr) {
   if (!dateStr) return 'Mới cập nhật';
@@ -103,7 +104,7 @@ async function fetchAnnouncementsFromRss() {
   try {
     const res = await axios.get(RSS_ANNOUNCEMENTS_URL, {
       httpsAgent,
-      timeout: 8000,
+      timeout: RSS_TIMEOUT_MS,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
@@ -210,7 +211,7 @@ async function fetchNewsFromRss() {
   try {
     const res = await axios.get(RSS_NEWS_URL, {
       httpsAgent,
-      timeout: 8000,
+      timeout: RSS_TIMEOUT_MS,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
@@ -516,89 +517,133 @@ const FALLBACK_NEWS = [
   }
 ];
 
-// ─── 6. HÀM CHÍNH: LẤY DỮ LIỆU SIÊU TỐC (DB & IN-MEMORY CACHE TRƯỚC TIÊN) ──────
+// ─── 6. HÀM CHÍNH: LẤY DỮ LIỆU TỪ WEB -> NẠP VÀO DB -> NẠP LÊN CACHE ─────────
 let announcementsMemCache = null;
 let announcementsCacheTime = 0;
 let newsMemCache = null;
 let newsCacheTime = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 phút lưu RAM
+let isSyncingAnnouncements = false;
+let isSyncingNews = false;
+
+async function _syncAnnouncementsInBackground() {
+  if (isSyncingAnnouncements) return;
+  isSyncingAnnouncements = true;
+  try {
+    const live = await fetchAnnouncementsFromRss();
+    if (live && live.length > 0) {
+      await saveItemsToDb(live);
+      enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
+      announcementsMemCache = sortByNewestDate(live);
+      announcementsCacheTime = Date.now();
+    }
+  } catch (err) {
+    // Chạy nền bỏ qua lỗi
+  } finally {
+    isSyncingAnnouncements = false;
+  }
+}
+
+async function _syncNewsInBackground() {
+  if (isSyncingNews) return;
+  isSyncingNews = true;
+  try {
+    const live = await fetchNewsFromRss();
+    if (live && live.length > 0) {
+      await saveItemsToDb(live);
+      enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
+      newsMemCache = sortByNewestDate(live);
+      newsCacheTime = Date.now();
+    }
+  } catch (err) {
+    // Chạy nền bỏ qua lỗi
+  } finally {
+    isSyncingNews = false;
+  }
+}
 
 async function getAnnouncementsWithFallback(forceRefresh = false) {
   const now = Date.now();
-  // 1. Kiểm tra RAM cache (0.1ms)
+
+  // 1. Kiểm tra RAM cache nếu có và còn mới (< 5 phút) và không ép reload
   if (!forceRefresh && announcementsMemCache && (now - announcementsCacheTime < CACHE_TTL_MS)) {
     return sortByNewestDate(announcementsMemCache);
   }
 
-  // 2. Đọc trực tiếp từ MySQL news_cache (1-2ms)
-  if (!forceRefresh) {
-    const cached = await getItemsFromDb('announcement', 50);
-    if (cached && cached.length > 0) {
-      const sorted = sortByNewestDate(cached);
+  // 2. Lấy từ MySQL news_cache (tốc độ siêu tốc 1-2ms, tránh làm treo ứng dụng di động)
+  const cached = await getItemsFromDb('announcement', 50);
+  if (cached && cached.length > 0) {
+    const sorted = sortByNewestDate(cached);
+    announcementsMemCache = sorted;
+    announcementsCacheTime = now;
+
+    // Khi người dùng vuốt xuống (forceRefresh) hoặc dữ liệu cũ (> 10 phút):
+    // Kích hoạt đồng bộ ngầm: Web trường -> Nạp vào DB -> Cập nhật Cache
+    if (forceRefresh || (now - announcementsCacheTime > 10 * 60 * 1000)) {
+      _syncAnnouncementsInBackground();
+    }
+
+    return sorted;
+  }
+
+  // 3. Nếu DB trống hoàn toàn: Bắt buộc cào trực tiếp từ Web trường -> Nạp DB -> Nạp Cache
+  try {
+    const live = await fetchAnnouncementsFromRss();
+    if (live && live.length > 0) {
+      await saveItemsToDb(live);
+      enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
+      const sorted = sortByNewestDate(live);
       announcementsMemCache = sorted;
       announcementsCacheTime = now;
       return sorted;
     }
+  } catch (e) {
+    console.warn('Lỗi cào Web Thông báo khi DB trống:', e.message);
   }
 
-  // 3. Chỉ cào Live RSS khi DB trống hoặc khi có yêu cầu reload (forceRefresh = true)
-  const live = await fetchAnnouncementsFromRss();
-  if (live.length > 0) {
-    enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
-    const sorted = sortByNewestDate(live);
-    announcementsMemCache = sorted;
-    announcementsCacheTime = now;
-    return sorted;
-  }
-
-  const cachedFallback = await getItemsFromDb('announcement', 50);
-  if (cachedFallback.length > 0) {
-    const sorted = sortByNewestDate(cachedFallback);
-    announcementsMemCache = sorted;
-    announcementsCacheTime = now;
-    return sorted;
-  }
-
-  return sortByNewestDate(FALLBACK_ANNOUNCEMENTS);
+  return [];
 }
 
 async function getNewsWithFallback(forceRefresh = false) {
   const now = Date.now();
-  // 1. Kiểm tra RAM cache (0.1ms)
+
+  // 1. Kiểm tra RAM cache nếu có và còn mới (< 5 phút) và không ép reload
   if (!forceRefresh && newsMemCache && (now - newsCacheTime < CACHE_TTL_MS)) {
     return sortByNewestDate(newsMemCache);
   }
 
-  // 2. Đọc trực tiếp từ MySQL news_cache (1-2ms)
-  if (!forceRefresh) {
-    const cached = await getItemsFromDb('news', 50);
-    if (cached && cached.length > 0) {
-      const sorted = sortByNewestDate(cached);
+  // 2. Lấy từ MySQL news_cache (tốc độ siêu tốc 1-2ms, tránh làm treo ứng dụng di động)
+  const cached = await getItemsFromDb('news', 50);
+  if (cached && cached.length > 0) {
+    const sorted = sortByNewestDate(cached);
+    newsMemCache = sorted;
+    newsCacheTime = now;
+
+    // Khi người dùng vuốt xuống (forceRefresh) hoặc dữ liệu cũ (> 10 phút):
+    // Kích hoạt đồng bộ ngầm: Web trường -> Nạp vào DB -> Cập nhật Cache
+    if (forceRefresh || (now - newsCacheTime > 10 * 60 * 1000)) {
+      _syncNewsInBackground();
+    }
+
+    return sorted;
+  }
+
+  // 3. Nếu DB trống hoàn toàn: Bắt buộc cào trực tiếp từ Web trường -> Nạp DB -> Nạp Cache
+  try {
+    const live = await fetchNewsFromRss();
+    if (live && live.length > 0) {
+      await saveItemsToDb(live);
+      enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
+      const sorted = sortByNewestDate(live);
       newsMemCache = sorted;
       newsCacheTime = now;
       return sorted;
     }
+  } catch (e) {
+    console.warn('Lỗi cào Web Tin tức khi DB trống:', e.message);
   }
 
-  // 3. Chỉ cào Live RSS khi DB trống hoặc khi có yêu cầu reload (forceRefresh = true)
-  const live = await fetchNewsFromRss();
-  if (live.length > 0) {
-    enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
-    const sorted = sortByNewestDate(live);
-    newsMemCache = sorted;
-    newsCacheTime = now;
-    return sorted;
-  }
-
-  const cachedFallback = await getItemsFromDb('news', 50);
-  if (cachedFallback.length > 0) {
-    const sorted = sortByNewestDate(cachedFallback);
-    newsMemCache = sorted;
-    newsCacheTime = now;
-    return sorted;
-  }
-
-  return sortByNewestDate(FALLBACK_NEWS);
+  return [];
 }
 
 // ─── 7. CÀO TOÀN VĂN VÀ DANH SÁCH ẢNH GỐC TỪ TRANG BÀI VIẾT TTN ──────────────

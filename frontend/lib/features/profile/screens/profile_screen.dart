@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/home_widget_service.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/widgets/nav_header.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../grades/providers/grades_provider.dart';
+import '../../home/providers/home_provider.dart';
+import '../../schedule/providers/schedule_provider.dart';
 import '../widgets/avatar_picker_modal.dart';
 import '../widgets/edit_profile_modal.dart';
 import '../widgets/logout_confirm_dialog.dart';
@@ -43,7 +48,7 @@ class ProfileScreen extends ConsumerWidget {
           // ─── 2. SCROLLABLE BODY ───
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 130),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
               children: [
                 // 3. MAIN PROFILE CARD (13_profile_overview.jpg)
                 _ProfileOverviewCard(
@@ -85,7 +90,20 @@ class ProfileScreen extends ConsumerWidget {
                 _SecuritySettingsCard(currentUser: user),
                 const SizedBox(height: 24),
 
-                // 6. LOGOUT BUTTON (14_profile_security.jpg)
+                // 6. CÀI ĐẶT ỨNG DỤNG & THÔNG BÁO (NHẮC NHỞ LỊCH HỌC 1 TIẾNG & THỬ GỬI)
+                const Text(
+                  'Cài đặt ứng dụng',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textForeground,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const _AppSettingsCard(),
+                const SizedBox(height: 24),
+
+                // 7. LOGOUT BUTTON (14_profile_security.jpg)
                 const _LogoutButton(),
               ],
             ),
@@ -472,6 +490,283 @@ class _LogoutButton extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── 5. APP SETTINGS & NOTIFICATIONS COMPONENT ───
+class _AppSettingsCard extends ConsumerStatefulWidget {
+  const _AppSettingsCard();
+
+  @override
+  ConsumerState<_AppSettingsCard> createState() => _AppSettingsCardState();
+}
+
+class _AppSettingsCardState extends ConsumerState<_AppSettingsCard> {
+  bool _scheduleReminder = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.cardBorder, width: 1),
+      ),
+      child: Column(
+        children: [
+          // Row 1: Nhắc nhở lịch học trước 1 tiếng
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEF2FF),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.alarm_on_outlined,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Nhắc nhở lịch học',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textForeground,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Thông báo trước khi bắt đầu 1 tiếng',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                Switch.adaptive(
+                  value: _scheduleReminder,
+                  activeTrackColor: AppColors.primary,
+                  onChanged: (val) {
+                    setState(() {
+                      _scheduleReminder = val;
+                    });
+                    if (val) {
+                      final scheduleItems = ref.read(scheduleProvider).items;
+                      NotificationService.instance.syncAllScheduleReminders(scheduleItems);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Đã bật tính năng nhắc nhở lịch học trước 1 tiếng!'),
+                          duration: Duration(seconds: 2),
+                          backgroundColor: AppColors.primary,
+                        ),
+                      );
+                    } else {
+                      NotificationService.instance.cancelAll();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Đã tắt toàn bộ thông báo nhắc nhở lịch học.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.cardBorder),
+
+          // Row 2: Thử gửi thông báo
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.notifications_active_outlined,
+                        color: Color(0xFFD97706),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Kiểm tra thông báo',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textForeground,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Gửi thông báo mẫu lên thiết bị',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final nextClass = ref.read(nextClassProvider);
+                    final subject = nextClass.subject.isNotEmpty ? nextClass.subject : 'LS Đảng CS VN';
+                    final time = nextClass.time.isNotEmpty ? nextClass.time : 'Tiết 1-4';
+                    final room = nextClass.room.isNotEmpty ? nextClass.room : '2.21 (CLC)';
+
+                    await NotificationService.instance.sendTestNotification(
+                      title: '🔔 Nhắc nhở ca học: $subject',
+                      body: 'Ca học bắt đầu lúc $time tại phòng $room. Hãy chuẩn bị trước 1 tiếng!',
+                    );
+
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Đã gửi thông báo thử nghiệm thành công!'),
+                          backgroundColor: AppColors.primary,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.send_outlined, size: 14),
+                  label: const Text('Thử gửi', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.cardBorder),
+
+          // Row 3: Widget Launcher màn hình chính
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.widgets_outlined,
+                        color: Color(0xFF16A34A),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Widget màn hình chính',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textForeground,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Đồng bộ ra màn hình điện thoại',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final nextClass = ref.read(nextClassProvider);
+                    final gradesState = ref.read(gradesProvider);
+
+                    await HomeWidgetService.instance.updateWidgetData(
+                      subject: nextClass.subject.isNotEmpty ? nextClass.subject : 'LS Đảng CS VN',
+                      time: nextClass.time.isNotEmpty ? nextClass.time : 'Tiết 1-4',
+                      room: nextClass.room.isNotEmpty ? nextClass.room : '2.21 (CLC)',
+                      status: nextClass.capsuleLabel.isNotEmpty ? nextClass.capsuleLabel : 'LỊCH HỌC',
+                      countdown: nextClass.countdownText,
+                      gpa: gradesState.gpa4.toStringAsFixed(2),
+                      credits: '${gradesState.accumulatedCredits} TC',
+                      rank: gradesState.summary.academicRank.isNotEmpty ? gradesState.summary.academicRank : 'Khá',
+                    );
+
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Đã đồng bộ dữ liệu ra Widget Launcher!'),
+                          backgroundColor: Color(0xFF16A34A),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.sync_outlined, size: 14),
+                  label: const Text('Đồng bộ', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.cardBorder),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

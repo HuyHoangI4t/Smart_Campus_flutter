@@ -36,12 +36,13 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
   Future<void> _loadArticleDetailIfNeeded() async {
     final homeState = ref.read(homeProvider);
     final targetIdStr = widget.id.toString();
+    final allArticles = homeState.allArticles;
 
-    final item = homeState.news.firstWhere(
-      (n) => n.id.toString() == targetIdStr || n.id.toString().contains(targetIdStr),
-      orElse: () => homeState.news.isNotEmpty
-          ? homeState.news.first
-          : const NewsModel(id: 0, title: 'Thông báo', summary: ''),
+    final item = allArticles.firstWhere(
+      (n) => n.id == targetIdStr || n.id.contains(targetIdStr),
+      orElse: () => allArticles.isNotEmpty
+          ? allArticles.first
+          : const NewsModel(id: '0', title: 'Thông báo', summary: ''),
     );
 
     if (item.link == null || item.link!.isEmpty || !item.link!.startsWith('http')) {
@@ -142,12 +143,13 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
   Widget build(BuildContext context) {
     final homeState = ref.watch(homeProvider);
     final targetIdStr = widget.id.toString();
+    final allArticles = homeState.allArticles;
 
-    final item = homeState.news.firstWhere(
-      (n) => n.id.toString() == targetIdStr || n.id.toString().contains(targetIdStr),
-      orElse: () => homeState.news.isNotEmpty
-          ? homeState.news.first
-          : const NewsModel(id: 0, title: 'Thông báo sinh viên', summary: ''),
+    final item = allArticles.firstWhere(
+      (n) => n.id == targetIdStr || n.id.contains(targetIdStr),
+      orElse: () => allArticles.isNotEmpty
+          ? allArticles.first
+          : const NewsModel(id: '0', title: 'Thông báo sinh viên', summary: ''),
     );
 
     final resolvedContent = _fetchedContent ?? item.content ?? item.summary;
@@ -254,7 +256,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   // Cover Hero Image (chuẩn qua proxy và fallbacks đa dạng - giữ lại duy nhất 1 ảnh bìa đầu bài)
                   NewsCardImage(
                     imageUrl: coverImageUrl,
-                    fallbackIndex: item.id,
+                    fallbackIndex: item.numericIndex,
                     width: double.infinity,
                     height: 210,
                     fit: BoxFit.cover,
@@ -277,7 +279,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
 
                   // Content: Nếu có các contentBlocks xen kẽ ảnh thì hiển thị chuẩn như React Native
                   if (resolvedBlocks.isNotEmpty)
-                    ..._buildContentBlocks(resolvedBlocks, item.id, coverImageUrl)
+                    ..._buildContentBlocks(resolvedBlocks, item.numericIndex, coverImageUrl)
                   else
                     ..._buildParagraphs(resolvedContent),
 

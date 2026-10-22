@@ -93,6 +93,32 @@ class CampusDijkstraRouter {
         );
       }
     }
+
+    // Tự động kết nối các nút gần nhau (dưới 25m) để tránh việc các nhánh đường bị đứt gãy
+    final nodesList = nodeCoordinates.entries.toList();
+    for (int i = 0; i < nodesList.length; i++) {
+      for (int j = i + 1; j < nodesList.length; j++) {
+        final n1 = nodesList[i];
+        final n2 = nodesList[j];
+        final d = calculateHaversineDistance(
+          n1.value.latitude,
+          n1.value.longitude,
+          n2.value.latitude,
+          n2.value.longitude,
+        );
+        if (d <= 25.0) {
+          final neighbors1 = graph[n1.key] ?? [];
+          if (!neighbors1.any((e) => e.target == n2.key)) {
+            graph.putIfAbsent(n1.key, () => []).add(
+              DijkstraEdge(target: n2.key, weight: d, coordinate: n2.value),
+            );
+            graph.putIfAbsent(n2.key, () => []).add(
+              DijkstraEdge(target: n1.key, weight: d, coordinate: n1.value),
+            );
+          }
+        }
+      }
+    }
   }
 
   /// Tìm đỉnh trong đồ thị gần nhất với một tọa độ cho trước
@@ -176,6 +202,36 @@ class CampusDijkstraRouter {
       }
     }
 
+    // Kiểm tra xem có tìm thấy đường đi khả thi tới đích hay không
+    final bool hasPath = visited.contains(endNodeId) &&
+        distances[endNodeId] != null &&
+        !distances[endNodeId]!.isInfinite;
+
+    if (!hasPath) {
+      final directDistance = calculateHaversineDistance(
+        start.latitude,
+        start.longitude,
+        end.latitude,
+        end.longitude,
+      );
+      final walkingMinutes = (directDistance / 75.0).ceil().clamp(1, 60);
+
+      final fallbackCoords = <LatLng>[start];
+      if (nodeCoordinates[startNodeId] != null) {
+        fallbackCoords.add(nodeCoordinates[startNodeId]!);
+      }
+      if (nodeCoordinates[endNodeId] != null && endNodeId != startNodeId) {
+        fallbackCoords.add(nodeCoordinates[endNodeId]!);
+      }
+      fallbackCoords.add(end);
+
+      return DijkstraResult(
+        coordinates: fallbackCoords,
+        distanceMeters: directDistance,
+        estimatedWalkingMinutes: walkingMinutes,
+      );
+    }
+
     // Tái cấu trúc lộ trình đường đi
     final pathCoords = <LatLng>[];
     String? step = endNodeId;
@@ -196,16 +252,19 @@ class CampusDijkstraRouter {
       pathCoords.add(end);
     }
 
-    final totalMeters = distances[endNodeId] ??
+    final rawMeters = distances[endNodeId] ??
         calculateHaversineDistance(start.latitude, start.longitude, end.latitude, end.longitude);
 
-    // Tốc độ đi bộ trung bình khoảng 75 mét / phút
-    final walkingMinutes = (totalMeters / 75.0).ceil();
+    final safeMeters = rawMeters.isInfinite || rawMeters.isNaN
+        ? calculateHaversineDistance(start.latitude, start.longitude, end.latitude, end.longitude)
+        : rawMeters;
+
+    final walkingMinutes = (safeMeters / 75.0).ceil().clamp(1, 120);
 
     return DijkstraResult(
       coordinates: pathCoords,
-      distanceMeters: totalMeters,
-      estimatedWalkingMinutes: walkingMinutes < 1 ? 1 : walkingMinutes,
+      distanceMeters: safeMeters,
+      estimatedWalkingMinutes: walkingMinutes,
     );
   }
 

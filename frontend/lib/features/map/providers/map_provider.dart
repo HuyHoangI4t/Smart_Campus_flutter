@@ -118,9 +118,17 @@ class MapNotifier extends Notifier<MapState> {
           accuracy: LocationAccuracy.high,
           distanceFilter: 3,
         ),
-      ).listen((pos) {
-        state = state.copyWith(userPosition: LatLng(pos.latitude, pos.longitude));
-      });
+      ).listen(
+        (pos) {
+          state = state.copyWith(userPosition: LatLng(pos.latitude, pos.longitude));
+        },
+        onError: (e) {
+          if (kDebugMode) {
+            print('GPS location listen stream error: $e');
+          }
+        },
+        cancelOnError: false,
+      );
     } catch (e) {
       if (kDebugMode) {
         print('GPS location listen error: $e');

@@ -1,3 +1,6 @@
+import 'room_direction_model.dart';
+import '../utils/room_directions.dart';
+
 enum ScheduleStatus {
   ongoing,
   upcoming,
@@ -13,6 +16,9 @@ class ScheduleItem {
   final String? lecturer;
   final bool isCustom;
   final String? code;
+  final String? note;
+  final String? type;
+  final RoomDirectionInfo? direction;
 
   final int dayNum;
   final String? date;
@@ -24,16 +30,34 @@ class ScheduleItem {
 
   String get subject => courseName;
   String get courseCode => code ?? 'HP${id.toString().padLeft(3, '0')}';
+  RoomDirectionInfo get roomDirection => direction ?? parseRoomDirections(room);
+
+  static int dayStrToNum(String dayStr) {
+    final lower = dayStr.toLowerCase().trim();
+    if (lower.contains('thứ 3') || lower.contains('thứ ba') || lower == '3') return 3;
+    if (lower.contains('thứ 4') || lower.contains('thứ tư') || lower == '4') return 4;
+    if (lower.contains('thứ 5') || lower.contains('thứ năm') || lower == '5') return 5;
+    if (lower.contains('thứ 6') || lower.contains('thứ sáu') || lower == '6') return 6;
+    if (lower.contains('thứ 7') || lower.contains('thứ bảy') || lower == '7') return 7;
+    if (lower.contains('cn') || lower.contains('chủ nhật') || lower == '1' || lower == '8') return 1;
+    return 2;
+  }
 
   String get cleanDay {
     final lower = dayOfWeek.toLowerCase().trim();
-    if (lower.startsWith('thứ 2') || dayNum == 2) return 'Thứ 2';
-    if (lower.startsWith('thứ 3') || dayNum == 3) return 'Thứ 3';
-    if (lower.startsWith('thứ 4') || dayNum == 4) return 'Thứ 4';
-    if (lower.startsWith('thứ 5') || dayNum == 5) return 'Thứ 5';
-    if (lower.startsWith('thứ 6') || dayNum == 6) return 'Thứ 6';
-    if (lower.startsWith('thứ 7') || dayNum == 7) return 'Thứ 7';
-    if (lower.startsWith('cn') || lower.startsWith('chủ nhật') || dayNum == 1) return 'CN';
+    if (lower.contains('thứ 2') || lower.contains('thứ hai')) return 'Thứ 2';
+    if (lower.contains('thứ 3') || lower.contains('thứ ba')) return 'Thứ 3';
+    if (lower.contains('thứ 4') || lower.contains('thứ tư')) return 'Thứ 4';
+    if (lower.contains('thứ 5') || lower.contains('thứ năm')) return 'Thứ 5';
+    if (lower.contains('thứ 6') || lower.contains('thứ sáu')) return 'Thứ 6';
+    if (lower.contains('thứ 7') || lower.contains('thứ bảy')) return 'Thứ 7';
+    if (lower.contains('cn') || lower.contains('chủ nhật')) return 'CN';
+    if (dayNum == 3) return 'Thứ 3';
+    if (dayNum == 4) return 'Thứ 4';
+    if (dayNum == 5) return 'Thứ 5';
+    if (dayNum == 6) return 'Thứ 6';
+    if (dayNum == 7) return 'Thứ 7';
+    if (dayNum == 1) return 'CN';
     return 'Thứ 2';
   }
 
@@ -43,6 +67,7 @@ class ScheduleItem {
     if (target == cDay) return true;
     if ((target == 'chủ nhật' || target == 'cn') && (cDay == 'cn' || cDay == 'chủ nhật')) return true;
     if (dayOfWeek.toLowerCase().contains(target)) return true;
+    if (target.contains(cDay)) return true;
     return false;
   }
 
@@ -56,6 +81,9 @@ class ScheduleItem {
     this.lecturer,
     this.isCustom = false,
     this.code,
+    this.note,
+    this.type,
+    this.direction,
     this.date,
     this.dateShort,
     this.status,
@@ -117,6 +145,11 @@ class ScheduleItem {
           json['is_custom'] == true ||
           json['isCustom'] == true,
       code: json['code'] ?? json['ma_hp'],
+      note: json['note']?.toString() ?? json['ghi_chu']?.toString(),
+      type: json['type']?.toString() ?? json['loai_lich']?.toString(),
+      direction: json['direction'] != null && json['direction'] is Map<String, dynamic>
+          ? RoomDirectionInfo.fromJson(json['direction'])
+          : parseRoomDirections(json['room'] ?? json['phong'] ?? ''),
       date: json['date']?.toString(),
       dateShort: json['dateShort']?.toString() ?? json['date_short']?.toString(),
       status: json['status']?.toString(),
@@ -148,7 +181,10 @@ class ScheduleItem {
       'lecturer': lecturer,
       'giang_vien': lecturer,
       'is_custom': isCustom ? 1 : 0,
-      'loai_lich': 'dot_xuat',
+      'note': note,
+      'ghi_chu': note,
+      'type': type ?? 'dot_xuat',
+      'loai_lich': type ?? 'dot_xuat',
     };
   }
 
@@ -161,6 +197,12 @@ class ScheduleItem {
   int get endMinutes {
     if (endMinutesRaw != null && endMinutesRaw! > 0) return endMinutesRaw!;
     return _calculatePeriodMinutes(timeSlot).end;
+  }
+
+  String get startTime {
+    final h = (startMinutes ~/ 60).toString().padLeft(2, '0');
+    final m = (startMinutes % 60).toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   static ({int start, int end}) _calculatePeriodMinutes(String timeStr) {

@@ -339,124 +339,158 @@ async function syncScheduleForStudent(mssv, dk = '10') {
             'Referer': TTN_CONFIG.SCHEDULE_REFERER,
             'Accept': 'text/plain, */*; q=0.01'
           },
-          timeout: 4000
+          timeout: 20000
         })
       );
 
       const $ = cheerio.load(response.data);
-    const parsedWeeks = [];
+      const parsedWeeks = [];
 
-    function parseTableRows(tableElem, weekRangeText = '') {
-      const rows = [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]];
-      if (!tableElem || tableElem.length === 0) return rows;
-      const headers = [];
-      tableElem.find('tr').first().find('th').slice(1).each((j, th) => {
-        headers.push($(th).text().replace(/\s+/g, ' ').trim());
-      });
+      function parseTableRows(tableElem, weekRangeText = '') {
+        const rows = [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]];
+        if (!tableElem || tableElem.length === 0) return rows;
+        const headers = [];
+        tableElem.find('tr').first().find('th, td').slice(1).each((j, cell) => {
+          headers.push($(cell).text().replace(/\s+/g, ' ').trim());
+        });
 
-      tableElem.find('tr').slice(1).each((rowIdx, tr) => {
-        const tds = $(tr).find('td');
-        if (tds.length > 0) {
-          const buoi = $(tds[0]).text().trim();
-          for (let colIdx = 1; colIdx < tds.length; colIdx++) {
-            const cellHtml = $(tds[colIdx]).html() || '';
-            if (!cellHtml.includes('HP:')) continue;
+        tableElem.find('tr').slice(1).each((rowIdx, tr) => {
+          const tds = $(tr).find('td');
+          if (tds.length > 0) {
+            const buoi = $(tds[0]).text().trim();
+            for (let colIdx = 1; colIdx < tds.length; colIdx++) {
+              const cellHtml = $(tds[colIdx]).html() || '';
+              if (!cellHtml.includes('HP:')) continue;
 
-            const lines = cellHtml.split(/<br\s*\/?>/i);
-            let currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '' };
+              const lines = cellHtml.split(/<br\s*\/?>/i);
+              let currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '' };
 
-            lines.forEach(rawLine => {
-              const line = cheerio.load(rawLine).text().trim();
-              if (!line) return;
-              if (line.startsWith('HP:')) {
-                if (currentLesson.ten_hp) {
-                  pushScheduleRow(headers, colIdx, buoi, currentLesson, rows, weekRangeText);
-                  currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '' };
+              lines.forEach(rawLine => {
+                const line = cheerio.load(rawLine).text().trim();
+                if (!line) return;
+                if (line.startsWith('HP:')) {
+                  if (currentLesson.ten_hp) {
+                    pushScheduleRow(headers, colIdx, buoi, currentLesson, rows, weekRangeText);
+                    currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '' };
+                  }
+                  const match = line.match(/HP:\s*(.*?)\s*\(([\d\s-]+)\)/);
+                  if (match) {
+                    currentLesson.ten_hp = match[1].trim();
+                    currentLesson.tiet = match[2].trim();
+                  } else {
+                    currentLesson.ten_hp = line.replace('HP:', '').trim();
+                  }
+                } else if (line.startsWith('GV:')) {
+                  currentLesson.giang_vien = line.replace('GV:', '').trim();
+                } else if (line.startsWith('Phòng:')) {
+                  currentLesson.phong = line.replace('Phòng:', '').trim();
                 }
-                const match = line.match(/HP:\s*(.*?)\s*\(([\d\s-]+)\)/);
-                if (match) {
-                  currentLesson.ten_hp = match[1].trim();
-                  currentLesson.tiet = match[2].trim();
-                } else {
-                  currentLesson.ten_hp = line.replace('HP:', '').trim();
-                }
-              } else if (line.startsWith('GV:')) {
-                currentLesson.giang_vien = line.replace('GV:', '').trim();
-              } else if (line.startsWith('Phòng:')) {
-                currentLesson.phong = line.replace('Phòng:', '').trim();
+              });
+
+              if (currentLesson.ten_hp) {
+                pushScheduleRow(headers, colIdx, buoi, currentLesson, rows, weekRangeText);
               }
-            });
-
-            if (currentLesson.ten_hp) {
-              pushScheduleRow(headers, colIdx, buoi, currentLesson, rows, weekRangeText);
             }
           }
+        });
+        return rows;
+      }
+
+      // Lấy TOÀN BỘ bảng thời khóa biểu trên trang web trường
+      const tables = $('table');
+      if (tables.length > 0) {
+        tables.each((tableIdx, tableElem) => {
+          let weekRangeText = '';
+          // 1. Tìm phần tử trước đó chứa text 'Từ ngày'
+          const prevWeekEl = $(tableElem).prevAll().filter((_, el) => $(el).text().includes('Từ ngày')).first();
+          if (prevWeekEl.length > 0) {
+            weekRangeText = prevWeekEl.text().replace(/\s+/g, ' ').trim();
+          }
+
+          // 2. Dự phòng: Tìm trong caption hoặc tr đầu tiên
+          if (!weekRangeText) {
+            const caption = $(tableElem).find('caption').text().trim();
+            if (caption.includes('Từ ngày')) {
+              weekRangeText = caption.replace(/\s+/g, ' ').trim();
+            }
+          }
+
+          if (!weekRangeText) {
+            weekRangeText = `Tuần ${tableIdx + 1}`;
+          }
+
+          const rows = parseTableRows($(tableElem), weekRangeText);
+          parsedWeeks.push({
+            index: tableIdx,
+            weekRangeText,
+            rows
+          });
+        });
+      }
+
+      let totalSaved = 0;
+      if (parsedWeeks.length > 0) {
+        const newWeekRanges = parsedWeeks.map(w => w.weekRangeText);
+        // Xóa các tuần trùng khớp vừa cào mới để cập nhật dữ liệu mới nhất
+        if (newWeekRanges.length > 0) {
+          await db.query(
+            'DELETE FROM student_schedules WHERE mssv = ? AND (is_custom = 0 OR is_custom IS NULL) AND week_range IN (?)',
+            [mssv, newWeekRanges]
+          );
         }
-      });
-      return rows;
-    }
 
-    $('p').each((i, pElem) => {
-      const pText = $(pElem).text().trim();
-      if (pText.startsWith('Từ ngày')) {
-        const table = $(pElem).next('table');
-        const rows = parseTableRows(table, pText);
-        parsedWeeks.push({
-          index: parsedWeeks.length,
-          weekRangeText: pText,
-          rows
-        });
-      }
-    });
-
-    if (parsedWeeks.length === 0) {
-      const firstTable = $('table').first();
-      if (firstTable.length > 0) {
-        parsedWeeks.push({
-          index: 0,
-          weekRangeText: "Lịch học tuần hiện tại",
-          rows: parseTableRows(firstTable, "Lịch học tuần hiện tại")
-        });
-      }
-    }
-
-    let totalSaved = 0;
-    if (parsedWeeks.length > 0) {
-      await db.query('DELETE FROM student_schedules WHERE mssv = ? AND (is_custom = 0 OR is_custom IS NULL)', [mssv]);
-      const bulkScheduleValues = [];
-      for (const w of parsedWeeks) {
-        if (w.rows && w.rows.length > 1) {
-          for (let i = 1; i < w.rows.length; i++) {
-            const r = w.rows[i];
+        const bulkScheduleValues = [];
+        for (const w of parsedWeeks) {
+          if (w.rows && w.rows.length > 1) {
+            for (let i = 1; i < w.rows.length; i++) {
+              const r = w.rows[i];
+              bulkScheduleValues.push([
+                mssv,
+                `HP-${w.index}-${i}`,
+                r[1],
+                r[0],
+                r[2],
+                r[3],
+                r[4],
+                'HK1 (2025-2026)',
+                0,
+                '',
+                'chinh_khoa',
+                w.weekRangeText,
+                r[5] || null
+              ]);
+            }
+          } else {
+            // Lưu dòng đánh dấu tuần trống (để hiển thị đủ toàn bộ các tuần của kỳ trên app)
             bulkScheduleValues.push([
               mssv,
-              `HP-${w.index}-${i}`,
-              r[1],
-              r[0],
-              r[2],
-              r[3],
-              r[4],
+              `EMPTY_WEEK_${w.index}`,
+              '',
+              'Thứ 2',
+              '',
+              '',
+              '',
               'HK1 (2025-2026)',
               0,
               '',
-              'chinh_khoa',
+              'empty_week',
               w.weekRangeText,
-              r[5] || null
+              null
             ]);
           }
         }
-      }
-      if (bulkScheduleValues.length > 0) {
-        await db.query(
-          'INSERT INTO student_schedules (mssv, ma_hp, ten_hp, thu, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc) VALUES ?',
-          [bulkScheduleValues]
-        );
-        totalSaved = bulkScheduleValues.length;
-      }
-      return { success: true, count: totalSaved, totalWeeks: parsedWeeks.length };
-    }
 
-    return { success: false, message: 'Không có dòng thời khóa biểu trả về từ web trường' };
+        if (bulkScheduleValues.length > 0) {
+          await db.query(
+            'INSERT INTO student_schedules (mssv, ma_hp, ten_hp, thu, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc) VALUES ?',
+            [bulkScheduleValues]
+          );
+          totalSaved = bulkScheduleValues.filter(v => v[10] !== 'empty_week').length;
+        }
+        return { success: true, count: totalSaved, totalWeeks: parsedWeeks.length };
+      }
+
+      return { success: false, message: 'Không có bảng thời khóa biểu nào trả về từ web trường' };
     } catch (error) {
       return { success: false, error: error.message };
     } finally {

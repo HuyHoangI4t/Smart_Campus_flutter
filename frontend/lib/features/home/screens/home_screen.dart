@@ -3,10 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/news_card_image.dart';
+import '../../../core/widgets/wireframe_widgets.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../grades/providers/grades_provider.dart';
+import '../../schedule/providers/schedule_provider.dart';
 import '../models/news_model.dart';
 import '../providers/home_provider.dart';
+import '../widgets/home_gpa_card.dart';
+import '../widgets/home_next_class_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -14,8 +18,6 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
-    final nextClass = ref.watch(nextClassProvider);
-    final gradesState = ref.watch(gradesProvider);
     final homeState = ref.watch(homeProvider);
     final user = authState.user;
 
@@ -31,18 +33,21 @@ class HomeScreen extends ConsumerWidget {
             child: RefreshIndicator(
               color: AppColors.primary,
               onRefresh: () async {
-                await ref.read(homeProvider.notifier).fetchDashboard();
-                await ref.read(gradesProvider.notifier).fetchGrades();
+                await Future.wait<void>([
+                  ref.read(homeProvider.notifier).fetchDashboard(forceRefresh: true),
+                  ref.read(scheduleProvider.notifier).fetchSchedule(forceRefresh: true),
+                  ref.read(gradesProvider.notifier).fetchGrades(),
+                ]);
               },
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
-                  // 3. NEXT CLASS CARD
-                  _buildNextClassCard(context, nextClass),
+                  // 3. THẺ LỊCH HỌC HÔM NAY / SẮP TỚI
+                  const HomeNextClassCard(),
                   const SizedBox(height: 16),
 
-                  // 4. GPA OVERVIEW CARD
-                  _buildGpaCard(context, gradesState),
+                  // 4. THẺ KẾT QUẢ HỌC TẬP (GPA & TÍN CHỈ)
+                  const HomeGpaCard(),
                   const SizedBox(height: 24),
 
                   // 5. QUICK ACTIONS
@@ -50,15 +55,25 @@ class HomeScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
 
                   // 6. ALERTS & NOTIFICATIONS
-                  _buildAlertsSection(context, homeState.alerts),
-                  const SizedBox(height: 24),
+                  if (homeState.alerts.isNotEmpty) ...[
+                    _buildAlertsSection(context, homeState.alerts),
+                    const SizedBox(height: 24),
+                  ],
 
                   // 7. ANNOUNCEMENTS SECTION
-                  _buildAnnouncementsSection(context, homeState.announcements),
+                  _buildAnnouncementsSection(
+                    context,
+                    homeState.announcements,
+                    isLoading: homeState.isLoading,
+                  ),
                   const SizedBox(height: 24),
 
                   // 8. NEWS SECTION
-                  _buildNewsSection(context, homeState.news),
+                  _buildNewsSection(
+                    context,
+                    homeState.news,
+                    isLoading: homeState.isLoading,
+                  ),
                 ],
               ),
             ),
@@ -72,10 +87,13 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildHomeHeader(BuildContext context, dynamic user) {
     final topPadding = MediaQuery.paddingOf(context).top;
     final isGuest = user == null || user.isGuest == true;
-    final roleText = isGuest
-        ? 'KHÁCH THAM QUAN'
-        : 'SINH VIÊN • ${user.studentId ?? "23103023"}';
-    final nameText = user?.fullName ?? 'Nguyễn Huy Hoàng';
+    final studentIdStr = (user?.studentId != null && user!.studentId.toString().isNotEmpty)
+        ? ' • ${user.studentId}'
+        : '';
+    final roleText = isGuest ? 'KHÁCH THAM QUAN' : 'SINH VIÊN$studentIdStr';
+    final nameText = (user?.fullName != null && user!.fullName.toString().isNotEmpty)
+        ? user.fullName
+        : (isGuest ? 'Khách tham quan' : 'Sinh viên');
 
     return Container(
       color: AppColors.primary,
@@ -186,423 +204,6 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ─── 2. NEXT CLASS CARD ───
-  Widget _buildNextClassCard(BuildContext context, NextClassInfo info) {
-    const indicatorColor = Color(0xFF8B5CF6); // Purple accent
-
-    return GestureDetector(
-      onTap: () => context.push('/map?room=${Uri.encodeComponent(info.room)}'),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.16),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.22),
-              offset: const Offset(0, 6),
-              blurRadius: 12,
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            // Left Accent Pill Indicator
-            Positioned(
-              left: 0,
-              top: 18,
-              bottom: 18,
-              width: 4.5,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: indicatorColor,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 18, 20, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Row 1: Status Capsule + Room Text
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: indicatorColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: indicatorColor.withValues(alpha: 0.3),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6.5,
-                              height: 6.5,
-                              decoration: const BoxDecoration(
-                                color: indicatorColor,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              info.capsuleLabel.isNotEmpty
-                                  ? info.capsuleLabel
-                                  : 'NGÀY MAI (THỨ HAI)',
-                              style: const TextStyle(
-                                color: indicatorColor,
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        info.room.isNotEmpty ? info.room : '2.21 (CLC)',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.88),
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Row 2: Subject Title + Period Pill
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          info.subject.isNotEmpty ? info.subject : 'LS Đảng CS VN',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.2,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4.5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.22),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Text(
-                          info.time.isNotEmpty ? info.time : 'Tiết 1-4',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Row 3: Lecturer + Navigation Capsule
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.14),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 7),
-                          Text(
-                            info.lecturer.isNotEmpty ? info.lecturer : 'Đoàn Văn Kỳ',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.85),
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.28),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.near_me, color: AppColors.textLight, size: 13),
-                            SizedBox(width: 6),
-                            Text(
-                              'Chỉ đường →',
-                              style: TextStyle(
-                                color: AppColors.textLight,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── 3. GPA OVERVIEW CARD ───
-  Widget _buildGpaCard(BuildContext context, dynamic gradesState) {
-    const rankColor = Color(0xFFF59E0B); // Amber for "Khá"
-
-    return GestureDetector(
-      onTap: () => context.push('/grades'),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: AppColors.cardBorder, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              offset: const Offset(0, 3),
-              blurRadius: 10,
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Header Row: Award Icon + Title + Rank Pill + Chevron
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.military_tech_outlined,
-                          color: AppColors.accent,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Kết quả học tập',
-                          style: TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.text,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                        SizedBox(height: 1),
-                        Text(
-                          'Tích lũy toàn khóa đào tạo',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: rankColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: rankColor.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: rankColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            gradesState.academicRank.isNotEmpty ? gradesState.academicRank : 'Khá',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: rankColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(
-                      Icons.chevron_right,
-                      color: AppColors.textSubtle,
-                      size: 18,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Tonal Container (3 Columns)
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.muted,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border, width: 0.8),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-              child: Row(
-                children: [
-                  // GPA HỆ 4
-                  Expanded(
-                    child: _buildGpaStatCol(
-                      label: 'GPA HỆ 4',
-                      value: gradesState.gpa4 > 0 ? gradesState.gpa4.toStringAsFixed(2) : '2.63',
-                      scale: '/4.0',
-                      valueColor: AppColors.info,
-                    ),
-                  ),
-                  Container(width: 1, height: 26, color: AppColors.border),
-                  // GPA HỆ 10
-                  Expanded(
-                    child: _buildGpaStatCol(
-                      label: 'GPA HỆ 10',
-                      value: gradesState.averageScore10 > 0 ? gradesState.averageScore10.toStringAsFixed(2) : '7.21',
-                      scale: '/10',
-                      valueColor: AppColors.accent,
-                    ),
-                  ),
-                  Container(width: 1, height: 26, color: AppColors.border),
-                  // TÍN CHỈ
-                  Expanded(
-                    child: _buildGpaStatCol(
-                      label: 'TÍN CHỈ',
-                      value: gradesState.accumulatedCredits > 0 ? '${gradesState.accumulatedCredits}' : '106',
-                      scale: 'TC',
-                      valueColor: AppColors.success,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGpaStatCol({
-    required String label,
-    required String value,
-    required String scale,
-    required Color valueColor,
-  }) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textSecondary,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: valueColor,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Text(
-              scale,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textSubtle,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
   // ─── 4. QUICK ACTIONS ───
   Widget _buildQuickActions(BuildContext context) {
     return Column(
@@ -671,15 +272,16 @@ class HomeScreen extends ConsumerWidget {
     required Color border,
     required Color fg,
   }) {
-    return GestureDetector(
-      onTap: () => context.push(route),
-      child: SizedBox(
-        width: 72,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => context.push(route),
+        behavior: HitTestBehavior.opaque,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 60,
-              height: 60,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
                 color: bg,
                 borderRadius: BorderRadius.circular(18),
@@ -705,6 +307,8 @@ class HomeScreen extends ConsumerWidget {
                 color: AppColors.textSecondary,
               ),
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -752,6 +356,184 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  void _showHomeNoticeModal(BuildContext context, HomeAlertItem alert) {
+    final isSuccess = alert.variant == 'success';
+    final isWarning = alert.variant == 'warning' || alert.type == 'sos';
+
+    final Color iconBg = isSuccess
+        ? const Color(0xFFDCFCE7)
+        : (isWarning ? const Color(0xFFFEF3C7) : const Color(0xFFDBEAFE));
+    final Color iconColor = isSuccess
+        ? const Color(0xFF10B981)
+        : (isWarning ? const Color(0xFFD97706) : const Color(0xFF2563EB));
+    final IconData iconData = isSuccess
+        ? Icons.check_circle_outline
+        : (isWarning ? Icons.warning_amber_rounded : Icons.info_outline);
+
+    final String typeLabel = alert.type == 'feedback'
+        ? 'Trạng thái phản hồi'
+        : (alert.type == 'sos' ? 'Cảnh báo khẩn cấp' : 'Thông báo từ nhà trường');
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Row: Icon + Type + Date + Close
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: iconBg,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Icon(iconData, size: 20, color: iconColor),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          typeLabel,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          alert.date.isNotEmpty ? alert.date : 'Hôm nay',
+                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20, color: Color(0xFF64748B)),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Status Badge
+              if (alert.status.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isSuccess
+                        ? const Color(0xFFDCFCE7)
+                        : (isWarning ? const Color(0xFFFEF3C7) : const Color(0xFFDBEAFE)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    alert.status,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isSuccess
+                          ? const Color(0xFF166534)
+                          : (isWarning ? const Color(0xFF92400E) : const Color(0xFF1E40AF)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Title
+              Text(
+                alert.title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Content / Subtitle
+              Text(
+                alert.content.isNotEmpty ? alert.content : alert.subtitle,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: Color(0xFF475569),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Action buttons
+              Row(
+                children: [
+                  if (alert.actionScreen != null && alert.actionScreen!.isNotEmpty) ...[
+                    Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            if (alert.actionScreen == 'feedback') {
+                              context.push('/feedback');
+                            } else if (alert.actionScreen == 'sos') {
+                              context.push('/sos');
+                            }
+                          },
+                          child: const Text(
+                            'Xem chi tiết',
+                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          side: BorderSide.none,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text(
+                          'Đóng',
+                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildAlertCard(BuildContext context, HomeAlertItem alert) {
     final isSuccess = alert.variant == 'success';
     final isWarning = alert.variant == 'warning' || alert.type == 'sos';
@@ -779,27 +561,7 @@ class HomeScreen extends ConsumerWidget {
         : (isWarning ? Icons.warning_amber_rounded : Icons.info_outline);
 
     return GestureDetector(
-      onTap: () {
-        if (alert.actionScreen == 'feedback') {
-          context.push('/feedback');
-        } else if (alert.actionScreen == 'sos') {
-          context.push('/sos');
-        } else {
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: Text(alert.title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              content: Text(alert.content.isNotEmpty ? alert.content : alert.subtitle),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Đóng'),
-                ),
-              ],
-            ),
-          );
-        }
-      },
+      onTap: () => _showHomeNoticeModal(context, alert),
       child: Container(
         decoration: BoxDecoration(
           color: bgColor,
@@ -864,40 +626,48 @@ class HomeScreen extends ConsumerWidget {
 
   // ─── 6. ANNOUNCEMENTS SECTION ───
   Widget _buildAnnouncementsSection(
-      BuildContext context, List<NewsModel> announcements) {
-    final sampleItems = announcements.isNotEmpty
-        ? announcements.take(3).toList()
-        : [
-            const NewsModel(
-              id: 1,
-              title:
-                  'Thông báo về việc xét chọn sinh viên nhận Học bổng Quỹ Thiện Tâm năm học 2026 -2027',
-              summary: 'Chi tiết học bổng Quỹ Thiện Tâm...',
-              content: '',
-              category: 'Thông báo SV',
-              publishedAt: '08/10/2026',
-              author: 'Đậu Thị Thúy Hoàn',
+      BuildContext context, List<NewsModel> announcements, {bool isLoading = false}) {
+    if (isLoading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Thông báo Sinh viên',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: AppColors.text,
             ),
-            const NewsModel(
-              id: 2,
-              title: 'Mobifone Đắk Lắk tuyển dụng',
-              summary: 'Mobifone Đắk Lắk tuyển dụng nhân sự...',
-              content: '',
-              category: 'Thông báo SV',
-              publishedAt: '07/10/2026',
-              author: 'Nguyễn Thạch Cương',
+          ),
+          const SizedBox(height: 12),
+          const WireframeNewsCard(),
+        ],
+      );
+    }
+
+    if (announcements.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Thông báo Sinh viên',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: AppColors.text,
             ),
-            const NewsModel(
-              id: 3,
-              title:
-                  'Tổ chức thi chứng chỉ Ứng dụng CNTT cơ bản tại Trường Đại học Tây Nguyên. Khóa ngày 24-25/10/2026',
-              summary: 'Thông tin tổ chức thi CNTT...',
-              content: '',
-              category: 'Thông báo SV',
-              publishedAt: '06/10/2026',
-              author: 'Nguyễn Thạch Cương',
-            ),
-          ];
+          ),
+          const SizedBox(height: 12),
+          const WireframeEmptyState(
+            title: 'Chưa có thông báo',
+            subtitle: 'Thông báo từ nhà trường sẽ cập nhật tại đây',
+            icon: Icons.notifications_none_rounded,
+          ),
+        ],
+      );
+    }
+
+    final displayItems = announcements.take(6).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -935,8 +705,8 @@ class HomeScreen extends ConsumerWidget {
         const SizedBox(height: 12),
 
         Column(
-          children: sampleItems.map((item) {
-            final dateStr = item.publishedAt ?? '08/10/2026';
+          children: displayItems.map((item) {
+            final dateStr = item.publishedAt ?? '';
 
             return GestureDetector(
               onTap: () => context.push('/home/news/${item.id}'),
@@ -967,14 +737,14 @@ class HomeScreen extends ConsumerWidget {
                             color: const Color(0xFFECFDF5),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.notifications_none, size: 12, color: AppColors.success),
-                              SizedBox(width: 4),
+                              const Icon(Icons.notifications_none, size: 12, color: AppColors.success),
+                              const SizedBox(width: 4),
                               Text(
-                                'Thông báo SV',
-                                style: TextStyle(
+                                item.category.isNotEmpty ? item.category : 'Thông báo SV',
+                                style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
                                   color: AppColors.success,
@@ -1050,23 +820,48 @@ class HomeScreen extends ConsumerWidget {
   }
 
   // ─── 7. NEWS & ACTIVITIES SECTION ───
-  Widget _buildNewsSection(BuildContext context, List<NewsModel> newsList) {
-    final sampleNews = newsList.isNotEmpty
-        ? newsList.take(2).toList()
-        : [
-            const NewsModel(
-              id: 101,
-              title:
-                  'Hội nghị thực hiện quy trình quy hoạch chức danh Hiệu trưởng, Phó Hiệu trưởng Trường Đại học Tây Nguyên, nhiệm kỳ 2026 – 2031',
-              summary:
-                  'Ngày 07/10, Trường Đại học Tây Nguyên tổ chức Hội nghị thực hiện quy trình quy hoạch chức danh Hiệu trưởng...',
-              content:
-                  'Ngày 07/10, Trường Đại học Tây Nguyên tổ chức Hội nghị thực hiện quy trình quy hoạch chức danh Hiệu trưởng...',
-              category: 'Tin hoạt động',
-              publishedAt: '07/10/2026',
-              author: 'Ban Biên tập TTN',
+  Widget _buildNewsSection(BuildContext context, List<NewsModel> newsList, {bool isLoading = false}) {
+    if (isLoading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Tin tức & Hoạt động',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: AppColors.text,
             ),
-          ];
+          ),
+          const SizedBox(height: 12),
+          const WireframeNewsCard(),
+        ],
+      );
+    }
+
+    if (newsList.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Tin tức & Hoạt động',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: AppColors.text,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const WireframeEmptyState(
+            title: 'Chưa có tin tức',
+            subtitle: 'Tin tức và hoạt động mới nhất sẽ cập nhật tại đây',
+            icon: Icons.article_outlined,
+          ),
+        ],
+      );
+    }
+
+    final displayNews = newsList.take(3).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1104,8 +899,8 @@ class HomeScreen extends ConsumerWidget {
         const SizedBox(height: 12),
 
         Column(
-          children: sampleNews.map((item) {
-            final dateStr = item.publishedAt ?? '07/10/2026';
+          children: displayNews.map((item) {
+            final dateStr = item.publishedAt ?? '';
 
             return GestureDetector(
               onTap: () => context.push('/home/news/${item.id}'),
@@ -1130,7 +925,7 @@ class HomeScreen extends ConsumerWidget {
                     // Banner Image
                     NewsCardImage(
                       imageUrl: item.imageUrl,
-                      fallbackIndex: item.id,
+                      fallbackIndex: item.numericIndex,
                       height: 155,
                       width: double.infinity,
                       fit: BoxFit.cover,
@@ -1150,14 +945,14 @@ class HomeScreen extends ConsumerWidget {
                                   color: const Color(0xFFEFF6FF),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.menu_book_outlined, size: 12, color: AppColors.info),
-                                    SizedBox(width: 4),
+                                    const Icon(Icons.menu_book_outlined, size: 12, color: AppColors.info),
+                                    const SizedBox(width: 4),
                                     Text(
-                                      'Tin hoạt động',
-                                      style: TextStyle(
+                                      item.category.isNotEmpty ? item.category : 'Tin hoạt động',
+                                      style: const TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w800,
                                         color: AppColors.info,
@@ -1188,10 +983,10 @@ class HomeScreen extends ConsumerWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (item.content != null && item.content!.isNotEmpty) ...[
+                          if (item.summary.isNotEmpty || (item.content != null && item.content!.isNotEmpty)) ...[
                             const SizedBox(height: 6),
                             Text(
-                              item.content!,
+                              item.summary.isNotEmpty ? item.summary : item.content!,
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,

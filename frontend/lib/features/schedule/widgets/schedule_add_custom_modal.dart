@@ -123,6 +123,9 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
         };
       });
     }
+    final now = DateTime.now();
+    final todayIdx = (now.weekday - 1).clamp(0, _weekDays.length - 1);
+    _selectedDayIndex = todayIdx;
     _dateInputController.text = _weekDays[_selectedDayIndex]['fullDate']!;
   }
 
@@ -164,13 +167,24 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
         ? _customTimeController.text.trim()
         : _selectedTime;
 
+    final selectedDay = _weekDays[_selectedDayIndex];
+    final selectedDayName = selectedDay['day']!;
+    final selectedDate = selectedDay['fullDate']!;
+    final selectedDateShort = selectedDay['date']!;
+    final calculatedDayNum = ScheduleItem.dayStrToNum(selectedDayName);
+
     final item = ScheduleItem(
       id: DateTime.now().millisecondsSinceEpoch % 100000,
       courseName: course,
       room: room,
-      dayOfWeek: _weekDays[_selectedDayIndex]['day']!,
+      dayOfWeek: selectedDayName,
+      dayNum: calculatedDayNum,
+      date: selectedDate,
+      dateShort: selectedDateShort,
       timeSlot: time,
       lecturer: _lecturerController.text.trim().isNotEmpty ? _lecturerController.text.trim() : null,
+      note: _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : null,
+      type: _selectedType,
       isCustom: true,
     );
 

@@ -42,7 +42,7 @@ exports.getAllNewsAndAnnouncements = async (req, res) => {
       total: result.length,
       isFallback: isFallback,
       isDbCached: isDbCached,
-      latestAnnouncements: announcements.slice(0, 3), // 3 Thông báo mới nhất
+      latestAnnouncements: announcements.slice(0, 6), // 6 Thông báo mới nhất
       latestNews: news.slice(0, 3),                  // 3 Tin tức mới nhất
       announcements: announcements,
       news: news,
@@ -65,7 +65,8 @@ exports.getAllNewsAndAnnouncements = async (req, res) => {
  */
 exports.getAnnouncements = async (req, res) => {
   try {
-    const announcements = await newsService.getAnnouncementsWithFallback();
+    const forceRefresh = req.query.reload === 'true' || req.query.refresh === 'true' || req.query.reload === '1' || req.query.refresh === '1';
+    const announcements = await newsService.getAnnouncementsWithFallback(forceRefresh);
     res.json({
       success: true,
       source: 'Cổng Thông báo sinh viên TTN',
@@ -82,7 +83,8 @@ exports.getAnnouncements = async (req, res) => {
  */
 exports.getNews = async (req, res) => {
   try {
-    const news = await newsService.getNewsWithFallback();
+    const forceRefresh = req.query.reload === 'true' || req.query.refresh === 'true' || req.query.reload === '1' || req.query.refresh === '1';
+    const news = await newsService.getNewsWithFallback(forceRefresh);
     res.json({
       success: true,
       source: 'Cổng Tin tức TTN.edu.vn',

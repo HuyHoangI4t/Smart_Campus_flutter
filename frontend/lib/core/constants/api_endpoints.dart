@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 class ApiEndpoints {
   ApiEndpoints._();
 
-  // IP máy tính chủ trên mạng Wi-Fi (IPv4: 192.168.1.14)
-  static const String lanHost = '192.168.1.14';
+  // IP máy tính chủ trên mạng Wi-Fi (IPv4: 192.168.1.9)
+  static const String lanHost = '192.168.1.9';
   static const int port = 5000;
 
   // URL cho máy thật (Wi-Fi), máy thật (USB adb reverse), giả lập, web

@@ -20,45 +20,45 @@ class GradesSummary {
   final int failedCourses;
 
   const GradesSummary({
-    this.totalCredits = 124,
-    this.accumulatedCredits = 106,
-    this.inProgressCredits = 18,
-    this.unlearnedCredits = 18,
-    this.gpa10 = 7.21,
-    this.gpa4 = 2.63,
-    this.academicRank = 'Khá',
-    this.totalCourses = 54,
-    this.passedCourses = 46,
-    this.inProgressCourses = 8,
+    this.totalCredits = 0,
+    this.accumulatedCredits = 0,
+    this.inProgressCredits = 0,
+    this.unlearnedCredits = 0,
+    this.gpa10 = 0.0,
+    this.gpa4 = 0.0,
+    this.academicRank = '',
+    this.totalCourses = 0,
+    this.passedCourses = 0,
+    this.inProgressCourses = 0,
     this.failedCourses = 0,
   });
 
   factory GradesSummary.fromJson(Map<String, dynamic> json) {
     final g10 = (json['gpa10'] is num)
         ? (json['gpa10'] as num).toDouble()
-        : double.tryParse(json['gpa10']?.toString() ?? '7.21') ?? 7.21;
+        : double.tryParse(json['gpa10']?.toString() ?? '0.0') ?? 0.0;
     final g4 = (json['gpa4'] is num)
         ? (json['gpa4'] as num).toDouble()
-        : double.tryParse(json['gpa4']?.toString() ?? '2.63') ?? 2.63;
+        : double.tryParse(json['gpa4']?.toString() ?? '0.0') ?? 0.0;
 
     final rankObj = json['academicRank'];
     final rank = rankObj is Map
-        ? (rankObj['label']?.toString() ?? 'Khá')
-        : (rankObj?.toString() ?? 'Khá');
+        ? (rankObj['label']?.toString() ?? '')
+        : (rankObj?.toString() ?? '');
 
     return GradesSummary(
-      totalCredits: (json['totalCredits'] as num?)?.toInt() ?? 124,
-      accumulatedCredits: (json['accumulatedCredits'] as num?)?.toInt() ?? 106,
-      inProgressCredits: (json['inProgressCredits'] as num?)?.toInt() ?? 18,
+      totalCredits: (json['totalCredits'] as num?)?.toInt() ?? 0,
+      accumulatedCredits: (json['accumulatedCredits'] as num?)?.toInt() ?? 0,
+      inProgressCredits: (json['inProgressCredits'] as num?)?.toInt() ?? 0,
       unlearnedCredits: (json['unlearnedCredits'] as num?)?.toInt() ??
           (json['remainingCredits'] as num?)?.toInt() ??
-          18,
+          0,
       gpa10: g10,
       gpa4: g4,
       academicRank: rank,
-      totalCourses: (json['totalCourses'] as num?)?.toInt() ?? 54,
-      passedCourses: (json['passedCourses'] as num?)?.toInt() ?? 46,
-      inProgressCourses: (json['inProgressCourses'] as num?)?.toInt() ?? 8,
+      totalCourses: (json['totalCourses'] as num?)?.toInt() ?? 0,
+      passedCourses: (json['passedCourses'] as num?)?.toInt() ?? 0,
+      inProgressCourses: (json['inProgressCourses'] as num?)?.toInt() ?? 0,
       failedCourses: (json['failedCourses'] as num?)?.toInt() ?? 0,
     );
   }
@@ -98,7 +98,7 @@ class GradesState {
 
   double get averageScore10 {
     if (selectedSemester == 'Tất cả') {
-      return summary.gpa10 > 0 ? summary.gpa10 : 7.21;
+      return summary.gpa10;
     }
     final sem = semesterStats[selectedSemester];
     if (sem != null && sem['gpa10'] != null) {
@@ -118,7 +118,7 @@ class GradesState {
 
   double get gpa4 {
     if (selectedSemester == 'Tất cả') {
-      return summary.gpa4 > 0 ? summary.gpa4 : 2.63;
+      return summary.gpa4;
     }
     final sem = semesterStats[selectedSemester];
     if (sem != null && sem['gpa4'] != null) {
@@ -250,111 +250,13 @@ class GradesNotifier extends Notifier<GradesState> {
           isLoading: false,
         );
       } else {
-        _useFallbackMockData();
+        state = state.copyWith(items: const [], isLoading: false);
       }
     } catch (_) {
-      _useFallbackMockData();
+      state = state.copyWith(items: const [], isLoading: false);
     }
   }
 
-  void _useFallbackMockData() {
-    final mockItems = [
-      const GradeItem(
-        id: 1,
-        courseCode: '',
-        courseName: 'An toàn thông tin',
-        credits: 2,
-        scoreOverall: 0.0,
-        semester: 'HK1 (2026)',
-        letter: 'X',
-        hocPhi: 'Nợ: 1238000',
-      ),
-      const GradeItem(
-        id: 2,
-        courseCode: '',
-        courseName: 'Quản trị mạng trên môi trường Windows',
-        credits: 2,
-        scoreOverall: 0.0,
-        semester: 'HK1 (2026)',
-        letter: 'X',
-        hocPhi: 'Nợ: 1238000',
-      ),
-      const GradeItem(
-        id: 3,
-        courseCode: '',
-        courseName: 'Thương mại điện tử',
-        credits: 2,
-        scoreOverall: 0.0,
-        semester: 'HK1 (2026)',
-        letter: 'X',
-        hocPhi: 'Nợ: 1238000',
-      ),
-      const GradeItem(
-        id: 4,
-        courseCode: '',
-        courseName: 'Những vấn đề hiện đại của CNTT',
-        credits: 2,
-        scoreOverall: 0.0,
-        semester: 'HK1 (2026)',
-        letter: 'X',
-        hocPhi: 'Nợ: 1238000',
-      ),
-      const GradeItem(
-        id: 5,
-        courseCode: '',
-        courseName: 'Cơ sở vật lý cho Tin học',
-        credits: 2,
-        scoreOverall: 6.9,
-        dbp: 9.1,
-        thi1: 5.5,
-        d1: 6.9,
-        semester: 'HK2 (2025)',
-        letter: 'C',
-        hocPhi: 'Nộp: 1100000',
-      ),
-      const GradeItem(
-        id: 6,
-        courseCode: '',
-        courseName: 'Trí tuệ nhân tạo',
-        credits: 2,
-        scoreOverall: 9.0,
-        dbp: 9.0,
-        thi1: 9.0,
-        d1: 9.0,
-        semester: 'HK2 (2025)',
-        letter: 'A',
-        hocPhi: 'Nộp: 1100000',
-      ),
-      const GradeItem(
-        id: 7,
-        courseCode: '',
-        courseName: 'Các quy trình phát triển phần mềm hiện đại',
-        credits: 2,
-        scoreOverall: 8.0,
-        dbp: 8.0,
-        thi1: 8.0,
-        d1: 8.0,
-        semester: 'HK2 (2025)',
-        letter: 'B',
-        hocPhi: 'Nộp: 1100000',
-      ),
-      const GradeItem(
-        id: 8,
-        courseCode: '',
-        courseName: 'Nhập môn Hệ điều hành',
-        credits: 2,
-        scoreOverall: 8.5,
-        dbp: 9.5,
-        thi1: 8.0,
-        d1: 8.5,
-        semester: 'HK2 (2025)',
-        letter: 'A',
-        hocPhi: 'Nộp: 1100000',
-      ),
-    ];
-
-    state = state.copyWith(items: mockItems, isLoading: false);
-  }
 }
 
 final gradesProvider = NotifierProvider<GradesNotifier, GradesState>(GradesNotifier.new);

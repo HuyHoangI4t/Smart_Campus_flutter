@@ -102,7 +102,7 @@ class MapNavigationBar extends StatelessWidget {
 
                 // Khoảng cách mét & phút đi bộ
                 Text(
-                  '~${distanceMeters.round()}m • ~$walkingMinutes phút đi bộ',
+                  '~${(distanceMeters.isInfinite || distanceMeters.isNaN) ? 100 : distanceMeters.round()}m • ~$walkingMinutes phút đi bộ',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,

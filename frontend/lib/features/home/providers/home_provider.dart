@@ -70,27 +70,31 @@ class HomeAlertItem {
 
 class HomeState {
   final List<NewsModel> news;
+  final List<NewsModel> announcements;
   final List<HomeAlertItem> alerts;
   final bool isLoading;
   final String? error;
 
   const HomeState({
     this.news = const [],
+    this.announcements = const [],
     this.alerts = const [],
     this.isLoading = false,
     this.error,
   });
 
-  List<NewsModel> get announcements => news;
+  List<NewsModel> get allArticles => [...announcements, ...news];
 
   HomeState copyWith({
     List<NewsModel>? news,
+    List<NewsModel>? announcements,
     List<HomeAlertItem>? alerts,
     bool? isLoading,
     String? error,
   }) {
     return HomeState(
       news: news ?? this.news,
+      announcements: announcements ?? this.announcements,
       alerts: alerts ?? this.alerts,
       isLoading: isLoading ?? this.isLoading,
       error: error,
@@ -107,10 +111,10 @@ class HomeNotifier extends Notifier<HomeState> {
     return const HomeState(isLoading: true);
   }
 
-  Future<void> fetchDashboard() async {
+  Future<void> fetchDashboard({bool forceRefresh = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     await Future.wait([
-      fetchNews(),
+      fetchNews(forceRefresh: forceRefresh),
       fetchAlerts(),
     ]);
     state = state.copyWith(isLoading: false);
@@ -123,7 +127,8 @@ class HomeNotifier extends Notifier<HomeState> {
         final List rawAlerts = response.data['alerts'] ?? response.data['notificationAlerts'] ?? [];
         if (rawAlerts.isNotEmpty) {
           final alerts = rawAlerts
-              .map((item) => HomeAlertItem.fromJson(item as Map<String, dynamic>))
+              .whereType<Map<String, dynamic>>()
+              .map((item) => HomeAlertItem.fromJson(item))
               .toList();
           state = state.copyWith(alerts: alerts);
           return;
@@ -131,171 +136,166 @@ class HomeNotifier extends Notifier<HomeState> {
       }
     } catch (_) {}
 
-    _useFallbackAlerts();
+    state = state.copyWith(alerts: const []);
   }
 
-  void _useFallbackAlerts() {
-    final mockAlerts = [
-      const HomeAlertItem(
-        id: 'fb-demo',
-        type: 'feedback',
-        variant: 'warning',
-        icon: 'alert-triangle',
-        title: 'Phản hồi: [Cơ sở vật chất] ÁDASD (Chờ tiếp nhận)',
-        subtitle: '10/10/2026',
-        date: '10/10/2026',
-        status: 'Chờ tiếp nhận',
-        content: 'Phản hồi cơ sở vật chất phòng học.',
-        actionScreen: 'feedback',
-      ),
-      const HomeAlertItem(
-        id: 'sos-demo',
-        type: 'sos',
-        variant: 'success',
-        icon: 'check',
-        title: 'Tín hiệu SOS: Đã được xử lý an toàn',
-        subtitle: '10/10/2026',
-        date: '10/10/2026',
-        status: 'Đã xử lý an toàn',
-        content: 'Tín hiệu SOS đã được đội an ninh hỗ trợ giải quyết.',
-        actionScreen: 'sos',
-      ),
-    ];
-    state = state.copyWith(alerts: mockAlerts);
-  }
-
-  Future<void> fetchNews() async {
+  Future<void> fetchNews({bool forceRefresh = false}) async {
     try {
-      final response = await _dio.get(ApiEndpoints.news);
+      final response = await _dio.get(
+        ApiEndpoints.news,
+        queryParameters: forceRefresh ? {'refresh': 'true', 'reload': 'true'} : null,
+      );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
-        final List list = response.data['data'] ?? [];
-        final news = list.map((item) => NewsModel.fromJson(item)).toList();
-        state = state.copyWith(news: news);
+        final List rawAnnouncements = response.data['announcements'] ??
+            response.data['latestAnnouncements'] ??
+            [];
+        final List rawNews = response.data['news'] ??
+            response.data['latestNews'] ??
+            [];
+        final List rawData = response.data['data'] ?? [];
+
+        List<NewsModel> announcements = rawAnnouncements
+            .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+
+        List<NewsModel> news = rawNews
+            .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList();
+
+        // Fallback: nếu API chưa phân tách announcements và news riêng thì tự động phân loại
+        if (announcements.isEmpty || news.isEmpty) {
+          final all = rawData
+              .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item as Map)))
+              .toList();
+
+          if (announcements.isEmpty) {
+            announcements = all.where((n) {
+              final cat = n.category.toLowerCase();
+              return cat.contains('thông báo') ||
+                  n.title.toLowerCase().contains('thông báo') ||
+                  n.id.startsWith('announcement');
+            }).toList();
+          }
+
+          if (news.isEmpty) {
+            news = all.where((n) {
+              final cat = n.category.toLowerCase();
+              return cat.contains('tin') ||
+                  cat.contains('hoạt động') ||
+                  n.id.startsWith('news') ||
+                  !announcements.any((a) => a.id == n.id);
+            }).toList();
+          }
+        }
+
+        state = state.copyWith(
+          news: news,
+          announcements: announcements,
+        );
       } else {
-        _useFallbackNews();
+        state = state.copyWith(news: const [], announcements: const []);
       }
-    } catch (_) {
-      _useFallbackNews();
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('❌ [fetchNews Error] $e\n$stack');
+      state = state.copyWith(news: const [], announcements: const []);
     }
-  }
-
-  void _useFallbackNews() {
-    final mockNews = [
-      const NewsModel(
-        id: 1,
-        title: 'Thông báo đăng ký học phần Học kỳ 2 năm học 2025 - 2026',
-        summary: 'Phòng Đào tạo thông báo kế hoạch đăng ký tín chỉ các khóa đào tạo chính quy.',
-        category: 'Đào tạo',
-        publishedAt: 'Hôm nay',
-      ),
-      const NewsModel(
-        id: 2,
-        title: 'Lễ ra quân Chiến dịch Mùa hè xanh & Tình nguyện vì cộng đồng',
-        summary: 'Đoàn Thanh niên - Hội Sinh viên trường phát động phong trào tình nguyện hè tại các xã vùng cao.',
-        category: 'Đoàn - Hội',
-        publishedAt: 'Hôm qua',
-      ),
-      const NewsModel(
-        id: 3,
-        title: 'Hội thảo khoa học Công nghệ Thông tin & Trí tuệ Nhân tạo ứng dụng',
-        summary: 'Khoa KHTN & Công nghệ tổ chức hội thảo chuyên đề chuyển đổi số trong giáo dục.',
-        category: 'Hội thảo',
-        publishedAt: '3 ngày trước',
-      ),
-    ];
-
-    state = state.copyWith(news: mockNews);
   }
 }
 
-final homeProvider = NotifierProvider<HomeNotifier, HomeState>(HomeNotifier.new);
+final homeProvider = NotifierProvider<HomeNotifier, HomeState>(() {
+  return HomeNotifier();
+});
 
-/// Provider tính toán lớp học kế tiếp và đếm ngược theo thời gian thực
+int _weekdayToDayNum(int weekday) => weekday == 7 ? 1 : weekday + 1;
+
 final nextClassProvider = Provider<NextClassInfo>((ref) {
   final scheduleState = ref.watch(scheduleProvider);
-  final allItems = scheduleState.items;
+  final items = scheduleState.items;
 
-  if (allItems.isEmpty) {
+  if (items.isEmpty) {
     return const NextClassInfo();
   }
 
   final now = DateTime.now();
-  final currentMinutes = now.hour * 60 + now.minute;
-  final todayJsDay = now.weekday == 7 ? 1 : now.weekday + 1; // 1: CN, 2: T2, 3: T3...
+  final currentWeekday = now.weekday; // 1 = Thứ 2, 7 = Chủ nhật
+  final currentDayNum = _weekdayToDayNum(currentWeekday);
+  final currentTimeMinutes = now.hour * 60 + now.minute;
 
-  // 1. Kiểm tra xem có lớp nào đang diễn ra hôm nay không
-  final todayItems = allItems.where((i) => i.dayNum == todayJsDay).toList();
-  for (final item in todayItems) {
-    if (currentMinutes >= item.startMinutes && currentMinutes <= item.endMinutes) {
-      final remaining = item.endMinutes - currentMinutes;
-      final h = remaining ~/ 60;
-      final m = remaining % 60;
-      final timeStr = h > 0 ? '$h giờ $m phút' : '$m phút';
+  // 1. Tìm các lớp học trong ngày hôm nay
+  final todayClasses = items.where((e) => e.dayNum == currentDayNum).toList();
 
+  // Sắp xếp theo giờ bắt đầu
+  todayClasses.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+
+  for (final cls in todayClasses) {
+    if (currentTimeMinutes >= cls.startMinutes && currentTimeMinutes < cls.endMinutes) {
+      final remaining = cls.endMinutes - currentTimeMinutes;
       return NextClassInfo(
-        item: item,
+        item: cls,
         isOngoing: true,
         statusText: 'Đang diễn ra',
-        countdownText: 'Còn $timeStr là tan học',
-        capsuleLabel: 'ĐANG TRONG GIỜ HỌC',
+        countdownText: 'Còn $remaining phút',
+        capsuleLabel: 'HÔM NAY',
       );
     }
-  }
-
-  // 2. Tìm lớp học kế tiếp hôm nay
-  ScheduleItem? nextTodayItem;
-  int minDiff = 99999;
-  for (final item in todayItems) {
-    if (item.startMinutes > currentMinutes) {
-      final diff = item.startMinutes - currentMinutes;
-      if (diff < minDiff) {
-        minDiff = diff;
-        nextTodayItem = item;
-      }
-    }
-  }
-
-  if (nextTodayItem != null) {
-    final h = minDiff ~/ 60;
-    final m = minDiff % 60;
-    final timeStr = h > 0 ? '$h giờ $m phút' : '$m phút';
-
-    return NextClassInfo(
-      item: nextTodayItem,
-      isOngoing: false,
-      statusText: 'Tiết học sắp tới',
-      countdownText: 'Bắt đầu sau $timeStr',
-      capsuleLabel: 'LỚP HỌC HÔM NAY',
-    );
-  }
-
-  // 3. Nếu hôm nay không còn lớp, tìm lớp ngày mai hoặc các ngày tiếp theo trong tuần
-  for (int offset = 1; offset <= 7; offset++) {
-    final targetDayNum = ((todayJsDay - 1 + offset) % 7) + 1;
-    final upcomingDayItems = allItems.where((i) => i.dayNum == targetDayNum).toList()
-      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
-
-    if (upcomingDayItems.isNotEmpty) {
-      final firstItem = upcomingDayItems.first;
-      final isTomorrow = offset == 1;
-      final dayNameUpper = firstItem.cleanDay.toUpperCase();
-      final label = isTomorrow ? 'NGÀY MAI ($dayNameUpper)' : dayNameUpper;
-
+    if (currentTimeMinutes < cls.startMinutes) {
+      final diff = cls.startMinutes - currentTimeMinutes;
+      final hours = diff ~/ 60;
+      final mins = diff % 60;
+      final countdownStr = hours > 0 ? 'Bắt đầu sau ${hours}h ${mins}p' : 'Bắt đầu sau $mins phút';
       return NextClassInfo(
-        item: firstItem,
+        item: cls,
         isOngoing: false,
-        statusText: isTomorrow ? 'Ngày mai ($dayNameUpper)' : 'Lớp học sắp tới ($dayNameUpper)',
-        countdownText: '${firstItem.timeSlot} • ${firstItem.room}',
-        capsuleLabel: label,
+        statusText: 'Sắp diễn ra',
+        countdownText: countdownStr,
+        capsuleLabel: 'HÔM NAY',
       );
     }
   }
 
-  return const NextClassInfo(
-    statusText: 'Không có tiết học sắp tới',
-    countdownText: 'Hẹn gặp lại tuần sau!',
-    capsuleLabel: 'KHÔNG CÓ LỊCH HỌC',
-  );
+  // 2. Nếu hôm nay đã hết hoặc không có lớp, tìm lớp gần nhất trong các ngày tiếp theo trong tuần
+  for (int dayOffset = 1; dayOffset <= 7; dayOffset++) {
+    int checkWeekday = ((currentWeekday - 1 + dayOffset) % 7) + 1;
+    int checkDayNum = _weekdayToDayNum(checkWeekday);
+    final nextDayClasses = items.where((e) => e.dayNum == checkDayNum).toList();
+    if (nextDayClasses.isNotEmpty) {
+      nextDayClasses.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+      final nextClass = nextDayClasses.first;
+      String capsule = dayOffset == 1 ? 'NGÀY MAI' : _weekdayToString(checkWeekday).toUpperCase();
+      return NextClassInfo(
+        item: nextClass,
+        isOngoing: false,
+        statusText: 'Lớp học tiếp theo',
+        countdownText: '${nextClass.startTime} • ${_weekdayToString(checkWeekday)}',
+        capsuleLabel: capsule,
+      );
+    }
+  }
+
+  return const NextClassInfo();
 });
 
+final nextClassInfoProvider = nextClassProvider;
+
+String _weekdayToString(int day) {
+  switch (day) {
+    case 1:
+      return 'Thứ hai';
+    case 2:
+      return 'Thứ ba';
+    case 3:
+      return 'Thứ tư';
+    case 4:
+      return 'Thứ năm';
+    case 5:
+      return 'Thứ sáu';
+    case 6:
+      return 'Thứ bảy';
+    case 7:
+      return 'Chủ nhật';
+    default:
+      return 'Hôm nay';
+  }
+}

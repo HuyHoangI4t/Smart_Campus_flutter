@@ -42,7 +42,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final homeState = ref.watch(homeProvider);
-    final allItems = homeState.news;
+    final allItems = homeState.allArticles;
 
     final filteredAll = _searchQuery.isEmpty
         ? allItems
@@ -51,24 +51,19 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
             return n.title.toLowerCase().contains(q) || n.summary.toLowerCase().contains(q);
           }).toList();
 
-    final announcements = filteredAll.where((n) {
-      final cat = n.category.toLowerCase();
-      final title = n.title.toLowerCase();
-      return cat.contains('thông báo') ||
-          cat.contains('đào tạo') ||
-          cat.contains('học phí') ||
-          cat.contains('khảo thí') ||
-          title.contains('thông báo');
-    }).toList();
+    final announcements = _searchQuery.isEmpty
+        ? homeState.announcements
+        : homeState.announcements.where((n) {
+            final q = _searchQuery.toLowerCase();
+            return n.title.toLowerCase().contains(q) || n.summary.toLowerCase().contains(q);
+          }).toList();
 
-    final newsItems = filteredAll.where((n) {
-      final cat = n.category.toLowerCase();
-      return cat.contains('tin') ||
-          cat.contains('hoạt động') ||
-          cat.contains('sự kiện') ||
-          cat.contains('hội thảo') ||
-          !announcements.contains(n);
-    }).toList();
+    final newsItems = _searchQuery.isEmpty
+        ? homeState.news
+        : homeState.news.where((n) {
+            final q = _searchQuery.toLowerCase();
+            return n.title.toLowerCase().contains(q) || n.summary.toLowerCase().contains(q);
+          }).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -179,15 +174,15 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
                     controller: _tabController,
                     children: [
                       // Tab 1: Tất cả
-                      _buildAllView(announcements, newsItems, allItems),
+                      _buildAllView(announcements, newsItems, filteredAll),
                       // Tab 2: Thông báo SV
                       _buildListView(
-                        announcements.isNotEmpty ? announcements : allItems,
+                        announcements,
                         isAnnouncement: true,
                       ),
                       // Tab 3: Tin tức TTN
                       _buildListView(
-                        newsItems.isNotEmpty ? newsItems : allItems,
+                        newsItems,
                         isAnnouncement: false,
                       ),
                     ],
@@ -204,12 +199,12 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
     List<NewsModel> newsItems,
     List<NewsModel> allItems,
   ) {
-    final listAnnounce = announcements.isNotEmpty ? announcements : allItems.take(5).toList();
-    final listNews = newsItems.isNotEmpty ? newsItems : allItems.skip(3).toList();
+    final listAnnounce = announcements.take(5).toList();
+    final listNews = newsItems.take(5).toList();
 
     return RefreshIndicator(
       color: const Color(0xFF132F73),
-      onRefresh: () => ref.read(homeProvider.notifier).fetchNews(),
+      onRefresh: () => ref.read(homeProvider.notifier).fetchNews(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -288,7 +283,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
 
     return RefreshIndicator(
       color: const Color(0xFF132F73),
-      onRefresh: () => ref.read(homeProvider.notifier).fetchNews(),
+      onRefresh: () => ref.read(homeProvider.notifier).fetchNews(forceRefresh: true),
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         itemCount: items.length,
@@ -445,7 +440,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
           children: [
             NewsCardImage(
               imageUrl: item.imageUrl,
-              fallbackIndex: item.id,
+              fallbackIndex: item.numericIndex,
               height: 170,
               width: double.infinity,
               fit: BoxFit.cover,

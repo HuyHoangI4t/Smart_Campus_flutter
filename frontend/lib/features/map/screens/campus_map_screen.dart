@@ -1,7 +1,7 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
 import '../../../core/widgets/nav_header.dart';
@@ -268,7 +268,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                 // 2.3 Right Floating Controls (4 nút tròn)
                 Positioned(
                   right: 14,
-                  bottom: (mapState.selectedLocation != null || mapState.isNavigating) ? 220 : 96,
+                  bottom: (mapState.selectedLocation != null || mapState.isNavigating) ? 170 : 16,
                   child: Column(
                     children: [
                       // Nút đổi lớp Bản đồ (Vệ tinh / Đường phố)
@@ -310,7 +310,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                   Positioned(
                     left: 14,
                     right: 14,
-                    bottom: 84,
+                    bottom: 12,
                     child: MapNavigationBar(
                       destination: mapState.selectedLocation!,
                       currentGate: mapState.selectedGate,
@@ -326,7 +326,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                   Positioned(
                     left: 14,
                     right: 14,
-                    bottom: 84,
+                    bottom: 12,
                     child: MapLocationDetailCard(
                       location: mapState.selectedLocation!,
                       currentGate: mapState.selectedGate,
@@ -334,7 +334,13 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                         ref.read(mapProvider.notifier).selectLocation(null);
                       },
                       onStartNavigation: () {
-                        ref.read(mapProvider.notifier).startNavigationTo(mapState.selectedLocation!);
+                        final loc = mapState.selectedLocation!;
+                        ref.read(mapProvider.notifier).startNavigationTo(loc);
+                        final start = mapState.userPosition ?? mapState.selectedGate.coordinate;
+                        final end = loc.coordinate;
+                        final centerLat = (start.latitude + end.latitude) / 2;
+                        final centerLng = (start.longitude + end.longitude) / 2;
+                        _mapController.move(LatLng(centerLat, centerLng), 17.0);
                       },
                     ),
                   ),

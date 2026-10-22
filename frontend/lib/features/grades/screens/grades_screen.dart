@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/nav_header.dart';
+import '../../../core/widgets/wireframe_widgets.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/grade_model.dart';
 import '../providers/grades_provider.dart';
@@ -27,7 +28,10 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
   Widget build(BuildContext context) {
     final gradesState = ref.watch(gradesProvider);
     final authState = ref.watch(authProvider);
-    final userName = authState.user?.fullName ?? 'Nguyễn Huy Hoàng';
+    final user = authState.user;
+    final userName = (user?.fullName.isNotEmpty == true)
+        ? user!.fullName
+        : (user?.isGuest == true ? 'Khách tham quan' : 'Sinh viên');
     final items = gradesState.filteredItems;
 
     return Scaffold(
@@ -75,7 +79,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
               color: AppColors.primary,
               onRefresh: () => ref.read(gradesProvider.notifier).fetchGrades(),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
                   // 3. OVERVIEW CARD (NAVY BLUE)
                   _buildOverviewCard(context, gradesState),
@@ -90,14 +94,14 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Học phần đã có điểm (${items.isNotEmpty ? items.length : 54})',
+                        'Học phần đã có điểm (${items.length})',
                         style: const TextStyle(
                           fontSize: 15.5,
                           fontWeight: FontWeight.w900,
                           color: AppColors.textForeground,
                         ),
                       ),
-                      Text(
+                      const Text(
                         'Kéo xuống để cập nhật',
                         style: TextStyle(
                           fontSize: 12,
@@ -109,38 +113,16 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 6. GRADE ITEMS
-                  if (items.isEmpty) ...[
-                    _buildSampleGradeItem(
-                      credits: '2 tín chỉ',
-                      subject: 'An toàn thông tin',
-                      semester: 'HK1 (2026)',
-                      status: 'Đang học',
-                      score: 'Chưa có điểm',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildSampleGradeItem(
-                      credits: '2 tín chỉ',
-                      subject: 'Quản trị mạng trên môi trường Windows',
-                      semester: 'HK1 (2026)',
-                      status: 'Đang học',
-                      score: 'Chưa có điểm',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildSampleGradeItem(
-                      credits: '2 tín chỉ',
-                      subject: 'Thương mại điện tử',
-                      semester: 'HK1 (2026)',
-                      status: 'Đang học',
-                      score: 'Chưa có điểm',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildSampleGradeItem(
-                      credits: '2 tín chỉ',
-                      subject: 'Những vấn đề hiện đại của CNTT',
-                      semester: 'HK1 (2026)',
-                      status: 'Đang học',
-                      score: 'Chưa có điểm',
+                  // 6. GRADE ITEMS (WIREFRAME SKELETON / EMPTY STATE)
+                  if (gradesState.isLoading) ...[
+                    const WireframeScheduleCard(),
+                    const WireframeScheduleCard(),
+                    const WireframeScheduleCard(),
+                  ] else if (items.isEmpty) ...[
+                    const WireframeEmptyState(
+                      icon: Icons.school_outlined,
+                      title: 'Chưa có dữ liệu điểm học phần',
+                      subtitle: 'Không tìm thấy dữ liệu điểm nào trong cơ sở dữ liệu cho kỳ học này.',
                     ),
                   ] else
                     for (final item in items) ...[
@@ -226,7 +208,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                   Text(
                     gradesState.averageScore10 > 0
                         ? gradesState.averageScore10.toStringAsFixed(2)
-                        : '7.21',
+                        : '--',
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w900,
@@ -250,7 +232,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                   Text(
                     gradesState.gpa4 > 0
                         ? gradesState.gpa4.toStringAsFixed(2)
-                        : '2.63',
+                        : '--',
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w900,
@@ -274,7 +256,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                   Text(
                     gradesState.accumulatedCredits > 0
                         ? '${gradesState.accumulatedCredits}'
-                        : '106',
+                        : '0',
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w900,
@@ -325,7 +307,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                     const Icon(Icons.pending_outlined, color: Color(0xFFFCD34D), size: 14),
                     const SizedBox(width: 6),
                     Text(
-                      'Chưa học: ${gradesState.inProgressCredits} TC',
+                      'Đang học: ${gradesState.inProgressCredits} TC',
                       style: const TextStyle(
                         color: Color(0xFFFCD34D),
                         fontSize: 11.5,
