@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../auth/providers/auth_provider.dart';
 
-/// Hộp thoại xác nhận đăng xuất tài khoản (Chuẩn 17_profile_logout_confirm.jpg)
-/// Tuân thủ quy chuẩn UI/UX: Touch target >= 44px, độ tương phản cao, xử lý async an toàn.
+/// Hộp thoại xác nhận đăng xuất tài khoản
+/// Touch target >= 44px, độ tương phản cao, xử lý async an toàn.
 class LogoutConfirmDialog extends ConsumerWidget {
   const LogoutConfirmDialog({super.key});
 

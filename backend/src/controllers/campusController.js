@@ -360,7 +360,18 @@ exports.getDashboard = async (req, res) => {
   }
 };
 
-// Lấy danh sách mạng lưới đường đi nội bộ khuôn viên trường
+// Tính khoảng cách Haversine (mét) giữa 2 tọa độ
+function _haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Lấy danh sách mạng lưới đường đi nội bộ khuôn viên trường (có metadata)
 exports.getCampusPaths = async (req, res) => {
   if (cachedCampusPaths && Date.now() - campusPathsCacheTime < CAMPUS_PATHS_TTL) {
     return res.json({
@@ -382,9 +393,24 @@ exports.getCampusPaths = async (req, res) => {
           coords = [];
         }
       }
+      const validCoords = Array.isArray(coords) ? coords : [];
+
+      // Tính tổng khoảng cách và số nút cho mỗi đoạn polyline
+      let distanceMeters = 0;
+      for (let i = 0; i < validCoords.length - 1; i++) {
+        const [lat1, lng1] = validCoords[i];
+        const [lat2, lng2] = validCoords[i + 1];
+        if (typeof lat1 === 'number' && typeof lng1 === 'number' &&
+            typeof lat2 === 'number' && typeof lng2 === 'number') {
+          distanceMeters += _haversineMeters(lat1, lng1, lat2, lng2);
+        }
+      }
+
       return {
-        ...r,
-        coordinates: Array.isArray(coords) ? coords : []
+        id: r.id,
+        coordinates: validCoords,
+        node_count: validCoords.length,
+        distance_meters: Math.round(distanceMeters * 100) / 100,
       };
     });
     cachedCampusPaths = paths;

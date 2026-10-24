@@ -4,7 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
 import '../../../core/utils/haversine.dart';
 
-/// Card chi tiết địa điểm dưới chân màn hình (Chuẩn 09_map_campus_overview.jpg)
+/// Card chi tiết địa điểm dưới chân màn hình
 class MapLocationDetailCard extends StatelessWidget {
   final CampusLocationItem location;
   final CampusGate currentGate;

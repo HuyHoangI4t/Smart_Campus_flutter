@@ -253,14 +253,6 @@ exports.getGrades = async (req, res) => {
     }
   }
 
-  /* 
-  // [Ghi chú: Đoạn cào trực tiếp cũ đã được chuyển giao vào studentSyncService có Queue & Rate Limiter, giữ lại để tham khảo]
-  let liveSubjects = [];
-  try {
-    const payload = new URLSearchParams({ 'msv': mssv, 'mssv': mssv, 'dk': studentDk });
-    ...
-  */
-
   // 4. Dự phòng: Danh sách học phần chuyên ngành chuẩn nếu DB hoàn toàn trống
   const fallbackList = [
     { ten_hp: 'Lập trình thiết bị di động', nam_hoc: '2026', ky: '1', so_tin_chi: 3, diem_dbp: 9.5, diem_thi1: 8.5, diem_thi2: null, diem_1: 8.9, diem_2: null, diem_chu: 'A', hoc_ky: 'HK1 (2026)', hoc_phi: 'Đã nộp' },
@@ -536,29 +528,6 @@ exports.getSchedule = async (req, res) => {
       console.warn('Lỗi đọc student_schedules từ DB:', e.message);
     }
   }
-
-  /*
-  // [Ghi chú: Đoạn cào lịch trực tiếp cũ đã được chuyển sang studentSyncService có Queue & Rate Limiter, giữ lại để tham khảo]
-  try {
-    const payload = new URLSearchParams({ 'msv': mssv, 'mssv': mssv, 'dk': studentDk });
-    ...
-  } catch (error) {
-    console.warn('Lỗi cào lịch học:', error.message);
-  }
-  */
-
-  /* [Ghi chú: Step 4 cũ — đã được thay thế bởi step 3 dùng formatDbSchedulesResponse() có week grouping đầy đủ]
-  // 4. Nếu cào trực tiếp không thành công, kiểm tra dữ liệu đã lưu trong Database
-  if (mssv && !isGuestOrEmail(mssv)) {
-    try {
-      const [dbSchedules] = await db.query(...);
-      if (dbSchedules && dbSchedules.length > 0) {
-        // Logic cũ thiếu week grouping — formatDbSchedulesResponse() đã thay thế hoàn toàn
-        ...
-      }
-    } catch (dbErr) {}
-  }
-  */
 
   // Dữ liệu dự phòng nếu cào lỗi
   let fallbackCustom = [];

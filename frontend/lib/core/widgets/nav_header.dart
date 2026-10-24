@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import '../constants/app_colors.dart';
 
 /// Header thanh điều hướng chuẩn Navy Blue (#132F73)
-/// Đồng bộ 1:1 với NavHeader.tsx của Expo
 class NavHeader extends StatelessWidget {
   final String title;
   final String? subtitle;

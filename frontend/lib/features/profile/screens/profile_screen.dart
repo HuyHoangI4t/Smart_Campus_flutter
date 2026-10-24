@@ -14,7 +14,7 @@ import '../widgets/avatar_picker_modal.dart';
 import '../widgets/edit_profile_modal.dart';
 import '../widgets/logout_confirm_dialog.dart';
 
-/// Màn hình Hồ sơ sinh viên (13_profile_overview.jpg & 14_profile_security.jpg)
+/// Màn hình Hồ sơ sinh viên
 /// Tuân thủ quy chuẩn: Clean Architecture, Small Widgets (<300 lines), Const constructors,
 /// Touch Target >= 44px, Riverpod state management.
 class ProfileScreen extends ConsumerWidget {
@@ -50,7 +50,7 @@ class ProfileScreen extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
               children: [
-                // 3. MAIN PROFILE CARD (13_profile_overview.jpg)
+                // 3. MAIN PROFILE CARD
                 _ProfileOverviewCard(
                   fullName: fullName,
                   studentId: studentId,
@@ -59,7 +59,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // 4. ACADEMIC & CONTACT INFO (13_profile_overview.jpg)
+                // 4. ACADEMIC & CONTACT INFO
                 const Text(
                   'Thông tin học tập & liên hệ',
                   style: TextStyle(
@@ -77,7 +77,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // 5. SECURITY & SETTINGS (14_profile_security.jpg)
+                // 5. SECURITY & SETTINGS
                 const Text(
                   'Bảo mật tài khoản',
                   style: TextStyle(
@@ -103,7 +103,7 @@ class ProfileScreen extends ConsumerWidget {
                 const _AppSettingsCard(),
                 const SizedBox(height: 24),
 
-                // 7. LOGOUT BUTTON (14_profile_security.jpg)
+                // 7. LOGOUT BUTTON
                 const _LogoutButton(),
               ],
             ),

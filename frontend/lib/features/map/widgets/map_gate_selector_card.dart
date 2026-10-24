@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
 
-/// Card chọn cổng trường xuất phát khi đang chỉ đường (Chuẩn 10_map_routing_navigation.jpg)
+/// Card chọn cổng trường xuất phát khi đang chỉ đường
 class MapGateSelectorCard extends StatelessWidget {
   final CampusGate selectedGate;
   final ValueChanged<CampusGate> onSelectGate;

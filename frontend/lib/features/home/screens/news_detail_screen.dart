@@ -277,7 +277,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   ],
                   const SizedBox(height: 18),
 
-                  // Content: Nếu có các contentBlocks xen kẽ ảnh thì hiển thị chuẩn như React Native
+                  // Content: Hiển thị các khối nội dung xen kẽ hình ảnh
                   if (resolvedBlocks.isNotEmpty)
                     ..._buildContentBlocks(resolvedBlocks, item.numericIndex, coverImageUrl)
                   else

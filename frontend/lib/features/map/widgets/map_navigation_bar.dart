@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
 
-/// Thanh điều hướng dẫn đường đi bộ dưới chân màn hình (Chuẩn 10_map_routing_navigation.jpg)
+/// Thanh dieu huong dan duong di bo duoi chan man hinh
 class MapNavigationBar extends StatelessWidget {
   final CampusLocationItem destination;
   final CampusGate currentGate;
@@ -37,7 +37,6 @@ class MapNavigationBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          // Icon điều hướng mũi tên xanh
           Container(
             width: 44,
             height: 44,
@@ -50,14 +49,11 @@ class MapNavigationBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-
-          // Thông tin điểm đến & Cổng & Khoảng cách
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Huy hiệu cổng đang qua
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                   decoration: BoxDecoration(
@@ -71,7 +67,7 @@ class MapNavigationBar extends StatelessWidget {
                       const SizedBox(width: 3),
                       Flexible(
                         child: Text(
-                          'CỔNG: ${currentGate.name.toUpperCase()}',
+                          'CONG: ${currentGate.name.toUpperCase()}',
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -86,8 +82,6 @@ class MapNavigationBar extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-
-                // Tên địa điểm đến
                 Text(
                   destination.name,
                   style: const TextStyle(
@@ -99,22 +93,40 @@ class MapNavigationBar extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-
-                // Khoảng cách mét & phút đi bộ
                 Text(
-                  '~${(distanceMeters.isInfinite || distanceMeters.isNaN) ? 100 : distanceMeters.round()}m • ~$walkingMinutes phút đi bộ',
+                  '~${(distanceMeters.isInfinite || distanceMeters.isNaN) ? 100 : distanceMeters.round()}m • ~$walkingMinutes phut di bo',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF059669),
                   ),
                 ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF10B981),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    const Text(
+                      'Dinh vi truc tiep • Tu cap nhat khoang cach',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
           const SizedBox(width: 10),
-
-          // Nút Dừng màu đỏ
           InkWell(
             onTap: onStopNavigation,
             borderRadius: BorderRadius.circular(14),
@@ -132,7 +144,7 @@ class MapNavigationBar extends StatelessWidget {
                   Icon(Icons.cancel_outlined, size: 16, color: Color(0xFFDC2626)),
                   SizedBox(width: 5),
                   Text(
-                    'Dừng',
+                    'Dung',
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w800,
@@ -148,4 +160,3 @@ class MapNavigationBar extends StatelessWidget {
     );
   }
 }
-

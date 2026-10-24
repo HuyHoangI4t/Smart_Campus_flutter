@@ -13,9 +13,7 @@ import '../widgets/map_navigation_bar.dart';
 import '../widgets/map_top_search_bar.dart';
 
 /// Màn hình Bản đồ khuôn viên trường Đại học Tây Nguyên
-/// (Chuẩn 1:1 theo 09_map_campus_overview.jpg & 10_map_routing_navigation.jpg)
-/// Tuân thủ quy chuẩn: Clean Architecture, Modular Widgets (<300 lines), Const constructors,
-/// Touch Target >= 44px, Dijkstra Router, Satellite & Street tile layers.
+/// Dijkstra Router, Satellite & Street tile layers.
 class CampusMapScreen extends ConsumerStatefulWidget {
   final String? initialBuildingCode;
 
@@ -240,14 +238,14 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                   left: 14,
                   right: 14,
                   child: mapState.isNavigating
-                      // Khi đang điều hướng (10_map_routing_navigation.jpg)
+                      // Khi đang điều hướng
                       ? MapGateSelectorCard(
                           selectedGate: mapState.selectedGate,
                           onSelectGate: (gate) {
                             ref.read(mapProvider.notifier).selectGate(gate);
                           },
                         )
-                      // Khi xem tổng quan (09_map_campus_overview.jpg)
+                      // Khi xem tổng quan
                       : MapTopSearchBar(
                           searchController: _searchController,
                           selectedCategory: mapState.selectedCategory,
@@ -265,8 +263,46 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                         ),
                 ),
 
+                if (mapState.isLoadingPaths)
+                  Positioned(
+                    top: 70,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A).withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Đang nạp mạng lưới đường đi...',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 // 2.3 Right Floating Controls (4 nút tròn)
                 Positioned(
+
                   right: 14,
                   bottom: (mapState.selectedLocation != null || mapState.isNavigating) ? 170 : 16,
                   child: Column(
@@ -306,7 +342,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
 
                 // 2.4 Bottom Overlay: Location Detail Card OR Navigation Bar
                 if (mapState.isNavigating && mapState.selectedLocation != null)
-                  // Đang chỉ đường đi bộ (10_map_routing_navigation.jpg)
+                  // Đang chỉ đường đi bộ
                   Positioned(
                     left: 14,
                     right: 14,
@@ -322,7 +358,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                     ),
                   )
                 else if (mapState.selectedLocation != null)
-                  // Xem chi tiết địa điểm đã chọn (09_map_campus_overview.jpg)
+                  // Xem chi tiết địa điểm đã chọn
                   Positioned(
                     left: 14,
                     right: 14,

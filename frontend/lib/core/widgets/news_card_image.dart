@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../utils/image_utils.dart';
 
-/// Widget hiển thị hình ảnh tin tức / thông báo chuẩn 1:1 theo React Native
+/// Widget hiển thị hình ảnh tin tức / thông báo với tỷ lệ chuẩn và hiệu ứng shimmer
 /// Tự động định tuyến qua backend proxy, chống lỗi 502 Bad Gateway và SSL.
 /// Phân bổ ảnh fallback đa dạng theo fallbackIndex để tránh tình trạng "toàn 1 ảnh".
 class NewsCardImage extends StatefulWidget {

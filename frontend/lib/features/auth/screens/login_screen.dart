@@ -8,7 +8,6 @@ import '../widgets/auth_otp_view.dart';
 import '../widgets/auth_text_field.dart';
 
 /// Màn hình Đăng nhập / Đăng ký tài khoản sinh viên
-/// Chuẩn 1:1 theo 01_auth_login.jpg, 02_auth_register.jpg, 03_auth_otp_verify.jpg
 class LoginScreen extends ConsumerStatefulWidget {
   final int initialTab;
   const LoginScreen({super.key, this.initialTab = 0});

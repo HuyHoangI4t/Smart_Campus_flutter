@@ -22,7 +22,7 @@ const options = {
       description: `
 ### Tài liệu API & Cổng Thử Nghiệm Tương Tác (Interactive Swagger UI)
 Hệ thống **Smart Campus Đại học Tây Nguyên** hỗ trợ tích hợp đa nền tảng:
--  **Ứng dụng di động (Mobile App - React Native / Expo)**: Tra cứu điểm, thời khóa biểu, bản đồ số 37 điểm, chỉ đường thông minh, phản ánh sinh viên và cứu trợ khẩn cấp SOS.
+-  **Ứng dụng di động (Mobile App - Flutter)**: Tra cứu điểm, thời khóa biểu, bản đồ số 37 điểm, chỉ đường thông minh, phản ánh sinh viên và cứu trợ khẩn cấp SOS.
 -  **Trang quản trị (Admin Portal Web)**: Giám sát KPI, quản lý người dùng, duyệt phản ánh, trực ban cứu nạn SOS, chỉnh sửa bản đồ & mạng lưới lối đi nội bộ.
 -  **Tiến trình tự động (Automated Cron Jobs)**: Đồng bộ tin tức, thông báo từ cổng trường TTN.
 

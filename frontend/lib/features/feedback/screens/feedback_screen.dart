@@ -95,7 +95,7 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
               ),
               const SizedBox(height: 22),
 
-              // Các nút bấm hành động chuẩn React Native
+              // Nút bấm hành động
               Row(
                 children: [
                   Expanded(

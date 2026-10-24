@@ -1,6 +1,6 @@
 import '../constants/api_endpoints.dart';
 
-/// Danh sách ảnh mẫu dự phòng trường đại học (giống chuẩn React Native)
+/// Danh sách ảnh mẫu dự phòng trường đại học
 const List<String> campusFallbackImages = [
   'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=800&auto=format&fit=crop&q=80',
   'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=80',

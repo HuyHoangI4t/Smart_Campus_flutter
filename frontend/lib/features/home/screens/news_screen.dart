@@ -7,7 +7,6 @@ import '../models/news_model.dart';
 import '../providers/home_provider.dart';
 
 /// Màn hình Danh sách Thông báo & Tin tức sinh viên
-/// Chuẩn 1:1 theo thiết kế 05_home_announcements_news.jpg
 class NewsScreen extends ConsumerStatefulWidget {
   final String? initialCategory;
   const NewsScreen({super.key, this.initialCategory});
@@ -77,7 +76,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
             onBack: () => context.pop(),
           ),
 
-          // Ô tìm kiếm thông báo & tin tức (chuẩn React Native)
+          // Ô tìm kiếm thông báo & tin tức
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
@@ -193,7 +192,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
     );
   }
 
-  // View hiển thị tổng hợp cả Thông báo & Tin tức giống 05_home_announcements_news.jpg
+  // View hiển thị tổng hợp cả Thông báo & Tin tức
   Widget _buildAllView(
     List<NewsModel> announcements,
     List<NewsModel> newsItems,
@@ -295,7 +294,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
     );
   }
 
-  // Card Thông báo SV (chuẩn 1:1 theo 05_home_announcements_news.jpg)
+  // Card Thông báo SV
   Widget _buildAnnouncementCard(NewsModel item) {
     return GestureDetector(
       onTap: () => context.push('/home/news/${item.id}'),
@@ -416,7 +415,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
     );
   }
 
-  // Card Tin tức & Hoạt động ảnh lớn (chuẩn 1:1 theo 05_home_announcements_news.jpg)
+  // Card Tin tức & Hoạt động
   Widget _buildNewsCard(NewsModel item) {
     return GestureDetector(
       onTap: () => context.push('/home/news/${item.id}'),

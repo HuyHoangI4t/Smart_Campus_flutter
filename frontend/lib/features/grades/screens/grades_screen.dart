@@ -409,7 +409,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
     );
   }
 
-  // ─── SAMPLE GRADE ITEM (Matching 11_grades_overview.jpg) ───
+  // ─── SAMPLE GRADE ITEM ───
   Widget _buildSampleGradeItem({
     required String credits,
     required String subject,

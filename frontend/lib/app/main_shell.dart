@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/constants/app_colors.dart';
+import '../features/map/providers/map_provider.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   const MainShell({super.key, required this.navigationShell});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Tự động ẩn bottom navigation bar khi đang chỉ đường đi bộ trên bản đồ
+    final isNavigatingOnMap = ref.watch(mapProvider.select((s) => s.isNavigating));
+    final isOnMapTab = navigationShell.currentIndex == 2;
+    final shouldHideBottomNav = isOnMapTab && isNavigatingOnMap;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: navigationShell,
-      bottomNavigationBar: _buildBottomNav(context),
+      bottomNavigationBar: shouldHideBottomNav ? null : _buildBottomNav(context),
     );
   }
 

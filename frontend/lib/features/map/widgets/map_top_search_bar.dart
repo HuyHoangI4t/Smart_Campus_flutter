@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 
-/// Thanh tìm kiếm và bộ lọc danh mục nổi trên đầu bản đồ (Chuẩn 09_map_campus_overview.jpg)
+/// Thanh tìm kiếm và bộ lọc danh mục nổi trên đầu bản đồ
 class MapTopSearchBar extends StatelessWidget {
   final TextEditingController searchController;
   final String selectedCategory;

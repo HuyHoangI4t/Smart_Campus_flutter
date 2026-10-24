@@ -5,8 +5,8 @@ import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'avatar_picker_modal.dart';
 
-/// Modal Cập nhật hồ sơ sinh viên (Chuẩn 15_profile_edit.jpg)
-/// Tuân thủ quy tắc Flutter: Form validation, TextFormField tối ưu không lồng viền, dispose controller sạch sẽ.
+/// Modal Cập nhật hồ sơ sinh viên
+/// Form validation, TextFormField tối ưu, dispose controller sạch sẽ.
 class EditProfileModal extends ConsumerStatefulWidget {
   final UserModel? currentUser;
 

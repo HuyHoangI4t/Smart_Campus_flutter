@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/campus_constants.dart';
 
-/// Marker hiển thị Cổng trường dạng Pill đen/xanh nổi bật (Chuẩn 09_map_campus_overview.jpg)
+/// Marker hiển thị Cổng trường dạng Pill nổi bật
 class MapGateMarker extends StatelessWidget {
   final CampusGate gate;
   final bool isSelected;

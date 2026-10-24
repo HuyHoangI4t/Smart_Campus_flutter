@@ -7,7 +7,6 @@ import '../widgets/auth_header.dart';
 import '../widgets/auth_otp_view.dart';
 
 /// Màn hình Xác thực OTP Đăng ký tài khoản
-/// Chuẩn 1:1 theo 03_auth_otp_verify.jpg
 class OtpVerifyScreen extends ConsumerWidget {
   final String studentId;
   final String? email;

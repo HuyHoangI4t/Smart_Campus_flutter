@@ -31,29 +31,66 @@ class DijkstraResult {
   );
 }
 
-class MinHeapNode implements Comparable<MinHeapNode> {
-  final String nodeId;
-  final double distance;
+/// Min-heap (binary heap) - O(log n) insert/extract
+class _MinHeap {
+  final List<_HeapEntry> _data = [];
 
-  MinHeapNode(this.nodeId, this.distance);
+  bool get isEmpty => _data.isEmpty;
 
-  @override
-  int compareTo(MinHeapNode other) => distance.compareTo(other.distance);
+  void insert(String nodeId, double distance) {
+    _data.add(_HeapEntry(nodeId, distance));
+    _siftUp(_data.length - 1);
+  }
+
+  _HeapEntry extractMin() {
+    final min = _data[0];
+    final last = _data.removeLast();
+    if (_data.isNotEmpty) {
+      _data[0] = last;
+      _siftDown(0);
+    }
+    return min;
+  }
+
+  void _siftUp(int i) {
+    while (i > 0) {
+      final parent = (i - 1) >> 1;
+      if (_data[i].distance < _data[parent].distance) {
+        final tmp = _data[i];
+        _data[i] = _data[parent];
+        _data[parent] = tmp;
+        i = parent;
+      } else {
+        break;
+      }
+    }
+  }
+
+  void _siftDown(int i) {
+    final n = _data.length;
+    while (true) {
+      int smallest = i;
+      final left = 2 * i + 1;
+      final right = 2 * i + 2;
+      if (left < n && _data[left].distance < _data[smallest].distance) {
+        smallest = left;
+      }
+      if (right < n && _data[right].distance < _data[smallest].distance) {
+        smallest = right;
+      }
+      if (smallest == i) break;
+      final tmp = _data[i];
+      _data[i] = _data[smallest];
+      _data[smallest] = tmp;
+      i = smallest;
+    }
+  }
 }
 
-class SimplePriorityQueue {
-  final List<MinHeapNode> _elements = [];
-
-  bool get isEmpty => _elements.isEmpty;
-
-  void add(String nodeId, double distance) {
-    _elements.add(MinHeapNode(nodeId, distance));
-    _elements.sort();
-  }
-
-  MinHeapNode removeFirst() {
-    return _elements.removeAt(0);
-  }
+class _HeapEntry {
+  final String nodeId;
+  final double distance;
+  _HeapEntry(this.nodeId, this.distance);
 }
 
 class CampusDijkstraRouter {
@@ -62,51 +99,80 @@ class CampusDijkstraRouter {
 
   CampusDijkstraRouter();
 
-  /// Nạp các đoạn đường từ danh sách đa tuyến (Multi-segment polylines)
+  /// Nap do thi tu danh sach polyline tinh (offline fallback)
   void buildGraphFromPolylines(List<List<LatLng>> polylines) {
     graph.clear();
     nodeCoordinates.clear();
 
     for (final polyline in polylines) {
       for (int i = 0; i < polyline.length - 1; i++) {
-        final p1 = polyline[i];
-        final p2 = polyline[i + 1];
-
-        final id1 = _formatCoordKey(p1.latitude, p1.longitude);
-        final id2 = _formatCoordKey(p2.latitude, p2.longitude);
-
-        nodeCoordinates[id1] = p1;
-        nodeCoordinates[id2] = p2;
-
-        final dist = calculateHaversineDistance(
-          p1.latitude,
-          p1.longitude,
-          p2.latitude,
-          p2.longitude,
-        );
-
-        graph.putIfAbsent(id1, () => []).add(
-          DijkstraEdge(target: id2, weight: dist, coordinate: p2),
-        );
-        graph.putIfAbsent(id2, () => []).add(
-          DijkstraEdge(target: id1, weight: dist, coordinate: p1),
-        );
+        _addEdge(polyline[i], polyline[i + 1]);
       }
     }
 
-    // Tự động kết nối các nút gần nhau (dưới 25m) để tránh việc các nhánh đường bị đứt gãy
+    _autoConnectNearbyNodes(25.0);
+  }
+
+  /// Nap do thi tu API backend paths (co pre-calculated distances)
+  void buildGraphFromApiPaths(List<Map<String, dynamic>> apiPaths) {
+    graph.clear();
+    nodeCoordinates.clear();
+
+    for (final pathData in apiPaths) {
+      final coords = pathData['coordinates'];
+      if (coords is! List || coords.length < 2) continue;
+
+      for (int i = 0; i < coords.length - 1; i++) {
+        final c1 = coords[i];
+        final c2 = coords[i + 1];
+        if (c1 is! List || c2 is! List) continue;
+
+        final lat1 = (c1[0] as num?)?.toDouble();
+        final lng1 = (c1[1] as num?)?.toDouble();
+        final lat2 = (c2[0] as num?)?.toDouble();
+        final lng2 = (c2[1] as num?)?.toDouble();
+
+        if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) {
+          continue;
+        }
+
+        _addEdge(LatLng(lat1, lng1), LatLng(lat2, lng2));
+      }
+    }
+
+    _autoConnectNearbyNodes(25.0);
+  }
+
+  void _addEdge(LatLng p1, LatLng p2) {
+    final id1 = _formatCoordKey(p1.latitude, p1.longitude);
+    final id2 = _formatCoordKey(p2.latitude, p2.longitude);
+
+    nodeCoordinates[id1] = p1;
+    nodeCoordinates[id2] = p2;
+
+    final dist = calculateHaversineDistance(
+      p1.latitude, p1.longitude, p2.latitude, p2.longitude,
+    );
+
+    graph.putIfAbsent(id1, () => []).add(
+      DijkstraEdge(target: id2, weight: dist, coordinate: p2),
+    );
+    graph.putIfAbsent(id2, () => []).add(
+      DijkstraEdge(target: id1, weight: dist, coordinate: p1),
+    );
+  }
+
+  void _autoConnectNearbyNodes(double thresholdMeters) {
     final nodesList = nodeCoordinates.entries.toList();
     for (int i = 0; i < nodesList.length; i++) {
       for (int j = i + 1; j < nodesList.length; j++) {
         final n1 = nodesList[i];
         final n2 = nodesList[j];
         final d = calculateHaversineDistance(
-          n1.value.latitude,
-          n1.value.longitude,
-          n2.value.latitude,
-          n2.value.longitude,
+          n1.value.latitude, n1.value.longitude,
+          n2.value.latitude, n2.value.longitude,
         );
-        if (d <= 25.0) {
+        if (d <= thresholdMeters) {
           final neighbors1 = graph[n1.key] ?? [];
           if (!neighbors1.any((e) => e.target == n2.key)) {
             graph.putIfAbsent(n1.key, () => []).add(
@@ -121,44 +187,27 @@ class CampusDijkstraRouter {
     }
   }
 
-  /// Tìm đỉnh trong đồ thị gần nhất với một tọa độ cho trước
-  String? findClosestNode(LatLng target) {
-    String? closestId;
-    double minDistance = double.infinity;
+  String? snapToNearestNode(LatLng point, {double maxSnapMeters = 200.0}) {
+    String? bestId;
+    double bestDist = double.infinity;
 
     for (final entry in nodeCoordinates.entries) {
       final d = calculateHaversineDistance(
-        target.latitude,
-        target.longitude,
-        entry.value.latitude,
-        entry.value.longitude,
+        point.latitude, point.longitude,
+        entry.value.latitude, entry.value.longitude,
       );
-      if (d < minDistance) {
-        minDistance = d;
-        closestId = entry.key;
+      if (d < bestDist && d <= maxSnapMeters) {
+        bestDist = d;
+        bestId = entry.key;
       }
     }
-
-    return closestId;
+    return bestId;
   }
 
-  /// Thuật toán Dijkstra tìm đường đi bộ ngắn nhất
+  /// Dijkstra shortest path su dung binary heap
   DijkstraResult findShortestRoute(LatLng start, LatLng end) {
-    if (graph.isEmpty) {
-      return DijkstraResult(
-        coordinates: [start, end],
-        distanceMeters: calculateHaversineDistance(
-          start.latitude,
-          start.longitude,
-          end.latitude,
-          end.longitude,
-        ),
-        estimatedWalkingMinutes: 1,
-      );
-    }
-
-    final startNodeId = findClosestNode(start);
-    final endNodeId = findClosestNode(end);
+    final startNodeId = snapToNearestNode(start);
+    final endNodeId = snapToNearestNode(end);
 
     if (startNodeId == null || endNodeId == null) {
       return DijkstraResult(
@@ -171,17 +220,17 @@ class CampusDijkstraRouter {
     final distances = <String, double>{};
     final previous = <String, String?>{};
     final visited = <String>{};
-    final pq = SimplePriorityQueue();
+    final pq = _MinHeap();
 
     for (final node in nodeCoordinates.keys) {
       distances[node] = double.infinity;
     }
 
     distances[startNodeId] = 0;
-    pq.add(startNodeId, 0);
+    pq.insert(startNodeId, 0);
 
     while (!pq.isEmpty) {
-      final current = pq.removeFirst();
+      final current = pq.extractMin();
       final currNode = current.nodeId;
 
       if (visited.contains(currNode)) continue;
@@ -197,25 +246,20 @@ class CampusDijkstraRouter {
         if (newDist < (distances[edge.target] ?? double.infinity)) {
           distances[edge.target] = newDist;
           previous[edge.target] = currNode;
-          pq.add(edge.target, newDist);
+          pq.insert(edge.target, newDist);
         }
       }
     }
 
-    // Kiểm tra xem có tìm thấy đường đi khả thi tới đích hay không
     final bool hasPath = visited.contains(endNodeId) &&
         distances[endNodeId] != null &&
         !distances[endNodeId]!.isInfinite;
 
     if (!hasPath) {
       final directDistance = calculateHaversineDistance(
-        start.latitude,
-        start.longitude,
-        end.latitude,
-        end.longitude,
+        start.latitude, start.longitude, end.latitude, end.longitude,
       );
       final walkingMinutes = (directDistance / 75.0).ceil().clamp(1, 60);
-
       final fallbackCoords = <LatLng>[start];
       if (nodeCoordinates[startNodeId] != null) {
         fallbackCoords.add(nodeCoordinates[startNodeId]!);
@@ -224,7 +268,6 @@ class CampusDijkstraRouter {
         fallbackCoords.add(nodeCoordinates[endNodeId]!);
       }
       fallbackCoords.add(end);
-
       return DijkstraResult(
         coordinates: fallbackCoords,
         distanceMeters: directDistance,
@@ -232,19 +275,14 @@ class CampusDijkstraRouter {
       );
     }
 
-    // Tái cấu trúc lộ trình đường đi
     final pathCoords = <LatLng>[];
     String? step = endNodeId;
-
     while (step != null) {
       final coord = nodeCoordinates[step];
-      if (coord != null) {
-        pathCoords.insert(0, coord);
-      }
+      if (coord != null) pathCoords.insert(0, coord);
       step = previous[step];
     }
 
-    // Thêm điểm xuất phát và kết thúc chính xác của người dùng
     if (pathCoords.isEmpty) {
       pathCoords.addAll([start, end]);
     } else {
@@ -253,12 +291,14 @@ class CampusDijkstraRouter {
     }
 
     final rawMeters = distances[endNodeId] ??
-        calculateHaversineDistance(start.latitude, start.longitude, end.latitude, end.longitude);
-
+        calculateHaversineDistance(
+          start.latitude, start.longitude, end.latitude, end.longitude,
+        );
     final safeMeters = rawMeters.isInfinite || rawMeters.isNaN
-        ? calculateHaversineDistance(start.latitude, start.longitude, end.latitude, end.longitude)
+        ? calculateHaversineDistance(
+            start.latitude, start.longitude, end.latitude, end.longitude,
+          )
         : rawMeters;
-
     final walkingMinutes = (safeMeters / 75.0).ceil().clamp(1, 120);
 
     return DijkstraResult(
@@ -272,4 +312,3 @@ class CampusDijkstraRouter {
     return '${lat.toStringAsFixed(6)},${lng.toStringAsFixed(6)}';
   }
 }
-

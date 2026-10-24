@@ -231,7 +231,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
               children: [
-                // ─── NOTICE BOX (16_profile_change_password.jpg) ───
+                // ─── NOTICE BOX ───
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
