@@ -29,6 +29,7 @@ class MapState {
   final LatLng? userPosition;
   final bool isLoadingPaths;
   final bool pathsFromApi;
+  final String? routingError;
 
   const MapState({
     this.locations = CampusConstants.campusLocations,
@@ -43,6 +44,7 @@ class MapState {
     this.userPosition,
     this.isLoadingPaths = false,
     this.pathsFromApi = false,
+    this.routingError,
   });
 
   List<CampusLocationItem> get filteredLocations {
@@ -70,6 +72,7 @@ class MapState {
     Object? userPosition = const _Sentinel(),
     bool? isLoadingPaths,
     bool? pathsFromApi,
+    Object? routingError = const _Sentinel(),
   }) {
     return MapState(
       locations: locations ?? this.locations,
@@ -90,6 +93,9 @@ class MapState {
           : userPosition as LatLng?,
       isLoadingPaths: isLoadingPaths ?? this.isLoadingPaths,
       pathsFromApi: pathsFromApi ?? this.pathsFromApi,
+      routingError: routingError is _Sentinel
+          ? this.routingError
+          : routingError as String?,
     );
   }
 }
@@ -221,10 +227,14 @@ class MapNotifier extends Notifier<MapState> {
     final destination = state.selectedLocation;
     if (destination == null) return;
 
-    final route = _router.findShortestRoute(currentPos, destination.coordinate);
-    state = state.copyWith(
-      activeRoute: route,
+    final route = _router.findHybridRoute(
+      start: currentPos,
+      destination: destination.coordinate,
+      availableGates: state.gates,
     );
+    if (route.coordinates.isNotEmpty) {
+      state = state.copyWith(activeRoute: route);
+    }
   }
 
   /// Tinh lai route (khi graph thay doi hoac doi cong)
@@ -232,9 +242,23 @@ class MapNotifier extends Notifier<MapState> {
     final destination = state.selectedLocation;
     if (destination == null) return;
 
-    final start = state.userPosition ?? state.selectedGate.coordinate;
-    final route = _router.findShortestRoute(start, destination.coordinate);
-    state = state.copyWith(activeRoute: route);
+    final userPos = state.userPosition;
+    final DijkstraResult route;
+    if (userPos != null) {
+      route = _router.findHybridRoute(
+        start: userPos,
+        destination: destination.coordinate,
+        availableGates: state.gates,
+      );
+    } else {
+      route = _router.findShortestRoute(
+        state.selectedGate.coordinate,
+        destination.coordinate,
+      );
+    }
+    if (route.coordinates.isNotEmpty) {
+      state = state.copyWith(activeRoute: route);
+    }
   }
 
   Future<void> fetchLocationsFromBackend() async {
@@ -308,16 +332,45 @@ class MapNotifier extends Notifier<MapState> {
     }
   }
 
-  void startNavigationTo(CampusLocationItem destination) {
-    final start = state.userPosition ?? state.selectedGate.coordinate;
-    final end = destination.coordinate;
+  void clearRoutingError() {
+    state = state.copyWith(routingError: null);
+  }
 
-    final route = _router.findShortestRoute(start, end);
+  void startNavigationTo(CampusLocationItem destination) {
+    final userPos = state.userPosition;
+    final DijkstraResult route;
+
+    if (userPos != null) {
+      // Co toa do GPS -> dung Hybrid Routing (ngoai truong -> cong gan nhat -> loi di bo)
+      route = _router.findHybridRoute(
+        start: userPos,
+        destination: destination.coordinate,
+        availableGates: state.gates,
+      );
+    } else {
+      // Khong co GPS -> di tu cong dang chon
+      route = _router.findShortestRoute(
+        state.selectedGate.coordinate,
+        destination.coordinate,
+      );
+    }
+
+    if (route.coordinates.isEmpty) {
+      // Khong tim thay duong -> bao loi, khong ve duong chim bay
+      state = state.copyWith(
+        selectedLocation: destination,
+        activeRoute: null,
+        isNavigating: false,
+        routingError: 'Không tìm thấy đường đi bộ đến ${destination.name}',
+      );
+      return;
+    }
 
     state = state.copyWith(
       selectedLocation: destination,
       activeRoute: route,
       isNavigating: true,
+      routingError: null,
     );
   }
 

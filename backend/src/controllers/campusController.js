@@ -393,23 +393,62 @@ exports.getCampusPaths = async (req, res) => {
           coords = [];
         }
       }
-      const validCoords = Array.isArray(coords) ? coords : [];
+      const rawCoords = Array.isArray(coords) ? coords : [];
 
-      // Tính tổng khoảng cách và số nút cho mỗi đoạn polyline
+      // Detect nested paths: if first element is array of arrays → flatten
+      // Nested: [[subpath1], [subpath2]] where subpath = [[lat,lng], [lat,lng]]
+      // Flat:   [[lat,lng], [lat,lng], ...]
+      const flatSegments = [];
+      function _flattenCoords(arr) {
+        if (!Array.isArray(arr) || arr.length === 0) return;
+        // Check if arr[0] is a coordinate pair [number, number]
+        if (typeof arr[0] === 'number' && arr.length >= 2) {
+          // This is a single coordinate [lat, lng] — should not happen at top level
+          return;
+        }
+        // Check if arr[0][0] is a number → arr is a flat list of [lat,lng] pairs
+        if (Array.isArray(arr[0]) && typeof arr[0][0] === 'number') {
+          flatSegments.push(arr); // one polyline segment
+          return;
+        }
+        // Otherwise arr[0][0] is also an array → arr is nested, recurse each subpath
+        for (const sub of arr) {
+          _flattenCoords(sub);
+        }
+      }
+      _flattenCoords(rawCoords);
+
+      // Build flat coordinate list for each segment & compute distance
       let distanceMeters = 0;
-      for (let i = 0; i < validCoords.length - 1; i++) {
-        const [lat1, lng1] = validCoords[i];
-        const [lat2, lng2] = validCoords[i + 1];
-        if (typeof lat1 === 'number' && typeof lng1 === 'number' &&
-            typeof lat2 === 'number' && typeof lng2 === 'number') {
-          distanceMeters += _haversineMeters(lat1, lng1, lat2, lng2);
+      const allPoints = [];
+      for (const segment of flatSegments) {
+        for (let i = 0; i < segment.length; i++) {
+          const pt = segment[i];
+          if (!Array.isArray(pt) || pt.length < 2) continue;
+          const lat = pt[0], lng = pt[1];
+          if (typeof lat !== 'number' || typeof lng !== 'number') continue;
+          allPoints.push([lat, lng]);
+        }
+      }
+
+      // Calculate distance along consecutive points within each segment
+      for (const segment of flatSegments) {
+        for (let i = 0; i < segment.length - 1; i++) {
+          const p1 = segment[i], p2 = segment[i + 1];
+          if (!Array.isArray(p1) || !Array.isArray(p2)) continue;
+          const [lat1, lng1] = p1;
+          const [lat2, lng2] = p2;
+          if (typeof lat1 === 'number' && typeof lng1 === 'number' &&
+              typeof lat2 === 'number' && typeof lng2 === 'number') {
+            distanceMeters += _haversineMeters(lat1, lng1, lat2, lng2);
+          }
         }
       }
 
       return {
         id: r.id,
-        coordinates: validCoords,
-        node_count: validCoords.length,
+        coordinates: flatSegments, // Array of segments: [[[lat,lng],...], [[lat,lng],...]]
+        node_count: allPoints.length,
         distance_meters: Math.round(distanceMeters * 100) / 100,
       };
     });
@@ -442,7 +481,7 @@ exports.getCampusGates = (req, res) => {
       },
       {
         id: 'hospital_gate',
-        name: 'Cổng Bệnh viện (Yersin)',
+        name: 'Cổng Bệnh viện (Lê Duẩn)',
         shortName: 'Bệnh viện',
         lat: 12.650645,
         lng: 108.022990

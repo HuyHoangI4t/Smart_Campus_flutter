@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 class ApiEndpoints {
   ApiEndpoints._();
 
-  // IP máy tính chủ trên mạng Wi-Fi (IPv4: 192.168.1.9)
-  static const String lanHost = '192.168.1.9';
+  // IP máy tính chủ trên mạng Wi-Fi (IPv4: 192.168.1.8)
+  static const String lanHost = '192.168.1.8';
   static const int port = 5000;
 
   // URL cho máy thật (Wi-Fi), máy thật (USB adb reverse), giả lập, web
@@ -16,7 +16,12 @@ class ApiEndpoints {
   static const String defaultBaseUrl = lanBaseUrl;
   static const String webBaseUrl = localhostBaseUrl;
 
+  static String? customBaseUrl;
+
   static String get activeBaseUrl {
+    if (customBaseUrl != null && customBaseUrl!.isNotEmpty) {
+      return customBaseUrl!;
+    }
     if (kIsWeb) {
       final host = (Uri.base.host.isNotEmpty && Uri.base.host != '0.0.0.0') ? Uri.base.host : 'localhost';
       return 'http://$host:$port/api';

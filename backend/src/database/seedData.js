@@ -2619,7 +2619,16 @@ const DEFAULT_CAMPUS_PATHS = [
         108.0245864
       ]
     ]
-  }
+  },
+  {
+    "id": 99,
+    "name": "Lối kết nối Thao trường quân sự",
+    "path_type": "walkway",
+    "coordinates": [
+      [12.649282, 108.027178],
+      [12.6490517, 108.027395]
+    ]
+  },
 ];
 
 module.exports = {

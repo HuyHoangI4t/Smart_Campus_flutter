@@ -205,6 +205,19 @@ class ScheduleItem {
     return '$h:$m';
   }
 
+  String get endTime {
+    final h = (endMinutes ~/ 60).toString().padLeft(2, '0');
+    final m = (endMinutes % 60).toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  String get periodDisplay {
+    if (timeSlot.toLowerCase().contains('tiết')) return timeSlot;
+    final match = RegExp(r'(\d+)\s*[-–—]\s*(\d+)').firstMatch(timeSlot);
+    if (match != null) return 'Tiết ${match.group(1)}-${match.group(2)}';
+    return timeSlot;
+  }
+
   static ({int start, int end}) _calculatePeriodMinutes(String timeStr) {
     final str = timeStr.trim();
     final timeMatch = RegExp(r'(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})').firstMatch(str);

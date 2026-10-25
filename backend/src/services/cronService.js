@@ -69,21 +69,21 @@ async function runFullSync(triggerSource = 'AUTOMATED_CRON') {
  */
 function startCronJobs() {
   // Lịch chạy 3 lần 1 ngày: 06:00 sáng, 12:00 trưa, 18:00 chiều tối
-  const cronExpression = '0 6,12,18 * * *';
+  // const cronExpression = '0 6,12,18 * * *';
 
-  cron.schedule(
-    cronExpression,
-    async () => {
-      console.log('⏰ [Cron Trigger] Kích hoạt lịch đồng bộ tự động 3 lần/ngày (06h, 12h, 18h)...');
-      await runFullSync('SCHEDULED_3X_DAILY');
-    },
-    {
-      scheduled: true,
-      timezone: 'Asia/Ho_Chi_Minh'
-    }
-  );
+  // cron.schedule(
+  //   cronExpression,
+  //   async () => {
+  //     console.log('⏰ [Cron Trigger] Kích hoạt lịch đồng bộ tự động 3 lần/ngày (06h, 12h, 18h)...');
+  //     await runFullSync('SCHEDULED_3X_DAILY');
+  //   },
+  //   {
+  //     scheduled: true,
+  //     timezone: 'Asia/Ho_Chi_Minh'
+  //   }
+  // );
 
-  console.log('📅 [Cron Service] Đã kích hoạt lịch tự động cào dữ liệu từ trường: 3 lần/ngày (06:00, 12:00, 18:00 Asia/Ho_Chi_Minh)');
+  //console.log('📅 [Cron Service] Đã kích hoạt lịch tự động cào dữ liệu từ trường: 3 lần/ngày (06:00, 12:00, 18:00 Asia/Ho_Chi_Minh)');
 
   // Chạy đồng bộ một lần ban đầu (sau 5 giây khởi động) để đảm bảo MySQL luôn có cache mới nhất
   setTimeout(() => {
@@ -91,17 +91,17 @@ function startCronJobs() {
   }, 5000);
 }
 
-function getSyncStatus() {
-  return {
-    lastSyncTime,
-    lastSyncStats,
-    schedule: '06:00, 12:00, 18:00 hàng ngày (Asia/Ho_Chi_Minh)',
-    frequency: '3 lần / ngày'
-  };
-}
+// function getSyncStatus() {
+//   return {
+//     lastSyncTime,
+//     lastSyncStats,
+//     schedule: '06:00, 12:00, 18:00 hàng ngày (Asia/Ho_Chi_Minh)',
+//     frequency: '3 lần / ngày'
+//   };
+// }
 
 module.exports = {
   startCronJobs,
   runFullSync,
-  getSyncStatus
+  //getSyncStatus
 };

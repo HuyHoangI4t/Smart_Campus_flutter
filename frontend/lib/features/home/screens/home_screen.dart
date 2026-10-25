@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/home_widget_service.dart';
 import '../../../core/widgets/news_card_image.dart';
 import '../../../core/widgets/wireframe_widgets.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -20,6 +21,50 @@ class HomeScreen extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     final homeState = ref.watch(homeProvider);
     final user = authState.user;
+
+    // Tự động đồng bộ 2 Widget màn hình chính Launcher khi có dữ liệu mới
+    ref.listen(nextClassProvider, (_, next) {
+      final item = next.item;
+      final timeStr = item != null && item.startTime.isNotEmpty
+          ? '${item.startTime} - ${item.endTime} (${item.periodDisplay})'
+          : (next.time.isNotEmpty ? next.time : 'Hôm nay nghỉ');
+      final statusBadge = next.capsuleLabel.isNotEmpty
+          ? (next.capsuleLabel == 'NGÀY MAI'
+              ? 'Thứ 2 • Ngày mai'
+              : (next.capsuleLabel == 'HÔM NAY'
+                  ? (next.isOngoing ? 'Hôm nay • Đang học' : 'Hôm nay • Sắp tới')
+                  : next.capsuleLabel))
+          : 'LỊCH HỌC';
+      final lecturerStr = (item?.lecturer != null && item!.lecturer!.isNotEmpty)
+          ? 'GV: ${item.lecturer}'
+          : 'Smart Campus TTN';
+
+      HomeWidgetService.instance.updateScheduleWidget(
+        subject: next.subject.isNotEmpty ? next.subject : 'Chưa có môn học',
+        time: timeStr,
+        room: next.room.isNotEmpty ? next.room : 'Khuôn viên trường',
+        status: statusBadge,
+        countdown: next.countdownText.isNotEmpty ? next.countdownText : 'Sắp diễn ra',
+        lecturer: lecturerStr,
+      );
+    });
+
+    ref.listen(gradesProvider, (_, grades) {
+      final gpa4 = grades.gpa4;
+      final gpa10 = grades.summary.gpa10;
+      final credits = grades.accumulatedCredits;
+      final progressPercent = (credits / 140 * 100).clamp(0, 100).round();
+
+      HomeWidgetService.instance.updateGpaWidget(
+        gpa: gpa4 > 0 ? gpa4.toStringAsFixed(2) : '0.00',
+        gpa10: gpa10 > 0 ? 'Thang 10: ${gpa10.toStringAsFixed(1)}' : 'Thang 10: --',
+        credits: credits.toString(),
+        rank: gpa4 > 0 && grades.summary.academicRank.isNotEmpty
+            ? grades.summary.academicRank
+            : 'Chưa xét',
+        progressText: credits > 0 ? 'Tiến độ: ~$progressPercent% CTĐT' : 'Chưa có tín chỉ',
+      );
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,

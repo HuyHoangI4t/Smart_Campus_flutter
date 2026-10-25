@@ -8,6 +8,6 @@
     android:initialLayout="@layout/schedule_widget_layout"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
-    android:description="@string/app_name">
+    android:description="@string/schedule_widget_desc">
 </appwidget-provider>
 

@@ -5,179 +5,163 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="14dp">
+    android:padding="16dp">
 
-    <!-- Header: App Name & Status -->
+    <!-- 1. Header: Calendar Icon + Title + Tonal Pill -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <TextView
+        <!-- Calendar Icon + LỊCH HỌC KẾ TIẾP -->
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="SMART CAMPUS TTN"
-            android:textColor="#93C5FD"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.08" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
+            <ImageView
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_widget_calendar"
+                android:contentDescription="Calendar" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="LỊCH HỌC KẾ TIẾP"
+                android:textColor="#94A3B8"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08" />
+        </LinearLayout>
+
+        <!-- Right Badge: Tonal Pill (No Border, Soft Sky Blue BG) -->
         <TextView
             android:id="@+id/widget_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="LỚP HỌC HÔM NAY"
-            android:textColor="#FFFFFF"
-            android:background="@drawable/widget_status_bg"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
+            android:text="Thứ 2 • Ngày mai"
+            android:textColor="#38BDF8"
+            android:background="@drawable/widget_tonal_sky_pill"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
             android:paddingTop="3dp"
             android:paddingBottom="3dp"
             android:textSize="9.5sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:letterSpacing="0.02" />
     </LinearLayout>
 
-    <!-- Subject Name -->
+    <!-- 2. Subject Name: Big, prominent, bold -->
     <TextView
         android:id="@+id/widget_subject"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="LS Đảng CS VN"
-        android:textColor="#FFFFFF"
-        android:textSize="15sp"
+        android:text="Lịch sử Đảng Cộng sản VN"
+        android:textColor="#F8FAFC"
+        android:textSize="18sp"
         android:textStyle="bold"
-        android:maxLines="1"
+        android:maxLines="2"
         android:ellipsize="end" />
 
-    <!-- Time & Room Details -->
+    <!-- 3. Sub-card Row: Time (07:00 - 10:35) & Classroom (Room 2.21) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="10dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/widget_time"
+        <!-- Time Sub-card -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Tiết 1-4"
-            android:textColor="#E0E7FF"
-            android:textSize="11.5sp"
-            android:textStyle="bold" />
+            android:background="@drawable/widget_chip_time_bg"
+            android:paddingStart="9dp"
+            android:paddingEnd="9dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/widget_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🕒 07:00 - 10:35 (Tiết 1-4)"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginEnd="6dp"
-            android:text="•"
-            android:textColor="#94A3B8"
-            android:textSize="11sp" />
+            android:layout_width="6dp"
+            android:layout_height="wrap_content" />
 
-        <TextView
-            android:id="@+id/widget_room"
+        <!-- Room Sub-card (Amber Warm Highlight) -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="2.21 (CLC)"
-            android:textColor="#FCD34D"
-            android:textSize="11.5sp"
-            android:textStyle="bold" />
+            android:background="@drawable/widget_chip_room_bg"
+            android:paddingStart="9dp"
+            android:paddingEnd="9dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/widget_room"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📍 2.21 (CLC)"
+                android:textColor="#FBBF24"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
     </LinearLayout>
 
-    <!-- Divider -->
-    <View
+    <TextView
         android:layout_width="match_parent"
-        android:layout_height="0.8dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginBottom="8dp"
-        android:background="#2E4A8C" />
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
-    <!-- GPA & Credits Summary Row -->
+    <!-- 4. Footer: Countdown / Status Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/widget_countdown_bar_bg"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <!-- GPA 4.0 -->
-        <LinearLayout
+        <TextView
+            android:id="@+id/widget_countdown"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical">
+            android:text="⏱ Bắt đầu sau 14 giờ nữa"
+            android:textColor="#38BDF8"
+            android:textSize="10.5sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="GPA HỆ 4"
-                android:textColor="#94A3B8"
-                android:textSize="8.5sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_gpa"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="3.25"
-                android:textColor="#38BDF8"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <!-- Tín chỉ -->
-        <LinearLayout
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/widget_lecturer"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="TÍN CHỈ"
-                android:textColor="#94A3B8"
-                android:textSize="8.5sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_credits"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="85 TC"
-                android:textColor="#4ADE80"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <!-- Xếp loại -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="end">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="XẾP LOẠI"
-                android:textColor="#94A3B8"
-                android:textSize="8.5sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/widget_rank"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Khá"
-                android:textColor="#FBBF24"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+            android:text="Smart Campus TTN"
+            android:textColor="#94A3B8"
+            android:textSize="10sp" />
     </LinearLayout>
 </LinearLayout>
-

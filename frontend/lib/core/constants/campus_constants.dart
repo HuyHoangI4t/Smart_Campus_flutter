@@ -146,7 +146,7 @@ class CampusConstants {
     ),
     CampusGate(
       id: 'hospital_gate',
-      name: 'Cổng Bệnh viện (Yersin)',
+      name: 'Cổng Bệnh viện (Lê Duẩn)',
       shortName: 'Bệnh viện',
       lat: 12.650645,
       lng: 108.022990,

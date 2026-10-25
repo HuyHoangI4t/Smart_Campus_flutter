@@ -649,4 +649,9 @@ final List<List<LatLng>> campusDefaultWalkways = [
       const LatLng(12.6510913, 108.024533),
       const LatLng(12.6509711, 108.0245864),
     ],
+    // Connector: Thao truong quan su island -> main graph
+    [
+      const LatLng(12.649282, 108.027178),
+      const LatLng(12.6490517, 108.027395),
+    ],
   ];

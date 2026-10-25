@@ -9,6 +9,8 @@ class MapNavigationBar extends StatelessWidget {
   final double distanceMeters;
   final int walkingMinutes;
   final VoidCallback onStopNavigation;
+  final bool isHybrid;
+  final String? viaGateName;
 
   const MapNavigationBar({
     super.key,
@@ -17,6 +19,8 @@ class MapNavigationBar extends StatelessWidget {
     required this.distanceMeters,
     required this.walkingMinutes,
     required this.onStopNavigation,
+    this.isHybrid = false,
+    this.viaGateName,
   });
 
   @override
@@ -67,7 +71,9 @@ class MapNavigationBar extends StatelessWidget {
                       const SizedBox(width: 3),
                       Flexible(
                         child: Text(
-                          'CONG: ${currentGate.name.toUpperCase()}',
+                          isHybrid && viaGateName != null
+                              ? 'NGOÀI TRƯỜNG ➔ VÀO ${viaGateName!.toUpperCase()}'
+                              : 'CỔNG: ${currentGate.name.toUpperCase()}',
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,

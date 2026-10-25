@@ -1,3 +1,4 @@
+import '../constants/campus_constants.dart';
 import 'package:latlong2/latlong.dart';
 import 'haversine.dart';
 
@@ -17,17 +18,23 @@ class DijkstraResult {
   final List<LatLng> coordinates;
   final double distanceMeters;
   final int estimatedWalkingMinutes;
+  final bool isHybrid;
+  final String? viaGateName;
 
   const DijkstraResult({
     required this.coordinates,
     required this.distanceMeters,
     required this.estimatedWalkingMinutes,
+    this.isHybrid = false,
+    this.viaGateName,
   });
 
   static const empty = DijkstraResult(
     coordinates: [],
     distanceMeters: 0,
     estimatedWalkingMinutes: 0,
+    isHybrid: false,
+    viaGateName: null,
   );
 }
 
@@ -113,34 +120,63 @@ class CampusDijkstraRouter {
     _autoConnectNearbyNodes(25.0);
   }
 
-  /// Nap do thi tu API backend paths (co pre-calculated distances)
+  /// Nap do thi tu API backend paths
+  /// Backend returns coordinates as List of segments: [[[lat,lng],...], [[lat,lng],...]]
   void buildGraphFromApiPaths(List<Map<String, dynamic>> apiPaths) {
     graph.clear();
     nodeCoordinates.clear();
 
     for (final pathData in apiPaths) {
       final coords = pathData['coordinates'];
-      if (coords is! List || coords.length < 2) continue;
+      if (coords is! List) continue;
 
-      for (int i = 0; i < coords.length - 1; i++) {
-        final c1 = coords[i];
-        final c2 = coords[i + 1];
-        if (c1 is! List || c2 is! List) continue;
+      // Extract flat segments from coords (handles nested arrays)
+      final segments = <List<List<num>>>[];
+      _extractSegments(coords, segments);
 
-        final lat1 = (c1[0] as num?)?.toDouble();
-        final lng1 = (c1[1] as num?)?.toDouble();
-        final lat2 = (c2[0] as num?)?.toDouble();
-        final lng2 = (c2[1] as num?)?.toDouble();
-
-        if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) {
-          continue;
+      // Build edges from each segment
+      for (final segment in segments) {
+        for (int i = 0; i < segment.length - 1; i++) {
+          final c1 = segment[i];
+          final c2 = segment[i + 1];
+          _addEdge(
+            LatLng(c1[0].toDouble(), c1[1].toDouble()),
+            LatLng(c2[0].toDouble(), c2[1].toDouble()),
+          );
         }
-
-        _addEdge(LatLng(lat1, lng1), LatLng(lat2, lng2));
       }
     }
 
     _autoConnectNearbyNodes(25.0);
+  }
+
+  /// Recursively extract flat polyline segments from nested coordinate arrays
+  void _extractSegments(List<dynamic> arr, List<List<List<num>>> out) {
+    if (arr.isEmpty) return;
+
+    // Case 1: arr[0] is num -> single [lat, lng] point, not a segment
+    if (arr[0] is num) return;
+
+    // Case 2: arr[0] is List and arr[0][0] is num -> flat segment of [lat,lng] pairs
+    if (arr[0] is List && (arr[0] as List).isNotEmpty && (arr[0] as List)[0] is num) {
+      final segment = <List<num>>[];
+      for (final pt in arr) {
+        if (pt is List && pt.length >= 2 && pt[0] is num && pt[1] is num) {
+          segment.add([pt[0] as num, pt[1] as num]);
+        }
+      }
+      if (segment.length >= 2) {
+        out.add(segment);
+      }
+      return;
+    }
+
+    // Case 3: deeper nesting -> recurse each sub-array
+    for (final sub in arr) {
+      if (sub is List) {
+        _extractSegments(sub, out);
+      }
+    }
   }
 
   void _addEdge(LatLng p1, LatLng p2) {
@@ -210,11 +246,8 @@ class CampusDijkstraRouter {
     final endNodeId = snapToNearestNode(end);
 
     if (startNodeId == null || endNodeId == null) {
-      return DijkstraResult(
-        coordinates: [start, end],
-        distanceMeters: 0,
-        estimatedWalkingMinutes: 0,
-      );
+      // Khong snap duoc vao graph -> khong ve duong (tranh chim bay)
+      return DijkstraResult.empty;
     }
 
     final distances = <String, double>{};
@@ -256,23 +289,8 @@ class CampusDijkstraRouter {
         !distances[endNodeId]!.isInfinite;
 
     if (!hasPath) {
-      final directDistance = calculateHaversineDistance(
-        start.latitude, start.longitude, end.latitude, end.longitude,
-      );
-      final walkingMinutes = (directDistance / 75.0).ceil().clamp(1, 60);
-      final fallbackCoords = <LatLng>[start];
-      if (nodeCoordinates[startNodeId] != null) {
-        fallbackCoords.add(nodeCoordinates[startNodeId]!);
-      }
-      if (nodeCoordinates[endNodeId] != null && endNodeId != startNodeId) {
-        fallbackCoords.add(nodeCoordinates[endNodeId]!);
-      }
-      fallbackCoords.add(end);
-      return DijkstraResult(
-        coordinates: fallbackCoords,
-        distanceMeters: directDistance,
-        estimatedWalkingMinutes: walkingMinutes,
-      );
+      // Khong tim duoc duong di -> tra empty (tranh ve duong chim bay)
+      return DijkstraResult.empty;
     }
 
     final pathCoords = <LatLng>[];
@@ -305,6 +323,99 @@ class CampusDijkstraRouter {
       coordinates: pathCoords,
       distanceMeters: safeMeters,
       estimatedWalkingMinutes: walkingMinutes,
+    );
+  }
+
+  /// Kiem tra toa do co nam ben trong khuon vien truong hay khong
+  static bool isInsideCampus(LatLng point) {
+    final x = point.latitude;
+    final y = point.longitude;
+
+    // Buffer 35m xung quanh cac cong truong -> van coi la trong truong
+    for (final gate in CampusConstants.gates) {
+      final d = calculateHaversineDistance(x, y, gate.lat, gate.lng);
+      if (d <= 35.0) return true;
+    }
+
+    // Ray-casting point-in-polygon kiem tra da giac ranh gioi
+    final b = CampusConstants.campusBoundary;
+    if (b.length < 3) return true;
+
+    bool inside = false;
+    for (int i = 0, j = b.length - 1; i < b.length; j = i++) {
+      final xi = b[i].latitude, yi = b[i].longitude;
+      final xj = b[j].latitude, yj = b[j].longitude;
+      final intersect = ((yi > y) != (yj > y)) &&
+          (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  /// Tim cong truong gan nhat voi vi tri nguoi dung
+  static CampusGate findNearestGate(LatLng point, List<CampusGate> gates) {
+    CampusGate bestGate = gates.first;
+    double bestDist = double.infinity;
+    for (final g in gates) {
+      final d = calculateHaversineDistance(
+        point.latitude, point.longitude, g.lat, g.lng,
+      );
+      if (d < bestDist) {
+        bestDist = d;
+        bestGate = g;
+      }
+    }
+    return bestGate;
+  }
+
+  /// Dan duong hybrid: ngoai truong -> cong gan nhat -> loi di bo noi bo
+  DijkstraResult findHybridRoute({
+    required LatLng start,
+    required LatLng destination,
+    required List<CampusGate> availableGates,
+  }) {
+    // Neu vi tri xuat phat nam TRONG truong -> Dijkstra noi bo binh thuong
+    if (isInsideCampus(start)) {
+      return findShortestRoute(start, destination);
+    }
+
+    // Vi tri NGOAI truong -> Dan qua cong gan nhat
+    final nearestGate = findNearestGate(start, availableGates);
+    final gateCoord = nearestGate.coordinate;
+
+    // Tinh doan di bo noi bo tu cong den dich
+    final internalRoute = findShortestRoute(gateCoord, destination);
+    if (internalRoute.coordinates.isEmpty) {
+      return DijkstraResult.empty;
+    }
+
+    // Khoang cach tu vi tri ngoai truong den cong
+    final externalDistance = calculateHaversineDistance(
+      start.latitude, start.longitude, gateCoord.latitude, gateCoord.longitude,
+    );
+
+    // Ghep tuyen: [Vi tri ngoai] -> [Cong truong] -> [Cac moc noi bo...]
+    final combinedCoords = <LatLng>[start];
+    // Tranh duplicate vi tri cong neu internalRoute da bat dau tu cong
+    final firstInternal = internalRoute.coordinates.first;
+    final distToFirst = calculateHaversineDistance(
+      gateCoord.latitude, gateCoord.longitude,
+      firstInternal.latitude, firstInternal.longitude,
+    );
+    if (distToFirst > 1.0) {
+      combinedCoords.add(gateCoord);
+    }
+    combinedCoords.addAll(internalRoute.coordinates);
+
+    final totalDistance = externalDistance + internalRoute.distanceMeters;
+    final totalMinutes = (totalDistance / 75.0).ceil().clamp(1, 120);
+
+    return DijkstraResult(
+      coordinates: combinedCoords,
+      distanceMeters: totalDistance,
+      estimatedWalkingMinutes: totalMinutes,
+      isHybrid: true,
+      viaGateName: nearestGate.name,
     );
   }
 

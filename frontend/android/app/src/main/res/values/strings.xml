@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Smart Campus</string>
-    <string name="widget_name">Lịch học &amp; GPA</string>
+    <string name="schedule_widget_name">Lịch học tiếp theo</string>
+    <string name="schedule_widget_desc">Xem môn học, thời gian và phòng học kế tiếp</string>
+    <string name="gpa_widget_name">Điểm GPA &amp; Tín chỉ</string>
+    <string name="gpa_widget_desc">Theo dõi điểm trung bình GPA hệ 4, tín chỉ và xếp loại</string>
 </resources>
 
