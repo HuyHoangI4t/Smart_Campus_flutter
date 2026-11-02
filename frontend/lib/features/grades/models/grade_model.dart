@@ -42,26 +42,30 @@ class GradeItem {
   });
 
   factory GradeItem.fromJson(Map<String, dynamic> json) {
-    final score = (json['score_overall'] ?? json['score'] ?? json['diem_hp'] ?? 0.0) is num
-        ? (json['score_overall'] ?? json['score'] ?? json['diem_hp'] ?? 0.0).toDouble()
-        : double.tryParse((json['score_overall'] ?? json['score'] ?? json['diem_hp'] ?? '0').toString()) ?? 0.0;
+    double? parseD(dynamic val) {
+      if (val == null) return null;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString());
+    }
+
+    final score = parseD(json['score_overall'] ?? json['score'] ?? json['diem_hp']) ?? 0.0;
 
     return GradeItem(
       id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
       courseCode: json['course_code'] ?? json['courseCode'] ?? json['code'] ?? '',
       courseName: json['course_name'] ?? json['courseName'] ?? json['ten_hp'] ?? json['name'] ?? '',
-      credits: (json['credits'] as num?)?.toInt() ?? (json['so_tin_chi'] as num?)?.toInt() ?? 2,
+      credits: (json['credits'] as num?)?.toInt() ?? (json['so_tin_chi'] as num?)?.toInt() ?? int.tryParse(json['credits']?.toString() ?? '') ?? 2,
       scoreOverall: score,
-      scoreAttendance: (json['score_attendance'] as num?)?.toDouble(),
-      scoreMidterm: (json['score_midterm'] as num?)?.toDouble(),
-      scorePractical: (json['score_practical'] as num?)?.toDouble(),
-      scoreFinal: (json['score_final'] as num?)?.toDouble(),
+      scoreAttendance: parseD(json['score_attendance']),
+      scoreMidterm: parseD(json['score_midterm']),
+      scorePractical: parseD(json['score_practical']),
+      scoreFinal: parseD(json['score_final']),
       semester: json['semester'] ?? json['hoc_ky'] ?? 'HK1 (2026)',
-      dbp: (json['dbp'] ?? json['diem_dbp'] as num?)?.toDouble(),
-      thi1: (json['thi1'] ?? json['diem_thi1'] as num?)?.toDouble(),
-      thi2: (json['thi2'] ?? json['diem_thi2'] as num?)?.toDouble(),
-      d1: (json['d1'] ?? json['diem_1'] as num?)?.toDouble(),
-      d2: (json['d2'] ?? json['diem_2'] as num?)?.toDouble(),
+      dbp: parseD(json['dbp'] ?? json['diem_dbp']),
+      thi1: parseD(json['thi1'] ?? json['diem_thi1']),
+      thi2: parseD(json['thi2'] ?? json['diem_thi2']),
+      d1: parseD(json['d1'] ?? json['diem_1']),
+      d2: parseD(json['d2'] ?? json['diem_2']),
       letter: json['letter'] ?? json['diem_chu'] ?? (score >= 8.5 ? 'A' : score >= 7.0 ? 'B' : score >= 5.5 ? 'C' : score >= 4.0 ? 'D' : (score > 0 ? 'F' : 'X')),
       hocPhi: json['hoc_phi'] ?? json['hocPhi'],
     );

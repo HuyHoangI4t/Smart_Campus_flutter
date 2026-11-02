@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' as ll;
@@ -19,19 +21,18 @@ extension _LatLngListToMl on List<ll.LatLng> {
   List<ml.LatLng> toMl() => map((c) => c.toMl()).toList();
 }
 
-String _colorToHex(Color color) {
-  final r = (color.r * 255).round().toRadixString(16).padLeft(2, '0');
-  final g = (color.g * 255).round().toRadixString(16).padLeft(2, '0');
-  final b = (color.b * 255).round().toRadixString(16).padLeft(2, '0');
-  return '#$r$g$b';
-}
 
 /// M�n h�nh B?n d? khu�n vi�n tru?ng �?i h?c T�y Nguy�n
 /// Vector Map GPU (MapLibre GL), 3D Buildings & Perspective Tilt, Satellite & Vector tile layers.
 class CampusMapScreen extends ConsumerStatefulWidget {
   final String? initialBuildingCode;
+  final String? initialRoomName;
 
-  const CampusMapScreen({super.key, this.initialBuildingCode});
+  const CampusMapScreen({
+    super.key,
+    this.initialBuildingCode,
+    this.initialRoomName,
+  });
 
   @override
   ConsumerState<CampusMapScreen> createState() => _CampusMapScreenState();
@@ -44,12 +45,17 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   bool _isSatellite = false;
   bool _is3D = true;
   bool _isStyleLoaded = false;
-  bool _initialBuildingFocused = false;
+  String? _selectedRoomName;
+  String? _pendingFocusBuilding;
+  String? _pendingFocusRoom;
 
   final List<ml.Circle> _locationCircles = [];
   final List<ml.Symbol> _locationSymbols = [];
   final List<ml.Circle> _gateCircles = [];
   final List<ml.Symbol> _gateSymbols = [];
+
+  static final Map<String, Uint8List> _iconBytesCache = {};
+  final Set<String> _registeredImages = {};
 
   ml.Fill? _boundaryFill;
   ml.Line? _boundaryLine;
@@ -68,7 +74,8 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
       "tiles": [
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
       ],
-      "tileSize": 256
+      "tileSize": 256,
+      "maxzoom": 18
     }
   },
   "layers": [
@@ -77,7 +84,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
       "type": "raster",
       "source": "esri-satellite",
       "minzoom": 0,
-      "maxzoom": 20
+      "maxzoom": 22
     }
   ]
 }''';
@@ -85,13 +92,33 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedRoomName = widget.initialRoomName;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialBuildingFocus();
     });
   }
 
   @override
+  void didUpdateWidget(CampusMapScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final targetBuilding = widget.initialBuildingCode;
+    final targetRoom = widget.initialRoomName;
+    if (targetBuilding != null && targetBuilding.isNotEmpty) {
+      if (targetBuilding != oldWidget.initialBuildingCode || targetRoom != oldWidget.initialRoomName) {
+        setState(() {
+          _selectedRoomName = targetRoom;
+        });
+        _focusOnBuilding(targetBuilding, roomName: targetRoom);
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    final mapState = ref.read(mapProvider);
+    if (!mapState.isNavigating) {
+      ref.read(mapProvider.notifier).resetExploreState();
+    }
     _searchController.dispose();
     _mapController?.dispose();
     super.dispose();
@@ -111,6 +138,9 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
 
   void _handleAnnotationTapped(Map<String, dynamic>? data) {
     if (data == null) return;
+    // Khi đang trong chế độ dẫn đường chỉ đường (như Google Maps), không cho phép nhấn sang địa điểm khác làm gián đoạn
+    if (ref.read(mapProvider).isNavigating) return;
+
     final type = data['type'] as String?;
     final rawId = data['id'];
 
@@ -121,6 +151,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
       final match = locations.where((l) => l.id == locId);
       if (match.isNotEmpty) {
         final loc = match.first;
+        setState(() => _selectedRoomName = null);
         ref.read(mapProvider.notifier).selectLocation(loc);
         _mapController?.animateCamera(
           ml.CameraUpdate.newCameraPosition(
@@ -142,54 +173,308 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     }
   }
 
+  static IconData _getDisplayIcon(CampusLocationItem loc) {
+    final name = loc.name.toLowerCase();
+    final cat = loc.category.toLowerCase();
+
+    if (name.contains('wc')) return Icons.wc_rounded;
+    if (name.contains('gara') || name.contains('bãi xe') || name.contains('xe')) {
+      return Icons.directions_car_rounded;
+    }
+    if (name.contains('căn tin') || name.contains('canteen') || name.contains('đảo sinh viên') || name.contains('cafe')) {
+      return Icons.restaurant_rounded;
+    }
+    if (name.contains('thư viện')) return Icons.local_library_rounded;
+    if (name.contains('bệnh viện') || name.contains('y tế') || name.contains('phòng khám')) {
+      return Icons.local_hospital_rounded;
+    }
+    if (name.contains('hồ bơi')) return Icons.pool_rounded;
+    if (name.contains('quần vợt')) return Icons.sports_tennis_rounded;
+    if (name.contains('thể thao') || name.contains('thi đấu') || name.contains('sân')) {
+      return Icons.fitness_center_rounded;
+    }
+    if (name.contains('thí nghiệm') || name.contains('công nghệ sinh học')) {
+      return Icons.biotech_rounded;
+    }
+    if (name.contains('ký túc xá') || name.contains('ktx')) return Icons.apartment_rounded;
+    if (name.contains('hội trường') || name.contains('400') || name.contains('200')) {
+      return Icons.groups_rounded;
+    }
+    if (name.contains('nhà học') || name.contains('giảng đường') || name.contains('thực hành cao nguyên') || cat.contains('giảng đường')) {
+      return Icons.school_rounded;
+    }
+    if (name.contains('điều hành') || name.contains('hiệu bộ') || name.contains('văn phòng') || cat.contains('hành chính')) {
+      return Icons.business_center_rounded;
+    }
+    return loc.icon;
+  }
+
+  static Future<Uint8List> _generateMarkerPng({
+    required IconData icon,
+    required Color backgroundColor,
+    required Color iconColor,
+    double size = 80.0,
+    bool isSelected = false,
+    bool isNavigating = false,
+  }) async {
+    final pictureRecorder = ui.PictureRecorder();
+    final canvas = Canvas(pictureRecorder);
+    final center = Offset(size / 2, size / 2);
+    final radius = (size / 2) - 4.0;
+
+    // 1. Drop shadow
+    final shadowPaint = Paint()
+      ..color = const Color(0x40000000)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+    canvas.drawCircle(center + const Offset(0, 2.5), radius, shadowPaint);
+
+    // 2. Outer border: Golden if selected/navigating, bright white otherwise
+    final isHighlighted = isNavigating || isSelected;
+    final borderPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = isHighlighted ? const Color(0xFFFACC15) : Colors.white;
+    canvas.drawCircle(center, radius, borderPaint);
+
+    // 3. Inner circle with category background color
+    final borderWidth = isHighlighted ? 4.5 : 3.0;
+    final innerPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = backgroundColor;
+    canvas.drawCircle(center, radius - borderWidth, innerPaint);
+
+    // 4. White icon in the center
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(icon.codePoint),
+      style: TextStyle(
+        fontSize: size * 0.44,
+        fontFamily: icon.fontFamily,
+        package: icon.fontPackage,
+        color: iconColor,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - (textPainter.width / 2),
+        center.dy - (textPainter.height / 2),
+      ),
+    );
+
+    final picture = pictureRecorder.endRecording();
+    final image = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
+  }
+
+  Future<void> _ensureMarkerImage({
+    required String key,
+    required IconData icon,
+    required Color backgroundColor,
+    required Color iconColor,
+    bool isSelected = false,
+    bool isNavigating = false,
+  }) async {
+    if (_mapController == null) return;
+    if (_registeredImages.contains(key)) return;
+
+    Uint8List? bytes = _iconBytesCache[key];
+    if (bytes == null) {
+      bytes = await _generateMarkerPng(
+        icon: icon,
+        backgroundColor: backgroundColor,
+        iconColor: iconColor,
+        isSelected: isSelected,
+        isNavigating: isNavigating,
+      );
+      _iconBytesCache[key] = bytes;
+    }
+
+    try {
+      await _mapController?.addImage(key, bytes);
+      _registeredImages.add(key);
+    } catch (_) {}
+  }
+
   Future<void> _onStyleLoaded() async {
     _isStyleLoaded = true;
-    await _drawCampusBoundary();
-    await _syncGates();
-    await _syncLocations();
-    await _syncRoute();
-    await _syncUserPosition();
+    _registeredImages.clear();
+
+    // 1. Reset tham chiếu annotations Style cũ mà không gọi remove...
+    // (Native MapLibre engine đã tự giải phóng toàn bộ annotations khi style thay đổi)
+    _locationSymbols.clear();
+    _locationCircles.clear();
+    _gateSymbols.clear();
+    _gateCircles.clear();
+    _boundaryFill = null;
+    _boundaryLine = null;
+    _routeGlowLine = null;
+    _routeCoreLine = null;
+    _userRing = null;
+    _userDot = null;
+
+    try {
+      await _mapController?.setSymbolIconAllowOverlap(true);
+      await _mapController?.setSymbolTextAllowOverlap(false);
+    } catch (_) {}
+
+    try {
+      await _drawCampusBoundary();
+    } catch (_) {}
+
+    try {
+      await _syncGates();
+    } catch (_) {}
+
+    try {
+      await _syncLocations();
+    } catch (_) {}
+
+    try {
+      await _syncRoute();
+    } catch (_) {}
+
+    try {
+      await _syncUserPosition();
+    } catch (_) {}
+
     _checkInitialBuildingFocus();
   }
 
   void _checkInitialBuildingFocus() {
-    if (_initialBuildingFocused || !_isStyleLoaded) return;
-    if (widget.initialBuildingCode != null && widget.initialBuildingCode!.isNotEmpty) {
-      _initialBuildingFocused = true;
-      _focusOnBuilding(widget.initialBuildingCode!);
+    if (!_isStyleLoaded) return;
+    final targetBuilding = _pendingFocusBuilding ?? widget.initialBuildingCode;
+    final targetRoom = _pendingFocusRoom ?? widget.initialRoomName;
+    if (targetBuilding != null && targetBuilding.isNotEmpty) {
+      _focusOnBuilding(targetBuilding, roomName: targetRoom);
     }
   }
 
-  void _focusOnBuilding(String buildingCode) {
-    final locations = ref.read(mapProvider).locations;
-    final match = locations.firstWhere(
-      (l) =>
-          l.building.toLowerCase().contains(buildingCode.toLowerCase()) ||
-          l.name.toLowerCase().contains(buildingCode.toLowerCase()),
-      orElse: () => locations.first,
-    );
+  CampusLocationItem? _findMatchingLocation(String query, List<CampusLocationItem> locations) {
+    if (locations.isEmpty) return null;
+    final q = query.toLowerCase().trim();
 
-    ref.read(mapProvider.notifier).selectLocation(match);
-    _mapController?.animateCamera(
-      ml.CameraUpdate.newCameraPosition(
-        ml.CameraPosition(
-          target: match.coordinate.toMl(),
-          zoom: 18.0,
-          tilt: _is3D ? 50.0 : 0.0,
+    // 1. Khớp chính xác hoặc chứa trong building / name
+    for (final loc in locations) {
+      final b = loc.building.toLowerCase();
+      final n = loc.name.toLowerCase();
+      if (b == q || n == q) return loc;
+    }
+    for (final loc in locations) {
+      final b = loc.building.toLowerCase();
+      final n = loc.name.toLowerCase();
+      if (b.contains(q) || n.contains(q) || q.contains(b)) return loc;
+    }
+
+    // Chuẩn hóa bỏ khoảng trắng quanh dấu chấm/gạch ngang: "7.3. 18" -> "7.3.18"
+    final normalizedQ = q.replaceAll(RegExp(r'\s*[\._]\s*'), '.').replaceAll(RegExp(r'\s+'), ' ');
+
+    // 2. Dạng phòng học: [Nhà].[Tầng].[Phòng] hoặc [Nhà].[Phòng] (vd: 7.3.18, 7.3. 18, 2.20, 8.3.4, 9.2.04)
+    final roomCodeMatch = RegExp(r'^(\d+)\.(\d+)(?:\.([0-9a-zA-Z_-]+))?').firstMatch(normalizedQ);
+    if (roomCodeMatch != null) {
+      final bNum = roomCodeMatch.group(1)!;
+      for (final loc in locations) {
+        final b = loc.building.toLowerCase();
+        final n = loc.name.toLowerCase();
+        if (b.contains('nhà học số $bNum') ||
+            b.contains('nhà $bNum') ||
+            n.contains('nhà học số $bNum') ||
+            n.contains('nhà $bNum')) {
+          return loc;
+        }
+      }
+    }
+
+    // 3. Dạng "Nhà 7", "Nha 7", "Nhà số 7", "Nhà học số 7"
+    final nhaMatch = RegExp(r'^(?:nhà\s*học\s*số|nhà\s*học|nhà\s*số|nhà|nha)\s*(\d+)', caseSensitive: false).firstMatch(q);
+    if (nhaMatch != null) {
+      final bNum = nhaMatch.group(1)!;
+      for (final loc in locations) {
+        final b = loc.building.toLowerCase();
+        final n = loc.name.toLowerCase();
+        if (b.contains('nhà học số $bNum') ||
+            b.contains('nhà $bNum') ||
+            n.contains('nhà học số $bNum') ||
+            n.contains('nhà $bNum')) {
+          return loc;
+        }
+      }
+    }
+
+    // 4. Các địa danh đặc biệt (Hội trường, Thư viện, GDQP...)
+    if (q.contains('400')) {
+      final match = locations.where((l) => l.name.contains('400') || l.building.contains('Hội trường lớn') || l.building.contains('400'));
+      if (match.isNotEmpty) return match.first;
+    }
+    if (q.contains('200')) {
+      final match = locations.where((l) => l.name.contains('200') || l.building.contains('Hội trường vừa') || l.building.contains('200'));
+      if (match.isNotEmpty) return match.first;
+    }
+    if (q.contains('thư viện') || q.contains('thu vien')) {
+      final match = locations.where((l) => l.building.toLowerCase().contains('thư viện'));
+      if (match.isNotEmpty) return match.first;
+    }
+    if (q.contains('gdqp') || q.contains('quốc phòng') || q.contains('quoc phong')) {
+      final match = locations.where((l) => l.building.toLowerCase().contains('gdqp'));
+      if (match.isNotEmpty) return match.first;
+    }
+
+    // 5. Tách số nhà học bất kỳ (vd: "7")
+    final numMatch = RegExp(r'(?:nhà\s*học\s*số|nhà\s*học|nhà)?\s*([0-9]+)', caseSensitive: false).firstMatch(q);
+    if (numMatch != null) {
+      final num = numMatch.group(1);
+      for (final loc in locations) {
+        final b = loc.building.toLowerCase();
+        final n = loc.name.toLowerCase();
+        if (b.contains('nhà học số $num') || b.contains('nhà $num') || n.contains('nhà học số $num')) {
+          return loc;
+        }
+      }
+    }
+
+    return locations.first;
+  }
+
+  void _focusOnBuilding(String buildingCode, {String? roomName}) {
+    if (roomName != null && roomName.isNotEmpty) {
+      _selectedRoomName = roomName;
+    }
+
+    if (_mapController == null || !_isStyleLoaded) {
+      _pendingFocusBuilding = buildingCode;
+      _pendingFocusRoom = roomName ?? _selectedRoomName;
+      return;
+    }
+    _pendingFocusBuilding = null;
+    _pendingFocusRoom = null;
+
+    final locations = ref.read(mapProvider).locations;
+    final match = _findMatchingLocation(buildingCode, locations);
+
+    if (match != null) {
+      ref.read(mapProvider.notifier).selectLocation(match);
+      _mapController?.animateCamera(
+        ml.CameraUpdate.newCameraPosition(
+          ml.CameraPosition(
+            target: match.coordinate.toMl(),
+            zoom: 18.2,
+            tilt: _is3D ? 45.0 : 0.0,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   Future<void> _drawCampusBoundary() async {
     if (_mapController == null) return;
 
     if (_boundaryFill != null) {
-      await _mapController?.removeFill(_boundaryFill!);
+      try { await _mapController?.removeFill(_boundaryFill!); } catch (_) {}
       _boundaryFill = null;
     }
     if (_boundaryLine != null) {
-      await _mapController?.removeLine(_boundaryLine!);
+      try { await _mapController?.removeLine(_boundaryLine!); } catch (_) {}
       _boundaryLine = null;
     }
 
@@ -217,52 +502,53 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     if (_mapController == null || !_isStyleLoaded) return;
 
     if (_gateCircles.isNotEmpty) {
-      await _mapController?.removeCircles(_gateCircles);
+      try { await _mapController?.removeCircles(_gateCircles); } catch (_) {}
       _gateCircles.clear();
     }
     if (_gateSymbols.isNotEmpty) {
-      await _mapController?.removeSymbols(_gateSymbols);
+      try { await _mapController?.removeSymbols(_gateSymbols); } catch (_) {}
       _gateSymbols.clear();
     }
 
     final mapState = ref.read(mapProvider);
-    final gates = mapState.gates;
     final selectedGate = mapState.selectedGate;
+    // Khi đang dẫn đường: nếu dùng vị trí GPS thì ẩn hết cổng, nếu đi từ cổng thì chỉ hiện duy nhất cổng xuất phát
+    final gates = mapState.isNavigating
+        ? (mapState.userPosition != null ? <CampusGate>[] : [selectedGate])
+        : mapState.gates;
 
-    final circleOptionsList = <ml.CircleOptions>[];
-    final circleDataList = <Map<String, dynamic>>[];
     final symbolOptionsList = <ml.SymbolOptions>[];
     final symbolDataList = <Map<String, dynamic>>[];
 
     for (final gate in gates) {
       final isSelected = gate.id == selectedGate.id;
-      circleOptionsList.add(
-        ml.CircleOptions(
-          geometry: gate.coordinate.toMl(),
-          circleRadius: isSelected ? 12.0 : 9.5,
-          circleColor: '#0F172A',
-          circleStrokeWidth: isSelected ? 3.0 : 2.0,
-          circleStrokeColor: isSelected ? '#38BDF8' : '#FFFFFF',
-        ),
+      final gateKey = 'gate_${gate.id}_${isSelected ? "sel" : "norm"}';
+
+      await _ensureMarkerImage(
+        key: gateKey,
+        icon: Icons.door_sliding_outlined,
+        backgroundColor: const Color(0xFF0F172A),
+        iconColor: Colors.white,
+        isSelected: isSelected,
       );
-      circleDataList.add({'type': 'gate', 'id': gate.id});
 
       symbolOptionsList.add(
         ml.SymbolOptions(
           geometry: gate.coordinate.toMl(),
+          iconImage: gateKey,
+          iconSize: isSelected ? 0.72 : 0.56,
+          iconAnchor: 'center',
           textField: gate.name,
-          textSize: 11.5,
+          textSize: 11.0,
           textColor: '#0F172A',
           textHaloColor: '#FFFFFF',
-          textHaloWidth: 2.0,
-          textOffset: const Offset(0, 1.4),
+          textHaloWidth: 2.2,
+          textOffset: const Offset(0, 1.6),
+          textAnchor: 'top',
         ),
       );
       symbolDataList.add({'type': 'gate', 'id': gate.id});
     }
-
-    final createdCircles = await _mapController?.addCircles(circleOptionsList, circleDataList);
-    if (createdCircles != null) _gateCircles.addAll(createdCircles);
 
     final createdSymbols = await _mapController?.addSymbols(symbolOptionsList, symbolDataList);
     if (createdSymbols != null) _gateSymbols.addAll(createdSymbols);
@@ -272,52 +558,58 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     if (_mapController == null || !_isStyleLoaded) return;
 
     if (_locationCircles.isNotEmpty) {
-      await _mapController?.removeCircles(_locationCircles);
+      try { await _mapController?.removeCircles(_locationCircles); } catch (_) {}
       _locationCircles.clear();
     }
     if (_locationSymbols.isNotEmpty) {
-      await _mapController?.removeSymbols(_locationSymbols);
+      try { await _mapController?.removeSymbols(_locationSymbols); } catch (_) {}
       _locationSymbols.clear();
     }
 
     final mapState = ref.read(mapProvider);
-    final locations = mapState.filteredLocations;
+    // Khi đang dẫn đường (isNavigating), ẩn toàn bộ các địa điểm khác (như Google Maps),
+    // chỉ giữ lại duy nhất 1 điểm đích đến để tập trung quan sát tuyến đường
+    final locations = mapState.isNavigating
+        ? (mapState.selectedLocation != null ? [mapState.selectedLocation!] : <CampusLocationItem>[])
+        : mapState.filteredLocations;
+
     if (locations.isEmpty) return;
 
-    final circleOptionsList = <ml.CircleOptions>[];
-    final circleDataList = <Map<String, dynamic>>[];
     final symbolOptionsList = <ml.SymbolOptions>[];
     final symbolDataList = <Map<String, dynamic>>[];
 
     for (final loc in locations) {
       final isSelected = loc.id == mapState.selectedLocation?.id;
-      circleOptionsList.add(
-        ml.CircleOptions(
-          geometry: loc.coordinate.toMl(),
-          circleRadius: isSelected ? 13.0 : 8.5,
-          circleColor: _colorToHex(loc.color),
-          circleStrokeWidth: isSelected ? 3.5 : 2.0,
-          circleStrokeColor: isSelected ? '#FACC15' : '#FFFFFF',
-        ),
+      final isNav = mapState.isNavigating;
+      final locKey = 'loc_${loc.id}_${isNav ? "nav" : (isSelected ? "sel" : "norm")}';
+
+      await _ensureMarkerImage(
+        key: locKey,
+        icon: _getDisplayIcon(loc),
+        backgroundColor: loc.color,
+        iconColor: Colors.white,
+        isSelected: isSelected,
+        isNavigating: isNav,
       );
-      circleDataList.add({'type': 'location', 'id': loc.id});
 
       symbolOptionsList.add(
         ml.SymbolOptions(
           geometry: loc.coordinate.toMl(),
+          iconImage: locKey,
+          iconSize: isNav ? 0.85 : (isSelected ? 0.75 : 0.58),
+          iconAnchor: 'center',
           textField: loc.name,
-          textSize: 11.0,
+          textSize: isNav ? 12.0 : 10.5,
           textColor: '#0F172A',
           textHaloColor: '#FFFFFF',
-          textHaloWidth: 1.5,
-          textOffset: const Offset(0, 1.3),
+          textHaloWidth: 2.2,
+          textOffset: const Offset(0, 1.6),
+          textAnchor: 'top',
+          textMaxWidth: 12.0,
         ),
       );
       symbolDataList.add({'type': 'location', 'id': loc.id});
     }
-
-    final createdCircles = await _mapController?.addCircles(circleOptionsList, circleDataList);
-    if (createdCircles != null) _locationCircles.addAll(createdCircles);
 
     final createdSymbols = await _mapController?.addSymbols(symbolOptionsList, symbolDataList);
     if (createdSymbols != null) _locationSymbols.addAll(createdSymbols);
@@ -327,11 +619,11 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     if (_mapController == null || !_isStyleLoaded) return;
 
     if (_routeGlowLine != null) {
-      await _mapController?.removeLine(_routeGlowLine!);
+      try { await _mapController?.removeLine(_routeGlowLine!); } catch (_) {}
       _routeGlowLine = null;
     }
     if (_routeCoreLine != null) {
-      await _mapController?.removeLine(_routeCoreLine!);
+      try { await _mapController?.removeLine(_routeCoreLine!); } catch (_) {}
       _routeCoreLine = null;
     }
 
@@ -363,11 +655,11 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     if (_mapController == null || !_isStyleLoaded) return;
 
     if (_userRing != null) {
-      await _mapController?.removeCircle(_userRing!);
+      try { await _mapController?.removeCircle(_userRing!); } catch (_) {}
       _userRing = null;
     }
     if (_userDot != null) {
-      await _mapController?.removeCircle(_userDot!);
+      try { await _mapController?.removeCircle(_userDot!); } catch (_) {}
       _userDot = null;
     }
 
@@ -394,12 +686,18 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   }
 
   void _toggleSatellite() {
-    setState(() => _isSatellite = !_isSatellite);
-    _isStyleLoaded = false;
-    _mapController?.setStyle(_isSatellite ? _satelliteStyle : _streetStyle);
+    final nextSatellite = !_isSatellite;
+    setState(() {
+      _isSatellite = nextSatellite;
+      _isStyleLoaded = false;
+    });
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_isSatellite ? 'Đã chuyển sang chế độ ảnh vệ tinh' : 'Đã chuyển sang bản đồ vector 3D'),
+        content: Text(nextSatellite
+            ? 'Đã chuyển sang chế độ ảnh vệ tinh'
+            : 'Đã chuyển sang bản đồ vector 3D'),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -465,17 +763,55 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
         ref.read(mapProvider.notifier).clearRoutingError();
       }
       if (!_isStyleLoaded) return;
+      if (prev?.isNavigating != next.isNavigating) {
+        _syncLocations();
+        _syncGates();
+        _syncRoute();
+      }
       if (prev?.activeRoute != next.activeRoute) {
         _syncRoute();
       }
       if (prev?.selectedGate != next.selectedGate || prev?.gates != next.gates) {
         _syncGates();
       }
-      if (prev?.selectedLocation != next.selectedLocation ||
+      if (prev?.searchQuery != next.searchQuery) {
+        _syncLocations();
+        final q = next.searchQuery.trim();
+        if (q.isNotEmpty && next.filteredLocations.isNotEmpty) {
+          final matched = next.filteredLocations.first;
+          setState(() {
+            _selectedRoomName = q;
+          });
+          ref.read(mapProvider.notifier).selectLocation(matched);
+          _mapController?.animateCamera(
+            ml.CameraUpdate.newCameraPosition(
+              ml.CameraPosition(
+                target: matched.coordinate.toMl(),
+                zoom: 18.2,
+                tilt: _is3D ? 45.0 : 0.0,
+              ),
+            ),
+          );
+        } else if (q.isEmpty) {
+          setState(() {
+            _selectedRoomName = null;
+          });
+          ref.read(mapProvider.notifier).selectLocation(null);
+        }
+      } else if (prev?.selectedLocation != next.selectedLocation ||
           prev?.selectedCategory != next.selectedCategory ||
-          prev?.searchQuery != next.searchQuery ||
           prev?.locations != next.locations) {
         _syncLocations();
+      }
+      if (next.selectedLocation == null && next.searchQuery.isEmpty) {
+        if (_searchController.text.isNotEmpty) {
+          _searchController.clear();
+        }
+        if (_selectedRoomName != null) {
+          setState(() {
+            _selectedRoomName = null;
+          });
+        }
       }
       if (prev?.userPosition != next.userPosition) {
         _syncUserPosition();
@@ -504,10 +840,12 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                     tilt: 45.0,
                     bearing: 0.0,
                   ),
+                  minMaxZoomPreference: const ml.MinMaxZoomPreference(14.0, 20.5),
                   styleString: _isSatellite ? _satelliteStyle : _streetStyle,
                   onMapCreated: _onMapCreated,
                   onStyleLoadedCallback: _onStyleLoaded,
                   onMapClick: (point, coordinates) {
+                    if (ref.read(mapProvider).isNavigating) return;
                     ref.read(mapProvider.notifier).selectLocation(null);
                   },
                   rotateGesturesEnabled: true,
@@ -668,7 +1006,9 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                     child: MapLocationDetailCard(
                       location: mapState.selectedLocation!,
                       currentGate: mapState.selectedGate,
+                      roomName: _selectedRoomName,
                       onClose: () {
+                        setState(() => _selectedRoomName = null);
                         ref.read(mapProvider.notifier).selectLocation(null);
                       },
                       onStartNavigation: () {

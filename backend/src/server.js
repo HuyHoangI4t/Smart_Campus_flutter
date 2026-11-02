@@ -138,7 +138,7 @@ app.get('/api/health', async (req, res) => {
     res.json({
       status: 'ok',
       message: `Smart Campus TTN Backend API & MySQL database (${process.env.DB_NAME || 'flutter_campus'}) đang hoạt động bình thường.`,
-      cron: cronService.getSyncStatus()
+      cron: (cronService && typeof cronService.getSyncStatus === 'function') ? cronService.getSyncStatus() : null
     });
   } catch (error) {
     res.status(500).json({ status: 'error', message: 'Lỗi kết nối database', error: error.message });

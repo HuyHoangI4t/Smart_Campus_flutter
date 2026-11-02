@@ -46,6 +46,44 @@ class _GradesDetailScreenState extends ConsumerState<GradesDetailScreen> {
       return matchSearch && matchSemester;
     }).toList();
 
+    // Tính toán tín chỉ & GPA động theo học kỳ được chọn
+    final int displayAccumulatedCredits;
+    final int displayInProgressCredits;
+    final int displayTotalCredits;
+    final String? semesterGpaText;
+
+    if (_selectedSemester == 'Tất cả') {
+      displayAccumulatedCredits = gradesState.accumulatedCredits;
+      displayInProgressCredits = gradesState.inProgressCredits;
+      displayTotalCredits = gradesState.summary.totalCredits;
+      semesterGpaText = null;
+    } else {
+      int acc = 0;
+      int inProg = 0;
+      double weightedScore10 = 0.0;
+      int scoredCredits = 0;
+
+      for (final it in filtered) {
+        if (it.letter == 'X' || it.scoreOverall == 0) {
+          inProg += it.credits;
+        } else {
+          acc += it.credits;
+          weightedScore10 += it.scoreOverall * it.credits;
+          scoredCredits += it.credits;
+        }
+      }
+
+      displayAccumulatedCredits = acc;
+      displayInProgressCredits = inProg;
+      displayTotalCredits = acc + inProg;
+      if (scoredCredits > 0) {
+        final gpa10 = weightedScore10 / scoredCredits;
+        semesterGpaText = 'GPA HK: ${gpa10.toStringAsFixed(2)} / 10';
+      } else {
+        semesterGpaText = null;
+      }
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
@@ -165,23 +203,33 @@ class _GradesDetailScreenState extends ConsumerState<GradesDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Đã tích lũy: ${gradesState.accumulatedCredits} TC',
+                        'Đã tích lũy: $displayAccumulatedCredits TC',
                         style: const TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF059669),
                         ),
                       ),
-                      Text(
-                        'Chưa học: ${gradesState.inProgressCredits} TC',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFFD97706),
+                      if (semesterGpaText != null)
+                        Text(
+                          semesterGpaText,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      else
+                        Text(
+                          'Chưa học: $displayInProgressCredits TC',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFD97706),
+                          ),
                         ),
-                      ),
                       Text(
-                        'Tổng: ${gradesState.summary.totalCredits} TC',
+                        'Tổng: $displayTotalCredits TC',
                         style: const TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,

@@ -32,7 +32,7 @@ class HomeGpaCard extends ConsumerWidget {
         : 'Chưa có';
 
     return GestureDetector(
-      onTap: () => context.push('/grades'),
+      onTap: () => context.go('/grades'),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(

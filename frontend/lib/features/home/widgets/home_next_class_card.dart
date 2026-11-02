@@ -108,7 +108,7 @@ class HomeNextClassCard extends ConsumerWidget {
             Align(
               alignment: Alignment.centerRight,
               child: GestureDetector(
-                onTap: () => context.push('/schedule'),
+                onTap: () => context.go('/schedule'),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(

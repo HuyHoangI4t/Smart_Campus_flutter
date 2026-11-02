@@ -368,20 +368,32 @@ class CampusDijkstraRouter {
     return bestGate;
   }
 
-  /// Dan duong hybrid: ngoai truong -> cong gan nhat -> loi di bo noi bo
+  /// Dan duong hybrid: ngoai truong (duong pho OSRM) -> cong gan nhat -> loi di bo noi bo (Dijkstra)
   DijkstraResult findHybridRoute({
     required LatLng start,
     required LatLng destination,
     required List<CampusGate> availableGates,
+    List<LatLng>? externalRoadCoordinates,
+    double? externalRoadDistanceMeters,
+    int? externalDurationSeconds,
   }) {
     // Neu vi tri xuat phat nam TRONG truong -> Dijkstra noi bo binh thuong
     if (isInsideCampus(start)) {
       return findShortestRoute(start, destination);
     }
 
-    // Vi tri NGOAI truong -> Dan qua cong gan nhat
+    // Vi tri NGOAI truong -> Tim cong truong gan nhat
     final nearestGate = findNearestGate(start, availableGates);
     final gateCoord = nearestGate.coordinate;
+
+    // Kiem tra ban kinh toi da 2km tu vi tri nguoi dung den cong
+    const double maxExternalRadiusMeters = 2000.0;
+    final directDistToGate = calculateHaversineDistance(
+      start.latitude, start.longitude, gateCoord.latitude, gateCoord.longitude,
+    );
+    if (directDistToGate > maxExternalRadiusMeters) {
+      return DijkstraResult.empty;
+    }
 
     // Tinh doan di bo noi bo tu cong den dich
     final internalRoute = findShortestRoute(gateCoord, destination);
@@ -389,26 +401,40 @@ class CampusDijkstraRouter {
       return DijkstraResult.empty;
     }
 
-    // Khoang cach tu vi tri ngoai truong den cong
-    final externalDistance = calculateHaversineDistance(
-      start.latitude, start.longitude, gateCoord.latitude, gateCoord.longitude,
-    );
+    // Doan duong ngoai truong:
+    // Uu tien dung toa do thuc te theo duong pho (OSRM/Google Maps style) neu duoc truyen vao
+    final List<LatLng> externalCoords;
+    final double extDistance;
+    final int extMinutes;
 
-    // Ghep tuyen: [Vi tri ngoai] -> [Cong truong] -> [Cac moc noi bo...]
-    final combinedCoords = <LatLng>[start];
-    // Tranh duplicate vi tri cong neu internalRoute da bat dau tu cong
-    final firstInternal = internalRoute.coordinates.first;
-    final distToFirst = calculateHaversineDistance(
-      gateCoord.latitude, gateCoord.longitude,
-      firstInternal.latitude, firstInternal.longitude,
-    );
-    if (distToFirst > 1.0) {
-      combinedCoords.add(gateCoord);
+    if (externalRoadCoordinates != null && externalRoadCoordinates.isNotEmpty) {
+      externalCoords = List<LatLng>.from(externalRoadCoordinates);
+      extDistance = externalRoadDistanceMeters ?? directDistToGate;
+      final durSec = externalDurationSeconds ?? (extDistance / 1.25).round();
+      extMinutes = (durSec / 60).ceil();
+    } else {
+      externalCoords = [start, gateCoord];
+      extDistance = directDistToGate;
+      extMinutes = (extDistance / 75.0).ceil();
     }
-    combinedCoords.addAll(internalRoute.coordinates);
 
-    final totalDistance = externalDistance + internalRoute.distanceMeters;
-    final totalMinutes = (totalDistance / 75.0).ceil().clamp(1, 120);
+    // Ghep noi 2 chang: [Duong pho ngoai truong] + [Mang noi bo trong truong]
+    final combinedCoords = <LatLng>[...externalCoords];
+    if (internalRoute.coordinates.isNotEmpty) {
+      final lastExt = combinedCoords.last;
+      final firstInt = internalRoute.coordinates.first;
+      final gap = calculateHaversineDistance(
+        lastExt.latitude, lastExt.longitude, firstInt.latitude, firstInt.longitude,
+      );
+      // Neu diem cuoi ngoai truong va diem dau noi bo gan nhau (< 3m), bo bot de tranh trung
+      final startIdx = gap < 3.0 ? 1 : 0;
+      for (int i = startIdx; i < internalRoute.coordinates.length; i++) {
+        combinedCoords.add(internalRoute.coordinates[i]);
+      }
+    }
+
+    final totalDistance = extDistance + internalRoute.distanceMeters;
+    final totalMinutes = (extMinutes + internalRoute.estimatedWalkingMinutes).clamp(1, 180);
 
     return DijkstraResult(
       coordinates: combinedCoords,

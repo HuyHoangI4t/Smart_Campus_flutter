@@ -80,6 +80,13 @@ class NewsModel {
     return int.tryParse(digits) ?? id.hashCode.abs();
   }
 
+  bool get isAnnouncement =>
+      category.toLowerCase().contains('thông báo') ||
+      category.toLowerCase().contains('announcement') ||
+      id.startsWith('ann') ||
+      id.contains('-ann-') ||
+      id.startsWith('sample-ann');
+
   factory NewsModel.fromJson(Map<String, dynamic> json) {
     final rawId = json['id']?.toString() ??
         json['guid']?.toString() ??
@@ -120,11 +127,6 @@ class NewsModel {
       }
     }
 
-    final rawImg = json['image_url'] ?? json['imageUrl'] ?? json['image'];
-    final digits = rawId.replaceAll(RegExp(r'[^0-9]'), '');
-    final fallbackIdx = int.tryParse(digits) ?? rawId.hashCode.abs();
-    final proxiedImageUrl = getNewsImageUrl(rawImg?.toString(), fallbackIdx);
-
     // Format display date: DD/MM/YYYY
     String? pubDate = json['published_at']?.toString() ??
         json['date']?.toString() ??
@@ -139,10 +141,22 @@ class NewsModel {
 
     // Determine category
     String cat = json['category']?.toString() ?? '';
+    final rawType = json['type']?.toString();
     if (cat.isEmpty) {
-      final type = json['type']?.toString();
-      cat = type == 'announcement' ? 'Thông báo SV' : 'Tin hoạt động';
+      cat = rawType == 'announcement' ? 'Thông báo SV' : 'Tin hoạt động';
     }
+
+    final isAnn = rawType == 'announcement' ||
+        cat.toLowerCase().contains('thông báo') ||
+        rawId.startsWith('ann') ||
+        rawId.contains('-ann-') ||
+        rawId.startsWith('sample-ann');
+
+    final rawImg = json['image_url'] ?? json['imageUrl'] ?? json['image'];
+    final digits = rawId.replaceAll(RegExp(r'[^0-9]'), '');
+    final fallbackIdx = int.tryParse(digits) ?? rawId.hashCode.abs();
+    // Thông báo sinh viên là văn bản hành chính, không dùng ảnh ngẫu nhiên hoặc ảnh fallback
+    final proxiedImageUrl = isAnn ? null : getNewsImageUrl(rawImg?.toString(), fallbackIdx);
 
     return NewsModel(
       id: rawId,

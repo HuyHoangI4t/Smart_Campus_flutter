@@ -189,7 +189,7 @@ async function fetchAnnouncementsFromRss() {
           content: cleanContent || title,
           date: formatRssDate(pubDate),
           rawDate: pubDate,
-          imageUrl: img || undefined,
+          imageUrl: undefined, // Thông báo SV là văn bản hành chính, không cần ảnh
           link: link || 'https://www.ttn.edu.vn/index.php/svthongbao',
           sender: authorName || 'Phòng Công tác Sinh viên',
           author: authorName || 'Phòng Công tác Sinh viên',
@@ -408,7 +408,7 @@ async function getItemsFromDb(type, limit) {
         content: r.content || r.title,
         date: r.pub_date,
         rawDate: r.raw_date,
-        imageUrl: r.image_url || undefined,
+        imageUrl: r.type === 'announcement' ? undefined : (r.image_url || undefined),
         link: r.link || 'https://www.ttn.edu.vn',
         sender: r.author || 'Đại học Tây Nguyên',
         author: r.author || 'Đại học Tây Nguyên',

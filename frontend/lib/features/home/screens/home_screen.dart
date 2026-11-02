@@ -85,6 +85,7 @@ class HomeScreen extends ConsumerWidget {
                 ]);
               },
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                 children: [
                   // 3. THẺ LỊCH HỌC HÔM NAY / SẮP TỚI
@@ -211,7 +212,7 @@ class HomeScreen extends ConsumerWidget {
 
               // Profile Avatar Button
               GestureDetector(
-                onTap: () => context.push('/profile'),
+                onTap: () => context.go('/profile'),
                 child: Container(
                   width: 44,
                   height: 44,
@@ -319,7 +320,14 @@ class HomeScreen extends ConsumerWidget {
   }) {
     return Expanded(
       child: GestureDetector(
-        onTap: () => context.push(route),
+        onTap: () {
+          const tabRoutes = ['/home', '/schedule', '/map', '/grades', '/profile'];
+          if (tabRoutes.contains(route)) {
+            context.go(route);
+          } else {
+            context.push(route);
+          }
+        },
         behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisSize: MainAxisSize.min,

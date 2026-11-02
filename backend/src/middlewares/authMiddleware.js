@@ -104,7 +104,63 @@ const requireRole = (...roles) => {
   };
 };
 
+/**
+ * Middleware xác thực tùy chọn (Optional Authentication)
+ * Nếu có Bearer token hợp lệ thì gán req.user, nếu không có hoặc token lỗi thì bỏ qua không chặn request
+ */
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) {
+      return next();
+    }
+
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      return next();
+    }
+
+    if (token.startsWith('jwt-token-')) {
+      const parts = token.split('-');
+      const identifier = parts[2];
+      const timestamp = parts[3];
+      const signature = parts[4];
+
+      const tokenTime = parseInt(timestamp, 10);
+      const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+      if (tokenTime && !isNaN(tokenTime) && Date.now() - tokenTime > MAX_TOKEN_AGE_MS) {
+        return next();
+      }
+
+      let user = null;
+      if (identifier) {
+        user = (await UserModel.findByMssv(identifier)) || (await UserModel.findById(identifier));
+      }
+
+      if (user) {
+        if (signature) {
+          const expectedSig = crypto
+            .createHmac('sha256', JWT_SECRET)
+            .update(`${identifier}:${user.role || 'sinh_vien'}:${timestamp}`)
+            .digest('hex')
+            .slice(0, 16);
+
+          if (signature === expectedSig) {
+            req.user = user;
+          }
+        } else {
+          req.user = user;
+        }
+      }
+    }
+    return next();
+  } catch (error) {
+    return next();
+  }
+};
+
 module.exports = {
   verifyToken,
-  requireRole
+  requireRole,
+  optionalAuth
 };

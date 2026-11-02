@@ -91,17 +91,17 @@ function startCronJobs() {
   }, 5000);
 }
 
-// function getSyncStatus() {
-//   return {
-//     lastSyncTime,
-//     lastSyncStats,
-//     schedule: '06:00, 12:00, 18:00 hàng ngày (Asia/Ho_Chi_Minh)',
-//     frequency: '3 lần / ngày'
-//   };
-// }
+function getSyncStatus() {
+  return {
+    lastSyncTime,
+    lastSyncStats,
+    schedule: '06:00, 12:00, 18:00 hang ngay (Asia/Ho_Chi_Minh)',
+    frequency: '3 lan / ngay'
+  };
+}
 
 module.exports = {
   startCronJobs,
   runFullSync,
-  //getSyncStatus
+  getSyncStatus
 };

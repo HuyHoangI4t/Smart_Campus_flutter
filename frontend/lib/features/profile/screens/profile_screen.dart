@@ -10,6 +10,8 @@ import '../../auth/providers/auth_provider.dart';
 import '../../grades/providers/grades_provider.dart';
 import '../../home/providers/home_provider.dart';
 import '../../schedule/providers/schedule_provider.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/widgets/server_config_dialog.dart';
 import '../widgets/avatar_picker_modal.dart';
 import '../widgets/edit_profile_modal.dart';
 import '../widgets/logout_confirm_dialog.dart';
@@ -732,14 +734,14 @@ class _AppSettingsCardState extends ConsumerState<_AppSettingsCard> {
                     final gradesState = ref.read(gradesProvider);
 
                     await HomeWidgetService.instance.updateWidgetData(
-                      subject: nextClass.subject.isNotEmpty ? nextClass.subject : 'LS Đảng CS VN',
-                      time: nextClass.time.isNotEmpty ? nextClass.time : 'Tiết 1-4',
-                      room: nextClass.room.isNotEmpty ? nextClass.room : '2.21 (CLC)',
+                      subject: nextClass.subject.isNotEmpty ? nextClass.subject : '--',
+                      time: nextClass.time.isNotEmpty ? nextClass.time : '--',
+                      room: nextClass.room.isNotEmpty ? nextClass.room : '--',
                       status: nextClass.capsuleLabel.isNotEmpty ? nextClass.capsuleLabel : 'LỊCH HỌC',
                       countdown: nextClass.countdownText,
                       gpa: gradesState.gpa4.toStringAsFixed(2),
                       credits: '${gradesState.accumulatedCredits} TC',
-                      rank: gradesState.summary.academicRank.isNotEmpty ? gradesState.summary.academicRank : 'Khá',
+                      rank: gradesState.summary.academicRank.isNotEmpty ? gradesState.summary.academicRank : '--',
                     );
 
                     if (context.mounted) {
@@ -764,6 +766,82 @@ class _AppSettingsCardState extends ConsumerState<_AppSettingsCard> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.cardBorder),
+
+          // Row 4: Máy chủ kết nối
+          InkWell(
+            onTap: () => ServerConfigDialog.show(context),
+            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.dns_outlined,
+                            color: Color(0xFF2563EB),
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Máy chủ kết nối',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textForeground,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                ref.watch(serverUrlProvider),
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'monospace',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    onPressed: () => ServerConfigDialog.show(context),
+                    icon: const Icon(Icons.tune_rounded, size: 14),
+                    label: const Text('Cấu hình', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.cardBorder),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

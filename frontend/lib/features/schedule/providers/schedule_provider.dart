@@ -17,6 +17,14 @@ class ScheduleState {
   final bool isLoading;
   final String? error;
 
+  // Lớp học tiếp theo và danh sách lịch tuần hiện tại (chuẩn cho Tab Home & Widget)
+  final ScheduleItem? nextClassItem;
+  final bool nextClassIsOngoing;
+  final String nextClassStatus;
+  final String nextClassCountdown;
+  final String nextClassLabel;
+  final List<ScheduleItem> currentWeekItems;
+
   const ScheduleState({
     this.items = const [],
     this.selectedDay = 'Thứ 2',
@@ -28,6 +36,12 @@ class ScheduleState {
     this.days = const [],
     this.isLoading = false,
     this.error,
+    this.nextClassItem,
+    this.nextClassIsOngoing = false,
+    this.nextClassStatus = 'Không có tiết học sắp tới',
+    this.nextClassCountdown = '--:--',
+    this.nextClassLabel = 'LỊCH HỌC',
+    this.currentWeekItems = const [],
   });
 
   List<ScheduleItem> get filteredItems {
@@ -45,6 +59,12 @@ class ScheduleState {
     List<Map<String, String>>? days,
     bool? isLoading,
     String? error,
+    ScheduleItem? nextClassItem,
+    bool? nextClassIsOngoing,
+    String? nextClassStatus,
+    String? nextClassCountdown,
+    String? nextClassLabel,
+    List<ScheduleItem>? currentWeekItems,
   }) {
     return ScheduleState(
       items: items ?? this.items,
@@ -57,6 +77,12 @@ class ScheduleState {
       days: days ?? this.days,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      nextClassItem: nextClassItem ?? this.nextClassItem,
+      nextClassIsOngoing: nextClassIsOngoing ?? this.nextClassIsOngoing,
+      nextClassStatus: nextClassStatus ?? this.nextClassStatus,
+      nextClassCountdown: nextClassCountdown ?? this.nextClassCountdown,
+      nextClassLabel: nextClassLabel ?? this.nextClassLabel,
+      currentWeekItems: currentWeekItems ?? this.currentWeekItems,
     );
   }
 }
@@ -192,8 +218,9 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
 
       final Map<String, dynamic> query = {};
       if (mssv != null) query['mssv'] = mssv;
-      final targetWeek = weekIndex ?? state.selectedWeekIndex;
-      query['weekIndex'] = targetWeek;
+      if (weekIndex != null) {
+        query['weekIndex'] = weekIndex;
+      }
       if (forceRefresh) {
         query['refresh'] = 'true';
         query['reload'] = 'true';
@@ -209,9 +236,49 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
         final items = list.map((item) => ScheduleItem.fromJson(item)).toList();
 
         final String weekRange = response.data['weekRange'] ?? state.weekRange;
-        final int selWeekIdx = response.data['selectedWeekIndex'] ?? targetWeek;
-        final int curWeekIdx = response.data['currentWeekIndex'] ?? 0;
+        final int curWeekIdx = response.data['currentWeekIndex'] ?? 1;
+        final int selWeekIdx = response.data['selectedWeekIndex'] ?? (weekIndex ?? state.selectedWeekIndex);
         final bool isSunday = response.data['isSunday'] == true;
+
+        // Trích xuất tiết học tiếp theo (nextClass) từ Backend tính toán sẵn
+        ScheduleItem? parsedNextClass = state.nextClassItem;
+        bool nextIsOngoing = state.nextClassIsOngoing;
+        String nextStatus = state.nextClassStatus;
+        String nextCountdown = state.nextClassCountdown;
+        String nextLabel = state.nextClassLabel;
+
+        if (response.data['nextClass'] != null && response.data['nextClass'] is Map<String, dynamic>) {
+          final nc = response.data['nextClass'] as Map<String, dynamic>;
+          if (nc['subject'] != null && nc['subject'].toString().isNotEmpty) {
+            parsedNextClass = ScheduleItem.fromJson(nc);
+            final rawStatus = (nc['status']?.toString() ?? '').toUpperCase();
+            nextIsOngoing = rawStatus == 'IN_PROGRESS' || rawStatus == 'ONGOING';
+            nextLabel = nc['statusLabel']?.toString() ?? (nextIsOngoing ? 'HÔM NAY' : (nc['dayText']?.toString() ?? 'LỊCH HỌC'));
+            nextStatus = nextIsOngoing
+                ? 'Đang diễn ra'
+                : (rawStatus == 'UPCOMING' ? 'Sắp diễn ra' : (nc['dayText']?.toString() ?? 'Lớp học tiếp theo'));
+
+            final now = DateTime.now();
+            final currentMins = now.hour * 60 + now.minute;
+            if (nextIsOngoing) {
+              final rem = (parsedNextClass.endMinutes - currentMins).clamp(0, 360);
+              nextCountdown = 'Còn $rem phút';
+            } else if (rawStatus == 'UPCOMING') {
+              final diff = (parsedNextClass.startMinutes - currentMins).clamp(0, 1440);
+              final hours = diff ~/ 60;
+              final mins = diff % 60;
+              nextCountdown = hours > 0 ? 'Bắt đầu sau ${hours}h ${mins}p' : 'Bắt đầu sau $mins phút';
+            } else {
+              nextCountdown = '${parsedNextClass.startTime} • ${parsedNextClass.cleanDay}';
+            }
+          }
+        }
+
+        // Chỉ cập nhật danh sách lịch của tuần hiện tại khi đang tải tuần hiện tại (hoặc lần đầu mở app)
+        final isFetchingCurrentWeek = (weekIndex == null && !isSunday) || weekIndex == curWeekIdx;
+        final updatedCurrentWeekItems = isFetchingCurrentWeek
+            ? items
+            : (state.currentWeekItems.isNotEmpty ? state.currentWeekItems : items);
 
         List<Map<String, dynamic>> weeks = state.availableWeeks;
         if (response.data['availableWeeks'] is List && (response.data['availableWeeks'] as List).isNotEmpty) {
@@ -261,6 +328,12 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
           availableWeeks: weeks,
           days: daysList,
           isLoading: false,
+          nextClassItem: parsedNextClass,
+          nextClassIsOngoing: nextIsOngoing,
+          nextClassStatus: nextStatus,
+          nextClassCountdown: nextCountdown,
+          nextClassLabel: nextLabel,
+          currentWeekItems: updatedCurrentWeekItems,
         );
       } else {
         state = state.copyWith(items: const [], isLoading: false);

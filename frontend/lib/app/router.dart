@@ -93,7 +93,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/map',
                 builder: (context, state) {
                   final building = state.uri.queryParameters['building'];
-                  return CampusMapScreen(initialBuildingCode: building);
+                  final room = state.uri.queryParameters['room'];
+                  return CampusMapScreen(
+                    initialBuildingCode: building,
+                    initialRoomName: room,
+                  );
                 },
               ),
             ],

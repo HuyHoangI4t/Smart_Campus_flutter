@@ -253,33 +253,35 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   ),
                   const Divider(height: 28),
 
-                  // Cover Hero Image (chuẩn qua proxy và fallbacks đa dạng - giữ lại duy nhất 1 ảnh bìa đầu bài)
-                  NewsCardImage(
-                    imageUrl: coverImageUrl,
-                    fallbackIndex: item.numericIndex,
-                    width: double.infinity,
-                    height: 210,
-                    fit: BoxFit.cover,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  if (leadingCaption != null && leadingCaption.trim().isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      leadingCaption,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontStyle: FontStyle.italic,
-                        color: Color(0xFF64748B),
-                        height: 1.4,
-                      ),
+                  // Cover Hero Image (chỉ hiển thị cho Tin tức; Thông báo SV là văn bản hành chính không hiển thị ảnh bìa)
+                  if (!item.isAnnouncement && coverImageUrl != null && coverImageUrl.isNotEmpty) ...[
+                    NewsCardImage(
+                      imageUrl: coverImageUrl,
+                      fallbackIndex: item.numericIndex,
+                      width: double.infinity,
+                      height: 210,
+                      fit: BoxFit.cover,
+                      borderRadius: BorderRadius.circular(14),
                     ),
+                    if (leadingCaption != null && leadingCaption.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        leadingCaption,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontStyle: FontStyle.italic,
+                          color: Color(0xFF64748B),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
                   ],
-                  const SizedBox(height: 18),
 
                   // Content: Hiển thị các khối nội dung xen kẽ hình ảnh
                   if (resolvedBlocks.isNotEmpty)
-                    ..._buildContentBlocks(resolvedBlocks, item.numericIndex, coverImageUrl)
+                    ..._buildContentBlocks(resolvedBlocks, item.numericIndex, coverImageUrl, isAnnouncement: item.isAnnouncement)
                   else
                     ..._buildParagraphs(resolvedContent),
 
@@ -379,53 +381,60 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
   List<Widget> _buildContentBlocks(
     List<ArticleContentBlock> blocks,
     int articleId,
-    String? coverImageUrl,
-  ) {
+    String? coverImageUrl, {
+    bool isAnnouncement = false,
+  }) {
     bool hasSkippedLeadingImage = false;
 
     return blocks.map((block) {
-      if (block.type == 'image' && block.url != null && block.url!.isNotEmpty) {
-        // Tránh trùng lặp 2 hình ở đầu bài viết:
-        // Nếu đây là hình đầu tiên trong nội dung và giống ảnh bìa, hoặc là ảnh đầu bài viết ngay dưới bìa
-        if (!hasSkippedLeadingImage) {
-          final isSame = _isSameImage(block.url, coverImageUrl);
-          final isFirstImageBlock = blocks.indexWhere((b) => b.type == 'image') == blocks.indexOf(block);
-
-          if (isSame || (isFirstImageBlock && coverImageUrl != null && coverImageUrl.isNotEmpty)) {
-            hasSkippedLeadingImage = true;
-            return const SizedBox.shrink();
-          }
+      if (block.type == 'image') {
+        if (isAnnouncement) {
+          return const SizedBox.shrink();
         }
+        if (block.url != null && block.url!.isNotEmpty) {
+          // Tránh trùng lặp 2 hình ở đầu bài viết:
+          // Nếu đây là hình đầu tiên trong nội dung và giống ảnh bìa, hoặc là ảnh đầu bài viết ngay dưới bìa
+          if (!hasSkippedLeadingImage) {
+            final isSame = _isSameImage(block.url, coverImageUrl);
+            final isFirstImageBlock = blocks.indexWhere((b) => b.type == 'image') == blocks.indexOf(block);
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              NewsCardImage(
-                imageUrl: block.url,
-                fallbackIndex: articleId,
-                width: double.infinity,
-                height: 220,
-                fit: BoxFit.cover,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              if (block.caption != null && block.caption!.trim().isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  block.caption!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontStyle: FontStyle.italic,
-                    color: Color(0xFF64748B),
-                    height: 1.4,
-                  ),
+            if (isSame || (isFirstImageBlock && coverImageUrl != null && coverImageUrl.isNotEmpty)) {
+              hasSkippedLeadingImage = true;
+              return const SizedBox.shrink();
+            }
+          }
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                NewsCardImage(
+                  imageUrl: block.url,
+                  fallbackIndex: articleId,
+                  width: double.infinity,
+                  height: 220,
+                  fit: BoxFit.cover,
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                if (block.caption != null && block.caption!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    block.caption!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontStyle: FontStyle.italic,
+                      color: Color(0xFF64748B),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-        );
+            ),
+          );
+        }
+        return const SizedBox.shrink();
       }
 
       if (block.type == 'text' && block.text != null && block.text!.trim().isNotEmpty) {

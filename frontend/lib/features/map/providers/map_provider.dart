@@ -8,7 +8,9 @@ import '../../../core/constants/api_endpoints.dart';
 import '../../../core/constants/campus_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/utils/compass_smoother.dart';
+import '../../../core/services/external_routing_service.dart';
 import '../../../core/utils/dijkstra.dart';
+import '../../../core/utils/haversine.dart';
 
 /// Sentinel object de phan biet "khong truyen" vs "truyen null"
 class _Sentinel {
@@ -49,13 +51,78 @@ class MapState {
 
   List<CampusLocationItem> get filteredLocations {
     return locations.where((loc) {
-      final matchesCategory =
-          selectedCategory == 'Tat ca' || loc.category == selectedCategory;
-      final matchesQuery = searchQuery.isEmpty ||
-          loc.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-          loc.building.toLowerCase().contains(searchQuery.toLowerCase());
-      return matchesCategory && matchesQuery;
+      final matchesCategory = selectedCategory == 'Tat ca' ||
+          selectedCategory == 'Tất cả' ||
+          loc.category == selectedCategory;
+      if (!matchesCategory) return false;
+      if (searchQuery.trim().isEmpty) return true;
+
+      return _matchesLocation(loc, searchQuery.trim());
     }).toList();
+  }
+
+  static bool _matchesLocation(CampusLocationItem loc, String rawQuery) {
+    final q = rawQuery.toLowerCase().trim();
+    if (q.isEmpty) return true;
+
+    final name = loc.name.toLowerCase();
+    final building = loc.building.toLowerCase();
+    final desc = loc.description.toLowerCase();
+
+    // 1. Chứa chuỗi trực tiếp
+    if (name.contains(q) || building.contains(q) || desc.contains(q)) {
+      return true;
+    }
+
+    // Chuẩn hóa bỏ khoảng trắng quanh dấu chấm/gạch ngang: "7.3. 18" -> "7.3.18"
+    final normalizedQ = q.replaceAll(RegExp(r'\s*[\._]\s*'), '.').replaceAll(RegExp(r'\s+'), ' ');
+
+    // 2. Dạng phòng học: [Nhà].[Tầng].[Phòng] hoặc [Nhà].[Phòng] (vd: 7.3.18, 7.3. 18, 2.20, 8.3.4, 9.2.04)
+    final roomCodeMatch = RegExp(r'^(\d+)\.(\d+)(?:\.([0-9a-zA-Z_-]+))?').firstMatch(normalizedQ);
+    if (roomCodeMatch != null) {
+      final bNum = roomCodeMatch.group(1)!;
+      if (building.contains('nhà học số $bNum') ||
+          building.contains('nhà $bNum') ||
+          name.contains('nhà học số $bNum') ||
+          name.contains('nhà $bNum')) {
+        return true;
+      }
+    }
+
+    // 3. Dạng "Nhà 7", "Nha 7", "Nhà số 7", "Nhà học số 7"
+    final nhaMatch = RegExp(r'^(?:nhà\s*học\s*số|nhà\s*học|nhà\s*số|nhà|nha)\s*(\d+)', caseSensitive: false).firstMatch(q);
+    if (nhaMatch != null) {
+      final bNum = nhaMatch.group(1)!;
+      if (building.contains('nhà học số $bNum') ||
+          building.contains('nhà $bNum') ||
+          name.contains('nhà học số $bNum') ||
+          name.contains('nhà $bNum')) {
+        return true;
+      }
+    }
+
+    // 4. Các hội trường lớn & giảng đường chuyên biệt
+    if (q.contains('400')) {
+      if (name.contains('400') || building.contains('Hội trường lớn') || building.contains('400')) return true;
+    }
+    if (q.contains('200')) {
+      if (name.contains('200') || building.contains('Hội trường vừa') || building.contains('200')) return true;
+    }
+    if (q.contains('thư viện') || q.contains('thu vien')) {
+      if (building.contains('thư viện') || name.contains('thư viện')) return true;
+    }
+    if (q.contains('gdqp') || q.contains('quốc phòng') || q.contains('quoc phong')) {
+      if (building.contains('gdqp') || name.contains('gdqp') || name.contains('quốc phòng')) return true;
+    }
+
+    // 5. Nếu gõ đúng 1 chữ số (vd: "7" -> Nhà 7):
+    if (RegExp(r'^\d+$').hasMatch(q)) {
+      if (building.contains('nhà học số $q') || building == 'nhà $q' || name.contains('nhà học số $q')) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /// Fixed copyWith: su dung sentinel pattern de ho tro set null
@@ -222,38 +289,98 @@ class MapNotifier extends Notifier<MapState> {
     }
   }
 
+  /// Tinh toan tuyen duong (noi bo hoac hybrid duong pho OSRM ngoai truong)
+  Future<DijkstraResult> _computeRoute({
+    required LatLng start,
+    required LatLng destination,
+    bool isFromGps = false,
+  }) async {
+    if (!isFromGps || CampusDijkstraRouter.isInsideCampus(start)) {
+      return _router.findShortestRoute(start, destination);
+    }
+
+    final nearestGate = CampusDijkstraRouter.findNearestGate(start, state.gates);
+    final gateCoord = nearestGate.coordinate;
+
+    final directDist = calculateHaversineDistance(
+      start.latitude, start.longitude, gateCoord.latitude, gateCoord.longitude,
+    );
+
+    if (directDist > 2000.0) {
+      final km = (directDist / 1000).toStringAsFixed(1);
+      state = state.copyWith(
+        routingError:
+            'Vị trí hiện tại cách trường ${km}km (vượt quá bán kính hỗ trợ 2km). Vui lòng chọn xuất phát trực tiếp từ Cổng trường.',
+        isNavigating: false,
+        activeRoute: null,
+      );
+      return DijkstraResult.empty;
+    }
+
+    final externalService = ExternalRoutingService(ref.read(dioProvider));
+    final roadResult = await externalService.getWalkingRoadRoute(
+      start: start,
+      end: gateCoord,
+    );
+
+    return _router.findHybridRoute(
+      start: start,
+      destination: destination,
+      availableGates: state.gates,
+      externalRoadCoordinates: roadResult.coordinates,
+      externalRoadDistanceMeters: roadResult.distanceMeters,
+      externalDurationSeconds: roadResult.durationSeconds,
+    );
+  }
+
   /// Cap nhat khoang cach live khi user di chuyen
-  void _updateLiveNavigation(LatLng currentPos) {
+  Future<void> _updateLiveNavigation(LatLng currentPos) async {
     final destination = state.selectedLocation;
     if (destination == null) return;
 
-    final route = _router.findHybridRoute(
-      start: currentPos,
-      destination: destination.coordinate,
-      availableGates: state.gates,
+    if (CampusDijkstraRouter.isInsideCampus(currentPos)) {
+      final route = _router.findShortestRoute(currentPos, destination.coordinate);
+      if (route.coordinates.isNotEmpty) {
+        state = state.copyWith(activeRoute: route);
+      }
+      return;
+    }
+
+    final nearestGate = CampusDijkstraRouter.findNearestGate(currentPos, state.gates);
+    final dist = calculateHaversineDistance(
+      currentPos.latitude, currentPos.longitude, nearestGate.lat, nearestGate.lng,
     );
-    if (route.coordinates.isNotEmpty) {
-      state = state.copyWith(activeRoute: route);
+
+    if (dist <= 2000.0) {
+      final route = await _computeRoute(
+        start: currentPos,
+        destination: destination.coordinate,
+        isFromGps: true,
+      );
+      if (route.coordinates.isNotEmpty && state.isNavigating) {
+        state = state.copyWith(activeRoute: route);
+      }
     }
   }
 
   /// Tinh lai route (khi graph thay doi hoac doi cong)
-  void _recalculateRoute() {
+  Future<void> _recalculateRoute() async {
     final destination = state.selectedLocation;
     if (destination == null) return;
 
     final userPos = state.userPosition;
     final DijkstraResult route;
     if (userPos != null) {
-      route = _router.findHybridRoute(
+      route = await _computeRoute(
         start: userPos,
         destination: destination.coordinate,
-        availableGates: state.gates,
+        isFromGps: true,
       );
     } else {
-      route = _router.findShortestRoute(
-        state.selectedGate.coordinate,
-        destination.coordinate,
+      route = await _computeRoute(
+        start: state.selectedGate.coordinate,
+        destination: destination.coordinate,
+        isFromGps: false,
       );
     }
     if (route.coordinates.isNotEmpty) {
@@ -336,33 +463,33 @@ class MapNotifier extends Notifier<MapState> {
     state = state.copyWith(routingError: null);
   }
 
-  void startNavigationTo(CampusLocationItem destination) {
+  Future<void> startNavigationTo(CampusLocationItem destination) async {
     final userPos = state.userPosition;
     final DijkstraResult route;
 
     if (userPos != null) {
-      // Co toa do GPS -> dung Hybrid Routing (ngoai truong -> cong gan nhat -> loi di bo)
-      route = _router.findHybridRoute(
+      route = await _computeRoute(
         start: userPos,
         destination: destination.coordinate,
-        availableGates: state.gates,
+        isFromGps: true,
       );
     } else {
-      // Khong co GPS -> di tu cong dang chon
-      route = _router.findShortestRoute(
-        state.selectedGate.coordinate,
-        destination.coordinate,
+      route = await _computeRoute(
+        start: state.selectedGate.coordinate,
+        destination: destination.coordinate,
+        isFromGps: false,
       );
     }
 
     if (route.coordinates.isEmpty) {
-      // Khong tim thay duong -> bao loi, khong ve duong chim bay
-      state = state.copyWith(
-        selectedLocation: destination,
-        activeRoute: null,
-        isNavigating: false,
-        routingError: 'Không tìm thấy đường đi bộ đến ${destination.name}',
-      );
+      if (state.routingError == null) {
+        state = state.copyWith(
+          selectedLocation: destination,
+          activeRoute: null,
+          isNavigating: false,
+          routingError: 'Không tìm thấy đường đi bộ đến ${destination.name}',
+        );
+      }
       return;
     }
 
@@ -378,6 +505,19 @@ class MapNotifier extends Notifier<MapState> {
     state = state.copyWith(
       isNavigating: false,
       activeRoute: null,
+    );
+  }
+
+  /// Xoá trạng thái tìm kiếm, chọn toà nhà khi rời khỏi map (chỉ thực hiện khi KHÔNG đang dẫn đường)
+  void resetExploreState() {
+    if (state.isNavigating) return;
+
+    state = state.copyWith(
+      selectedLocation: null,
+      searchQuery: '',
+      selectedCategory: 'Tat ca',
+      activeRoute: null,
+      routingError: null,
     );
   }
 }

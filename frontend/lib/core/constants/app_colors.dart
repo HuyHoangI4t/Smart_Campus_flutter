@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-
-/// Bảng mã màu chuẩn của Smart Campus theo quy chuẩn thiết kế hệ thống
-/// Đồng bộ với Android 16 Material 3 Expressive & iOS HIG
 class AppColors {
   AppColors._();
 

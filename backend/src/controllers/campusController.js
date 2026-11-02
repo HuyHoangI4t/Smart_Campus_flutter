@@ -3,6 +3,7 @@ const db = require('../config/db');
 
 // Helper to get mssv from request
 const getMssvFromReq = (req) => {
+  if (req.user && req.user.mssv) return req.user.mssv;
   if (req.body && req.body.mssv) return req.body.mssv;
   if (req.body && req.body.msv) return req.body.msv;
   if (req.query && req.query.mssv) return req.query.mssv;
@@ -490,3 +491,77 @@ exports.getCampusGates = (req, res) => {
   });
 };
 
+
+
+
+// Cache cho road route ngoai truong (OSRM)
+const roadRouteCache = new Map();
+const ROAD_ROUTE_TTL = 30 * 60 * 1000; // 30 phut
+
+// Proxy OSRM Foot routing cho doan duong ngoai truong (nhu Google Maps)
+exports.getRoadRoute = async (req, res) => {
+  const { startLat, startLng, endLat, endLng } = req.query;
+
+  const sLat = parseFloat(startLat);
+  const sLng = parseFloat(startLng);
+  const eLat = parseFloat(endLat);
+  const eLng = parseFloat(endLng);
+
+  if (isNaN(sLat) || isNaN(sLng) || isNaN(eLat) || isNaN(eLng)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Toa do bat dau va ket thuc khong hop le.',
+    });
+  }
+
+  const cacheKey = `${sLat.toFixed(5)},${sLng.toFixed(5)}_${eLat.toFixed(5)},${eLng.toFixed(5)}`;
+  const cached = roadRouteCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < ROAD_ROUTE_TTL) {
+    return res.json({
+      success: true,
+      data: cached.data,
+      source: 'cache',
+    });
+  }
+
+  try {
+    const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${sLng},${sLat};${eLng},${eLat}?overview=full&geometries=geojson`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const response = await fetch(osrmUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`OSRM HTTP error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+      const best = data.routes[0];
+      const result = {
+        distanceMeters: best.distance,
+        durationSeconds: best.duration,
+        coordinates: best.geometry.coordinates.map(c => [c[1], c[0]]), // [lat, lng]
+      };
+
+      roadRouteCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+      return res.json({
+        success: true,
+        data: result,
+        source: 'osrm',
+      });
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: 'Khong tim thay tuyen duong di bo phu hop.',
+    });
+  } catch (err) {
+    return res.status(502).json({
+      success: false,
+      message: `Loi goi dich vu chi duong OSRM: ${err.message}`,
+    });
+  }
+};

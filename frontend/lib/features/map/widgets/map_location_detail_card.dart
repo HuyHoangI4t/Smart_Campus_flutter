@@ -8,6 +8,7 @@ import '../../../core/utils/haversine.dart';
 class MapLocationDetailCard extends StatelessWidget {
   final CampusLocationItem location;
   final CampusGate currentGate;
+  final String? roomName;
   final VoidCallback onClose;
   final VoidCallback onStartNavigation;
 
@@ -15,6 +16,7 @@ class MapLocationDetailCard extends StatelessWidget {
     super.key,
     required this.location,
     required this.currentGate,
+    this.roomName,
     required this.onClose,
     required this.onStartNavigation,
   });
@@ -144,6 +146,32 @@ class MapLocationDetailCard extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
+          if (roomName != null && roomName!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFBFDBFE), width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.meeting_room_rounded, size: 16, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Phòng học: ${roomName!.trim()}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1D4ED8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (location.description.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(

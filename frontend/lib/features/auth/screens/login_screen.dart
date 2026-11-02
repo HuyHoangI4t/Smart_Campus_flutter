@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../widgets/auth_header.dart';
 import '../widgets/auth_otp_view.dart';
 import '../widgets/auth_text_field.dart';
+import '../widgets/server_config_dialog.dart';
 
 /// Màn hình Đăng nhập / Đăng ký tài khoản sinh viên
 class LoginScreen extends ConsumerStatefulWidget {
@@ -69,11 +70,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context.go('/home');
     } else {
       final error = ref.read(authProvider).error ?? 'Đăng nhập không thành công';
+      final isConnectionError = error.toLowerCase().contains('kết nối') ||
+          error.toLowerCase().contains('timeout') ||
+          error.toLowerCase().contains('máy chủ') ||
+          error.toLowerCase().contains('network');
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error),
           backgroundColor: AppColors.danger,
           behavior: SnackBarBehavior.floating,
+          action: isConnectionError
+              ? SnackBarAction(
+                  label: 'Đổi IP',
+                  textColor: Colors.yellowAccent,
+                  onPressed: () => ServerConfigDialog.show(context),
+                )
+              : null,
         ),
       );
     }

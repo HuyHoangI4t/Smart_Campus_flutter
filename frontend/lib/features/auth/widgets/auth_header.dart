@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'server_config_dialog.dart';
 
 class AuthHeader extends StatelessWidget {
   final int activeTab; // 0: Đăng nhập, 1: Đăng ký
@@ -39,6 +40,36 @@ class AuthHeader extends StatelessWidget {
                     const Color(0xFFF8FAFC),
                   ],
                   stops: const [0.0, 0.45, 0.82, 1.0],
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              right: 16,
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(20),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => ServerConfigDialog.show(context),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.wifi_tethering_rounded, color: Colors.white, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'Máy chủ',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),

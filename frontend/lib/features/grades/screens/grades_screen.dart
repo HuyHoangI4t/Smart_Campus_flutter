@@ -409,113 +409,144 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
     );
   }
 
-  // ─── SAMPLE GRADE ITEM ───
-  Widget _buildSampleGradeItem({
-    required String credits,
-    required String subject,
-    required String semester,
-    required String status,
-    required String score,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            offset: const Offset(0, 2),
-            blurRadius: 5,
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: Credits & Status Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                credits,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEE2E2), // Light pink/red
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFFECACA), width: 0.8),
-                ),
-                child: Text(
-                  status,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFFDC2626),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Subject Title
-          Text(
-            subject,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              color: AppColors.textForeground,
-              letterSpacing: -0.2,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Row 3: Semester & Score
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                semester,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                score,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+  // ─── GRADE BADGE HELPER ───
+  static _GradeBadgeStyle _getGradeBadge(String letter) {
+    final upper = letter.toUpperCase().trim();
+    if (upper == 'A') {
+      return const _GradeBadgeStyle(Color(0xFFECFDF5), Color(0xFF059669), Color(0xFFA7F3D0), 'A');
+    }
+    if (upper == 'B') {
+      return const _GradeBadgeStyle(Color(0xFFEFF6FF), Color(0xFF2563EB), Color(0xFFBFDBFE), 'B');
+    }
+    if (upper == 'C') {
+      return const _GradeBadgeStyle(Color(0xFFFFFBEB), Color(0xFFD97706), Color(0xFFFDE68A), 'C');
+    }
+    if (upper == 'D') {
+      return const _GradeBadgeStyle(Color(0xFFFEF3C7), Color(0xFFB45309), Color(0xFFFDE68A), 'D');
+    }
+    if (upper == 'P') {
+      return const _GradeBadgeStyle(Color(0xFFF0FDF4), Color(0xFF16A34A), Color(0xFFBBF7D0), 'Đạt');
+    }
+    if (upper == 'F') {
+      return const _GradeBadgeStyle(Color(0xFFFEF2F2), Color(0xFFDC2626), Color(0xFFFECACA), 'F');
+    }
+    return const _GradeBadgeStyle(Color(0xFFF1F5F9), Color(0xFF64748B), Color(0xFFCBD5E1), 'Đang học');
   }
 
   Widget _buildRealGradeCard(BuildContext context, GradeItem item) {
-    return _buildSampleGradeItem(
-      credits: '${item.credits} tín chỉ',
-      subject: item.subjectName,
-      semester: item.semester,
-      status: item.status,
-      score: '${item.score10.toStringAsFixed(1)} (${item.conversion.letterGrade})',
+    final badge = _getGradeBadge(item.letter);
+    final String scoreDisplay;
+    if (item.letter == 'X' || item.score10 <= 0) {
+      scoreDisplay = 'Chưa có điểm';
+    } else if (item.letter == 'P') {
+      scoreDisplay = 'Môn điều kiện';
+    } else {
+      scoreDisplay = 'Điểm HP: ${item.score10.toStringAsFixed(1)}';
+    }
+
+    return GestureDetector(
+      onTap: () => _showDetailModal(context),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.cardBorder, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              offset: const Offset(0, 2),
+              blurRadius: 5,
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Row 1: Credits & Letter Grade Badge (A, B, C, D, F, Đạt, Đang học)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${item.credits} tín chỉ',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: badge.bg,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: badge.border, width: 0.8),
+                  ),
+                  child: Text(
+                    badge.label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: badge.text,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Subject Title
+            Text(
+              item.subjectName,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+                color: AppColors.textForeground,
+                letterSpacing: -0.2,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Row 3: Semester & Score
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  item.semester,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  scoreDisplay,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textForeground,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   void _showDetailModal(BuildContext context) {
     context.push('/grades/detail');
   }
+}
+
+class _GradeBadgeStyle {
+  final Color bg;
+  final Color text;
+  final Color border;
+  final String label;
+
+  const _GradeBadgeStyle(this.bg, this.text, this.border, this.label);
 }

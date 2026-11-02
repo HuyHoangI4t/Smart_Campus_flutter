@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const campusController = require('../controllers/campusController');
 const generalController = require('../controllers/generalController');
+const { optionalAuth } = require('../middlewares/authMiddleware');
 
 /**
  * @swagger
@@ -107,8 +108,8 @@ router.get('/paths', campusController.getCampusPaths);
  *       200:
  *         description: Tóm tắt điểm GPA, ca học kế tiếp, thông báo mới và tiện ích nhanh
  */
-router.get('/dashboard', campusController.getDashboard);
-router.get('/home/dashboard', campusController.getDashboard);
+router.get('/dashboard', optionalAuth, campusController.getDashboard);
+router.get('/home/dashboard', optionalAuth, campusController.getDashboard);
 
 /**
  * @swagger
@@ -191,5 +192,9 @@ router.delete('/notifications/:id', generalController.deleteNotification);
 
 // Cổng ra vào khuôn viên trường
 router.get('/gates', campusController.getCampusGates);
+// Chỉ đường đường phố ngoại vi ngoài trường (OSRM Proxy)
+router.get('/road-route', campusController.getRoadRoute);
+
+
 
 module.exports = router;

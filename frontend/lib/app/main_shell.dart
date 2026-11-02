@@ -19,11 +19,11 @@ class MainShell extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: navigationShell,
-      bottomNavigationBar: shouldHideBottomNav ? null : _buildBottomNav(context),
+      bottomNavigationBar: shouldHideBottomNav ? null : _buildBottomNav(context, ref),
     );
   }
 
-  Widget _buildBottomNav(BuildContext context) {
+  Widget _buildBottomNav(BuildContext context, WidgetRef ref) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final currentIndex = navigationShell.currentIndex;
 
@@ -51,6 +51,7 @@ class MainShell extends ConsumerWidget {
       child: Row(
         children: [
           _buildTabItem(
+            ref: ref,
             index: 0,
             icon: Icons.home_outlined,
             selectedIcon: Icons.home_rounded,
@@ -58,6 +59,7 @@ class MainShell extends ConsumerWidget {
             isSelected: currentIndex == 0,
           ),
           _buildTabItem(
+            ref: ref,
             index: 1,
             icon: Icons.calendar_today_outlined,
             selectedIcon: Icons.calendar_month_rounded,
@@ -65,6 +67,7 @@ class MainShell extends ConsumerWidget {
             isSelected: currentIndex == 1,
           ),
           _buildTabItem(
+            ref: ref,
             index: 2,
             icon: Icons.near_me_outlined,
             selectedIcon: Icons.near_me_rounded,
@@ -73,6 +76,7 @@ class MainShell extends ConsumerWidget {
             isCenter: true,
           ),
           _buildTabItem(
+            ref: ref,
             index: 3,
             icon: Icons.bar_chart_outlined,
             selectedIcon: Icons.bar_chart_rounded,
@@ -80,6 +84,7 @@ class MainShell extends ConsumerWidget {
             isSelected: currentIndex == 3,
           ),
           _buildTabItem(
+            ref: ref,
             index: 4,
             icon: Icons.person_outline_rounded,
             selectedIcon: Icons.person_rounded,
@@ -92,6 +97,7 @@ class MainShell extends ConsumerWidget {
   }
 
   Widget _buildTabItem({
+    required WidgetRef ref,
     required int index,
     required IconData icon,
     required IconData selectedIcon,
@@ -104,7 +110,7 @@ class MainShell extends ConsumerWidget {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => _onTabSelected(index),
+        onTap: () => _onTabSelected(ref, index),
         behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -142,7 +148,16 @@ class MainShell extends ConsumerWidget {
     );
   }
 
-  void _onTabSelected(int index) {
+  void _onTabSelected(WidgetRef ref, int index) {
+    if (navigationShell.currentIndex == 2 && index != 2) {
+      // Khi rời khỏi tab Bản đồ: tự động dọn sạch ô tìm kiếm, huỷ chọn toà nhà,
+      // TRỪ TRƯỜNG HỢP đang ở chế độ dẫn đường chỉ đường (isNavigating == true)
+      final mapState = ref.read(mapProvider);
+      if (!mapState.isNavigating) {
+        ref.read(mapProvider.notifier).resetExploreState();
+      }
+    }
+
     navigationShell.goBranch(
       index,
       initialLocation: index == navigationShell.currentIndex,

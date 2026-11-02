@@ -69,9 +69,10 @@ class ServerDiscoveryService {
 
     // 2. Thêm các IP ưu tiên thường dùng nhất
     candidateIps.addAll([
-      '192.168.1.8', // IP máy tính hiện tại
+      '127.0.0.1',   // Cáp USB qua adb reverse (khi cắm điện thoại vào máy tính)
+      '10.196.33.54', // IP máy tính mạng hiện tại
+      '192.168.1.8', // IP Wi-Fi
       '192.168.1.9', // IP cấu hình cũ
-      '127.0.0.1',   // USB cáp qua adb reverse / localhost
       '10.0.2.2',    // Android Emulator host loopback
     ]);
 

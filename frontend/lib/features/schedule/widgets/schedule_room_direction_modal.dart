@@ -370,8 +370,15 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                 ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    final query = direction.mapQuery.isNotEmpty ? direction.mapQuery : direction.buildingCode;
-                    context.go('/map?building=${Uri.encodeComponent(query)}');
+                    final query = direction.building.isNotEmpty
+                        ? direction.building
+                        : (direction.mapQuery.isNotEmpty ? direction.mapQuery : direction.buildingCode);
+                    final roomParam = item.room.isNotEmpty
+                        ? (direction.floor.isNotEmpty && !item.room.toLowerCase().contains('tầng')
+                            ? '${item.room} (${direction.floor})'
+                            : item.room)
+                        : direction.room;
+                    context.go('/map?building=${Uri.encodeComponent(query)}&room=${Uri.encodeComponent(roomParam)}');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,

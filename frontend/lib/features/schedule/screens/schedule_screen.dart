@@ -103,7 +103,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           _buildWeekNavigator(scheduleState),
 
           // ─── 3. SUNDAY / NEXT WEEK ALERT ───
-          if (scheduleState.isSunday) _buildSundayAlert(),
+          if (scheduleState.isSunday) _buildSundayAlert(scheduleState),
 
           // ─── 4. MAIN SCHEDULE TABLE (Thứ theo chiều dọc, chỉ Sáng & Chiều) ───
           Expanded(
@@ -346,6 +346,40 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   ),
                 ),
               ),
+
+              if (currentIdx != curIdx) ...[
+                const SizedBox(width: 6),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => ref.read(scheduleProvider.notifier).selectWeek(curIdx),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.today, size: 14, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text(
+                            'Hiện tại',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
 
@@ -524,7 +558,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   }
 
   // ─── SUNDAY ALERT BANNER ───
-  Widget _buildSundayAlert() {
+  Widget _buildSundayAlert(ScheduleState scheduleState) {
+    final isViewingNextWeek = scheduleState.selectedWeekIndex != scheduleState.currentWeekIndex;
+    final targetWeekIdx = isViewingNextWeek
+        ? scheduleState.currentWeekIndex
+        : (scheduleState.currentWeekIndex + 1 < scheduleState.availableWeeks.length
+            ? scheduleState.currentWeekIndex + 1
+            : scheduleState.currentWeekIndex);
+
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -537,10 +578,12 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         children: [
           const Icon(Icons.info_outline, color: AppColors.info, size: 16),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Hôm nay là Chủ nhật: Đang xem trước lịch học Tuần sau',
-              style: TextStyle(
+              isViewingNextWeek
+                  ? 'Hôm nay là Chủ nhật: Đang xem trước lịch học Tuần sau'
+                  : 'Hôm nay là Chủ nhật: Lịch học tuần này đã kết thúc',
+              style: const TextStyle(
                 fontSize: 12,
                 color: Color(0xFF1E40AF),
                 fontWeight: FontWeight.w600,
@@ -549,7 +592,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           ),
           GestureDetector(
             onTap: () {
-              ref.read(scheduleProvider.notifier).selectWeek(0);
+              ref.read(scheduleProvider.notifier).selectWeek(targetWeekIdx);
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -558,9 +601,9 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(color: const Color(0xFF93C5FD)),
               ),
-              child: const Text(
-                'Xem tuần này',
-                style: TextStyle(
+              child: Text(
+                isViewingNextWeek ? 'Xem tuần này' : 'Xem tuần sau',
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: AppColors.info,

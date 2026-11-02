@@ -210,23 +210,75 @@ final homeProvider = NotifierProvider<HomeNotifier, HomeState>(() {
 
 int _weekdayToDayNum(int weekday) => weekday == 7 ? 1 : weekday + 1;
 
+/// Provider phát tín hiệu thời gian thực mỗi 30 giây để cập nhật đồng hồ đếm ngược tự động
+final currentTimeProvider = StreamProvider.autoDispose<DateTime>((ref) {
+  return Stream.periodic(const Duration(seconds: 30), (_) => DateTime.now());
+});
+
 final nextClassProvider = Provider<NextClassInfo>((ref) {
+  // Lắng nghe ticker thời gian thực để cập nhật countdown đếm ngược mỗi 30s
+  final now = ref.watch(currentTimeProvider).value ?? DateTime.now();
   final scheduleState = ref.watch(scheduleProvider);
-  final items = scheduleState.items;
+  final currentWeekday = now.weekday; // 1 = Thứ 2, 7 = Chủ nhật
+  final currentDayNum = _weekdayToDayNum(currentWeekday);
+  final currentTimeMinutes = now.hour * 60 + now.minute;
+
+  // 1. ƯU TIÊN SỐ 1: Sử dụng nextClass đã được Backend tính toán chuẩn xác
+  // (Đã tự động xử lý Chủ nhật, ngày mai, các ngày tiếp theo, phòng học và chỉ đường)
+  if (scheduleState.nextClassItem != null) {
+    final item = scheduleState.nextClassItem!;
+    final isForToday = item.dayNum == currentDayNum &&
+        !scheduleState.nextClassLabel.contains('NGÀY MAI') &&
+        !scheduleState.nextClassLabel.contains('TUẦN');
+
+    if (isForToday) {
+      if (currentTimeMinutes >= item.startMinutes && currentTimeMinutes < item.endMinutes) {
+        final remaining = item.endMinutes - currentTimeMinutes;
+        return NextClassInfo(
+          item: item,
+          isOngoing: true,
+          statusText: 'Đang diễn ra',
+          countdownText: 'Còn $remaining phút',
+          capsuleLabel: 'HÔM NAY',
+        );
+      } else if (currentTimeMinutes < item.startMinutes) {
+        final diff = item.startMinutes - currentTimeMinutes;
+        final hours = diff ~/ 60;
+        final mins = diff % 60;
+        final countdownStr = hours > 0 ? 'Bắt đầu sau ${hours}h ${mins}p' : 'Bắt đầu sau $mins phút';
+        return NextClassInfo(
+          item: item,
+          isOngoing: false,
+          statusText: 'Sắp diễn ra',
+          countdownText: countdownStr,
+          capsuleLabel: 'HÔM NAY',
+        );
+      }
+      // Nếu đã qua giờ học của tiết này (currentTimeMinutes >= item.endMinutes),
+      // rơi xuống bước 2 để tìm tiết tiếp theo của hôm nay hoặc các ngày kế tiếp!
+    } else {
+      return NextClassInfo(
+        item: item,
+        isOngoing: scheduleState.nextClassIsOngoing,
+        statusText: scheduleState.nextClassStatus,
+        countdownText: scheduleState.nextClassCountdown,
+        capsuleLabel: scheduleState.nextClassLabel,
+      );
+    }
+  }
+
+  // 2. DỰ PHÒNG: Tính toán cục bộ dựa trên danh sách lịch của TUẦN HIỆN TẠI
+  // (Đảm bảo không bao giờ bị nhảy sang tuần khác khi người dùng chuyển tuần ở tab Lịch học)
+  final items = scheduleState.currentWeekItems.isNotEmpty
+      ? scheduleState.currentWeekItems
+      : scheduleState.items;
 
   if (items.isEmpty) {
     return const NextClassInfo();
   }
 
-  final now = DateTime.now();
-  final currentWeekday = now.weekday; // 1 = Thứ 2, 7 = Chủ nhật
-  final currentDayNum = _weekdayToDayNum(currentWeekday);
-  final currentTimeMinutes = now.hour * 60 + now.minute;
-
-  // 1. Tìm các lớp học trong ngày hôm nay
+  // 2.1. Tìm các lớp học trong ngày hôm nay
   final todayClasses = items.where((e) => e.dayNum == currentDayNum).toList();
-
-  // Sắp xếp theo giờ bắt đầu
   todayClasses.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
 
   for (final cls in todayClasses) {
@@ -255,9 +307,10 @@ final nextClassProvider = Provider<NextClassInfo>((ref) {
     }
   }
 
-  // 2. Nếu hôm nay đã hết hoặc không có lớp, tìm lớp gần nhất trong các ngày tiếp theo trong tuần
-  for (int dayOffset = 1; dayOffset <= 7; dayOffset++) {
-    int checkWeekday = ((currentWeekday - 1 + dayOffset) % 7) + 1;
+  // 2.2. Nếu hôm nay đã hết hoặc không có lớp, tìm lớp gần nhất trong các ngày CÒN LẠI của tuần
+  // Chú ý: CHỈ tìm tịnh tiến về phía trước (không vòng lặp modulo 7 để tránh lấy nhầm lịch quá khứ của tuần này)
+  for (int dayOffset = 1; (currentWeekday + dayOffset) <= 7; dayOffset++) {
+    int checkWeekday = currentWeekday + dayOffset;
     int checkDayNum = _weekdayToDayNum(checkWeekday);
     final nextDayClasses = items.where((e) => e.dayNum == checkDayNum).toList();
     if (nextDayClasses.isNotEmpty) {
@@ -274,7 +327,10 @@ final nextClassProvider = Provider<NextClassInfo>((ref) {
     }
   }
 
-  return const NextClassInfo();
+  return const NextClassInfo(
+    statusText: 'Tuần này đã hết tiết học',
+    capsuleLabel: 'ĐÃ HẾT TIẾT',
+  );
 });
 
 final nextClassInfoProvider = nextClassProvider;
