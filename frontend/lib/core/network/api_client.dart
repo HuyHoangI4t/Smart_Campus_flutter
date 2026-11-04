@@ -10,36 +10,71 @@ final storageServiceProvider = Provider<StorageService>((ref) {
 });
 
 class ServerUrlNotifier extends Notifier<String> {
+  bool _isAutoDetecting = false;
+
   @override
   String build() {
-    _initFromStorage();
+    _initServerUrl();
+    // Khởi đầu với mặc định CẮM DÂY USB (127.0.0.1:5000/api)
     return ApiEndpoints.activeBaseUrl;
   }
 
-  Future<void> _initFromStorage() async {
+  Future<void> _initServerUrl() async {
     try {
       final storage = ref.read(storageServiceProvider);
       final saved = await storage.getServerUrl();
+
+      // 1. Kiểm tra CẮM DÂY USB (127.0.0.1:5000) TRƯỚC TIÊN
+      final isCableAlive = await ServerDiscoveryService.verifyHealthEndpoint(
+        ApiEndpoints.defaultCableBaseUrl,
+        timeoutMs: 350,
+      );
+      if (isCableAlive) {
+        setUrl(ApiEndpoints.defaultCableBaseUrl);
+        return;
+      }
+
+      // 2. Kiểm tra Emulator (10.0.2.2:5000)
+      final isEmulatorAlive = await ServerDiscoveryService.verifyHealthEndpoint(
+        ApiEndpoints.emulatorBaseUrl,
+        timeoutMs: 350,
+      );
+      if (isEmulatorAlive) {
+        setUrl(ApiEndpoints.emulatorBaseUrl);
+        return;
+      }
+
+      // 3. Nếu trước đó đã lưu URL Wi-Fi và vẫn còn online: dùng tiếp
       if (saved != null && saved.isNotEmpty) {
-        ApiEndpoints.customBaseUrl = saved;
-        if (saved != state) {
-          state = saved;
+        final isSavedAlive = await ServerDiscoveryService.verifyHealthEndpoint(
+          saved,
+          timeoutMs: 600,
+        );
+        if (isSavedAlive) {
+          setUrl(saved);
+          return;
         }
       }
 
-      // Tự động nhận diện máy chủ trong nền nếu địa chỉ hiện tại không phản hồi
-      Future.delayed(const Duration(milliseconds: 300), () async {
-        try {
-          final isAlive = await ServerDiscoveryService.verifyHealthEndpoint(state, timeoutMs: 1000);
-          if (!isAlive) {
-            final found = await ServerDiscoveryService.discoverServer();
-            if (found != null && found.isNotEmpty && found != state) {
-              setUrl(found);
-            }
-          }
-        } catch (_) {}
-      });
+      // 4. Nếu không cắm dây và không có kết nối khả dụng: Tự động nhận diện Wi-Fi trong nền
+      autoDetectWifiServer();
     } catch (_) {}
+  }
+
+  Future<String?> autoDetectWifiServer() async {
+    if (_isAutoDetecting) return null;
+    _isAutoDetecting = true;
+    try {
+      final found = await ServerDiscoveryService.discoverServer();
+      if (found != null && found.isNotEmpty && found != state) {
+        setUrl(found);
+        return found;
+      }
+    } catch (_) {
+    } finally {
+      _isAutoDetecting = false;
+    }
+    return null;
   }
 
   void setUrl(String url) {
@@ -91,6 +126,14 @@ final dioProvider = Provider<Dio>((ref) {
         if (kDebugMode) {
           print('⚠️ [API Error] ${error.requestOptions.path}: ${error.message}');
         }
+        // Tự động nhận diện lại máy chủ khi mất kết nối (rút dây sang Wi-Fi hoặc đổi mạng Wi-Fi)
+        if (error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.connectionError ||
+            error.type == DioExceptionType.unknown) {
+          Future.microtask(() {
+            ref.read(serverUrlProvider.notifier).autoDetectWifiServer();
+          });
+        }
         return handler.next(error);
       },
     ),
@@ -98,4 +141,3 @@ final dioProvider = Provider<Dio>((ref) {
 
   return dio;
 });
-

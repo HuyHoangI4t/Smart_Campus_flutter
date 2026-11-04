@@ -32,7 +32,7 @@ const FeedbackModule = {
     if (this.feedbackList.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6" class="py-12 text-center text-slate-400">
+          <td colspan="7" class="py-12 text-center text-slate-400">
             <i data-lucide="message-square" class="w-8 h-8 mx-auto mb-2 opacity-40"></i>
             <p class="text-sm font-medium">Chưa có ý kiến phản hồi nào từ sinh viên</p>
           </td>

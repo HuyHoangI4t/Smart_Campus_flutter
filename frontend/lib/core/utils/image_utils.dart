@@ -13,12 +13,12 @@ const List<String> campusFallbackImages = [
 /// để tránh lỗi 502 Bad Gateway và lỗi SSL tự ký của máy chủ TTN khi chạy trên thiết bị di động
 String getNewsImageUrl(String? imageUrl, [int fallbackIndex = 0]) {
   if (imageUrl == null || imageUrl.trim().isEmpty) {
-    return campusFallbackImages[fallbackIndex.abs() % campusFallbackImages.length];
+    return '';
   }
 
   final trimmed = imageUrl.trim();
 
-  // Nếu đã là link proxy rồi hoặc ảnh unsplash thì giữ nguyên, không bọc lặp
+  // Nếu đã là link proxy rồi hoặc ảnh tĩnh thì giữ nguyên, không bọc lặp
   if (trimmed.contains('/image-proxy') || trimmed.contains('unsplash.com')) {
     return trimmed;
   }

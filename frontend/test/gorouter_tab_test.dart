@@ -54,3 +54,4 @@ void main() {
     expect(find.text('CURRENT_INDEX_1'), findsOneWidget);
   });
 }
+

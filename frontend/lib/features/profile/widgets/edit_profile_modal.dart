@@ -69,13 +69,14 @@ class _EditProfileModalState extends ConsumerState<EditProfileModal> {
 
     setState(() => _saving = true);
 
-    final u = widget.currentUser ?? UserModel.guest();
-    final updated = u.copyWith(
+    final latestUser = ref.read(authProvider).user ?? widget.currentUser ?? UserModel.guest();
+    final updated = latestUser.copyWith(
       fullName: name,
       email: _emailController.text.trim(),
       phone: _phoneController.text.trim(),
       studentClass: _classController.text.trim(),
       faculty: _facultyController.text.trim(),
+      avatarUrl: latestUser.avatarUrl,
     );
 
     try {
@@ -98,14 +99,15 @@ class _EditProfileModalState extends ConsumerState<EditProfileModal> {
     Navigator.pop(context);
     AvatarPickerModal.show(
       context,
-      currentUser: widget.currentUser,
+      currentUser: ref.read(authProvider).user ?? widget.currentUser,
       onReturnToEdit: () => EditProfileModal.show(context, currentUser: ref.read(authProvider).user),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final avatar = widget.currentUser?.avatarUrl ?? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+    final liveUser = ref.watch(authProvider).user ?? widget.currentUser;
+    final avatar = liveUser?.avatarUrl ?? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
 
     return Container(
       decoration: const BoxDecoration(

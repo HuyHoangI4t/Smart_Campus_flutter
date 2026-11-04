@@ -30,7 +30,6 @@ class NewsCardImage extends StatefulWidget {
 
 class _NewsCardImageState extends State<NewsCardImage> {
   late String _currentUri;
-  bool _hasAttemptedFallback = false;
 
   @override
   void initState() {
@@ -43,19 +42,6 @@ class _NewsCardImageState extends State<NewsCardImage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageUrl != widget.imageUrl || oldWidget.fallbackIndex != widget.fallbackIndex) {
       _currentUri = getNewsImageUrl(widget.imageUrl, widget.fallbackIndex);
-      _hasAttemptedFallback = false;
-    }
-  }
-
-  void _triggerFallback() {
-    if (!_hasAttemptedFallback && mounted) {
-      final fallback = campusFallbackImages[widget.fallbackIndex.abs() % campusFallbackImages.length];
-      if (_currentUri != fallback) {
-        setState(() {
-          _hasAttemptedFallback = true;
-          _currentUri = fallback;
-        });
-      }
     }
   }
 
@@ -63,8 +49,15 @@ class _NewsCardImageState extends State<NewsCardImage> {
   Widget build(BuildContext context) {
     Widget imageWidget;
 
-    // Trên Flutter Web: dùng Image.network trực tiếp qua browser HTML engine để tương thích 100% với CORS
-    if (kIsWeb) {
+    if (_currentUri.isEmpty) {
+      imageWidget = Image.asset(
+        'assets/images/images.jpg',
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
+      );
+    } else if (kIsWeb) {
+      // Trên Flutter Web: dùng Image.network trực tiếp qua browser HTML engine để tương thích 100% với CORS
       imageWidget = Image.network(
         _currentUri,
         width: widget.width,
@@ -74,7 +67,7 @@ class _NewsCardImageState extends State<NewsCardImage> {
           if (loadingProgress == null) return child;
           return Container(
             width: widget.width,
-            height: widget.height,
+            height: widget.height ?? 200,
             color: const Color(0xFFF1F5F9),
             child: const Center(
               child: SizedBox(
@@ -86,14 +79,6 @@ class _NewsCardImageState extends State<NewsCardImage> {
           );
         },
         errorBuilder: (context, error, stackTrace) {
-          if (!_hasAttemptedFallback) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => _triggerFallback());
-            return Container(
-              width: widget.width,
-              height: widget.height,
-              color: const Color(0xFFF1F5F9),
-            );
-          }
           return Image.asset(
             'assets/images/images.jpg',
             width: widget.width,
@@ -111,7 +96,7 @@ class _NewsCardImageState extends State<NewsCardImage> {
         fit: widget.fit,
         placeholder: (context, url) => Container(
           width: widget.width,
-          height: widget.height,
+          height: widget.height ?? 200,
           color: const Color(0xFFF1F5F9),
           child: const Center(
             child: SizedBox(
@@ -121,21 +106,12 @@ class _NewsCardImageState extends State<NewsCardImage> {
             ),
           ),
         ),
-        errorWidget: (context, url, error) {
-          final fallback = campusFallbackImages[widget.fallbackIndex.abs() % campusFallbackImages.length];
-          return CachedNetworkImage(
-            imageUrl: fallback,
-            width: widget.width,
-            height: widget.height,
-            fit: widget.fit,
-            errorWidget: (c, e, s) => Image.asset(
-              'assets/images/images.jpg',
-              width: widget.width,
-              height: widget.height,
-              fit: widget.fit,
-            ),
-          );
-        },
+        errorWidget: (context, url, error) => Image.asset(
+          'assets/images/images.jpg',
+          width: widget.width,
+          height: widget.height,
+          fit: widget.fit,
+        ),
       );
     }
 

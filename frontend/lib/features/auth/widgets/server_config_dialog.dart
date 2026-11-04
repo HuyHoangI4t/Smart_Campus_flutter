@@ -313,15 +313,11 @@ class _ServerConfigDialogState extends ConsumerState<ServerConfigDialog> {
                 runSpacing: 8,
                 children: [
                   _buildPresetChip(
-                    label: 'Wi-Fi (${ApiEndpoints.lanHost})',
-                    url: ApiEndpoints.lanBaseUrl,
-                  ),
-                  _buildPresetChip(
-                    label: 'USB Cáp (adb reverse)',
+                    label: 'Cắm dây USB (127.0.0.1 - Mặc định)',
                     url: ApiEndpoints.localhostBaseUrl,
                   ),
                   _buildPresetChip(
-                    label: 'Giả lập Android',
+                    label: 'Giả lập Android (10.0.2.2)',
                     url: ApiEndpoints.emulatorBaseUrl,
                   ),
                 ],

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
 import '../../../core/utils/haversine.dart';
@@ -186,77 +185,30 @@ class MapLocationDetailCard extends StatelessWidget {
           ],
           const SizedBox(height: 14),
 
-          // 2 Nút hành động: "Chỉ đường đi bộ" + "Mở App ngoài"
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: InkWell(
-                  onTap: onStartNavigation,
-                  borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.near_me, color: Colors.white, size: 16),
-                        SizedBox(width: 8),
-                        Text(
-                          'Chỉ đường đi bộ',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+          // Nút hành động: "Chỉ đường đi bộ"
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: onStartNavigation,
+              icon: const Icon(Icons.near_me, color: Colors.white, size: 18),
+              label: const Text(
+                'Chỉ đường đi bộ',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: InkWell(
-                  onTap: () async {
-                    final url = Uri.parse(
-                      'https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}',
-                    );
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                    }
-                  },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.open_in_new, color: AppColors.textForeground, size: 14),
-                        SizedBox(width: 6),
-                        Text(
-                          'Mở App ngoài',
-                          style: TextStyle(
-                            color: AppColors.textForeground,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
+                elevation: 0,
               ),
-            ],
+            ),
           ),
         ],
       ),

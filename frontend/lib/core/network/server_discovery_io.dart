@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 class PlatformServerDiscovery {
@@ -39,5 +40,65 @@ class PlatformServerDiscovery {
       } catch (_) {}
     }
   }
-}
 
+  /// Gửi gói tin UDP Broadcast tới mạng Wi-Fi để tìm backend server tức thì (~10-50ms)
+  static Future<String?> probeUdpBroadcast({
+    List<int> ports = const [5055, 5056, 5057, 5088],
+    int timeoutMs = 800,
+  }) async {
+    RawDatagramSocket? socket;
+    Timer? timer;
+    try {
+      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      socket.broadcastEnabled = true;
+
+      final completer = Completer<String?>();
+      timer = Timer(Duration(milliseconds: timeoutMs), () {
+        if (!completer.isCompleted) {
+          completer.complete(null);
+        }
+        socket?.close();
+      });
+
+      socket.listen(
+        (event) {
+          if (event == RawSocketEvent.read) {
+            final dg = socket?.receive();
+            if (dg != null) {
+              try {
+                final text = utf8.decode(dg.data);
+                if (text.contains('smart_campus_backend')) {
+                  timer?.cancel();
+                  if (!completer.isCompleted) {
+                    completer.complete(dg.address.address);
+                  }
+                  socket?.close();
+                }
+              } catch (_) {}
+            }
+          }
+        },
+        onError: (_) {
+          if (!completer.isCompleted) completer.complete(null);
+        },
+        onDone: () {
+          if (!completer.isCompleted) completer.complete(null);
+        },
+      );
+
+      final msg = utf8.encode('SMART_CAMPUS_DISCOVERY');
+      for (final p in ports) {
+        socket.send(msg, InternetAddress('255.255.255.255'), p);
+      }
+
+      return await completer.future;
+    } catch (_) {
+      return null;
+    } finally {
+      timer?.cancel();
+      try {
+        socket?.close();
+      } catch (_) {}
+    }
+  }
+}

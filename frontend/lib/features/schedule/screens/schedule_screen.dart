@@ -6,6 +6,9 @@ import '../../../core/widgets/wireframe_widgets.dart';
 import '../models/schedule_model.dart';
 import '../providers/schedule_provider.dart';
 import '../widgets/schedule_add_custom_modal.dart';
+import '../widgets/schedule_card.dart';
+import '../widgets/schedule_custom_detail_modal.dart';
+import '../widgets/schedule_day_bar.dart';
 import '../widgets/schedule_room_direction_modal.dart';
 
 class ScheduleScreen extends ConsumerStatefulWidget {
@@ -16,6 +19,58 @@ class ScheduleScreen extends ConsumerStatefulWidget {
 }
 
 class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
+  int _selectedDay = 2; // Mặc định Thứ 2, cập nhật theo ngày thực trong initState
+  bool _isTableView = false; // Mặc định chế độ xem theo ngày (Day-by-Day như index.tsx)
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    // Trong model & DB: CN = 1, Thứ 2 = 2, ..., Thứ 7 = 7
+    _selectedDay = now.weekday == 7 ? 1 : now.weekday + 1;
+  }
+
+  String _dayNumToName(int dayNum) {
+    switch (dayNum) {
+      case 1:
+        return 'Chủ nhật';
+      case 2:
+        return 'Thứ 2';
+      case 3:
+        return 'Thứ 3';
+      case 4:
+        return 'Thứ 4';
+      case 5:
+        return 'Thứ 5';
+      case 6:
+        return 'Thứ 6';
+      case 7:
+        return 'Thứ 7';
+      default:
+        return 'Thứ 2';
+    }
+  }
+
+  String _dayNumToLongName(int dayNum) {
+    switch (dayNum) {
+      case 1:
+        return 'Chủ nhật';
+      case 2:
+        return 'Thứ Hai';
+      case 3:
+        return 'Thứ Ba';
+      case 4:
+        return 'Thứ Tư';
+      case 5:
+        return 'Thứ Năm';
+      case 6:
+        return 'Thứ Sáu';
+      case 7:
+        return 'Thứ Bảy';
+      default:
+        return 'Thứ Hai';
+    }
+  }
   final List<Map<String, dynamic>> _weeks = [
     {
       'index': 0,
@@ -60,8 +115,55 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         ? scheduleState.weekRange
         : 'Từ ngày 19/10/2026 đến ngày 25/10/2026';
 
+    final now = DateTime.now();
+    final todayDayNum = now.weekday == 7 ? 1 : now.weekday + 1;
+    final isViewingCurrentWeek = scheduleState.selectedWeekIndex == scheduleState.currentWeekIndex;
+
+    // Tính số tiết học cho mỗi thứ trong tuần
+    final Map<int, int> countMap = {};
+    for (final item in scheduleState.items) {
+      countMap[item.dayNum] = (countMap[item.dayNum] ?? 0) + 1;
+    }
+
+    final days = scheduleState.days.isNotEmpty ? scheduleState.days : _days;
+
+    // Lọc môn học của thứ đang chọn
+    final selectedDayName = _dayNumToName(_selectedDay);
+    final filteredItems = scheduleState.items.where((it) {
+      if (it.dayNum == _selectedDay) return true;
+      if (it.matchesDay(selectedDayName)) return true;
+      return false;
+    }).toList()
+      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+
+    // Tìm chuỗi ngày tương ứng với thứ đang chọn
+    String selectedDateStr = '';
+    for (final d in days) {
+      final rawDay = d['day'] ?? '';
+      if (ScheduleItem.dayStrToNum(rawDay) == _selectedDay) {
+        selectedDateStr = d['date'] ?? '';
+        break;
+      }
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddScheduleModal(
+          context,
+          ref,
+          scheduleState,
+          initialDayNum: _selectedDay,
+        ),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        icon: const Icon(Icons.add_rounded, size: 22),
+        label: const Text(
+          'Thêm lịch',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+        ),
+      ),
       body: Column(
         children: [
           // ─── 1. NAVHEADER (Navy #132F73) ───
@@ -69,7 +171,12 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
             title: 'Thời khóa biểu',
             subtitle: weekSubtitle,
             rightElement: GestureDetector(
-              onTap: () => _showAddScheduleModal(context, ref, scheduleState),
+              onTap: () => _showAddScheduleModal(
+                context,
+                ref,
+                scheduleState,
+                initialDayNum: _selectedDay,
+              ),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
@@ -105,37 +212,119 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           // ─── 3. SUNDAY / NEXT WEEK ALERT ───
           if (scheduleState.isSunday) _buildSundayAlert(scheduleState),
 
-          // ─── 4. MAIN SCHEDULE TABLE (Thứ theo chiều dọc, chỉ Sáng & Chiều) ───
+          // ─── 4. THANH CHỌN THỨ TRONG TUẦN (7 THỨ NGANG - CHẾ ĐỘ XEM THEO NGÀY) ───
+          if (!_isTableView)
+            ScheduleDayBar(
+              selectedDay: _selectedDay,
+              todayDayNum: todayDayNum,
+              isViewingCurrentWeek: isViewingCurrentWeek,
+              days: days,
+              classCountPerDay: countMap,
+              onSelectDay: (dayNum) {
+                setState(() {
+                  _selectedDay = dayNum;
+                });
+              },
+            ),
+
+          // ─── 5. DANH SÁCH LỊCH HỌC THEO NGÀY HOẶC BẢNG CẢ TUẦN ───
           Expanded(
             child: RefreshIndicator(
               color: AppColors.primary,
               onRefresh: () => ref.read(scheduleProvider.notifier).fetchSchedule(forceRefresh: true),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Hint bar
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.cardBorder),
-                      ),
-                      child: const Row(
+                    // Tiêu đề ngày / Chế độ xem & nút chuyển đổi
+                    Padding(
+                      padding: const EdgeInsets.only(left: 2, right: 2, bottom: 12),
+                      child: Row(
                         children: [
-                          Icon(Icons.touch_app_outlined, size: 14, color: AppColors.primary),
-                          SizedBox(width: 6),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Thời khóa biểu 7 ngày (T2 - CN) • Chạm vào ô để xem chỉ đường',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary,
+                              _isTableView
+                                  ? 'Thời khóa biểu cả tuần (T2 – CN)'
+                                  : '${_dayNumToLongName(_selectedDay)}${selectedDateStr.isNotEmpty ? " ($selectedDateStr)" : ""}',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                          ),
+                          if (!_isTableView) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: filteredItems.isNotEmpty
+                                    ? const Color(0xFFEEF2FF)
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: filteredItems.isNotEmpty
+                                      ? const Color(0xFFC7D2FE)
+                                      : const Color(0xFFE2E8F0),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                '${filteredItems.length} tiết',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: filteredItems.isNotEmpty
+                                      ? const Color(0xFF4338CA)
+                                      : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          // Nút chuyển đổi chế độ xem
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                _isTableView = !_isTableView;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFCBD5E1), width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _isTableView ? Icons.view_day_outlined : Icons.calendar_view_week_outlined,
+                                    size: 14,
+                                    color: AppColors.primary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isTableView ? 'Theo ngày' : 'Cả tuần',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -143,13 +332,37 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                       ),
                     ),
 
-                    // Table Card
+                    // Nội dung: Bảng cả tuần hoặc Danh sách môn theo ngày
                     if (scheduleState.isLoading)
-                      _buildTableSkeleton()
+                      _isTableView
+                          ? _buildTableSkeleton()
+                          : const Column(
+                              children: [
+                                WireframeScheduleCard(),
+                                WireframeScheduleCard(),
+                                WireframeScheduleCard(),
+                              ],
+                            )
+                    else if (_isTableView)
+                      _buildVerticalTimetable(scheduleState)
+                    else if (filteredItems.isEmpty)
+                      _buildEmptyDayState(scheduleState)
                     else
-                      _buildVerticalTimetable(scheduleState),
+                      Column(
+                        children: filteredItems.map((item) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: ScheduleCard(
+                              item: item,
+                              onSelectDirection: (it) => ScheduleRoomDirectionModal.show(context, item: it),
+                              onEdit: (it) => _showEditScheduleModal(context, ref, scheduleState, it),
+                              onDelete: (it) => _confirmDeleteSchedule(context, ref, it),
+                            ),
+                          );
+                        }).toList(),
+                      ),
 
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
 
                     // Information note box
                     _buildNoticeBox(),
@@ -944,6 +1157,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                             sessionColor: const Color(0xFFD97706),
                             sessionBg: const Color(0xFFFFFBEB),
                             sessionBorder: const Color(0xFFFDE68A),
+                            scheduleState: scheduleState,
                           ),
                         ],
                       ],
@@ -970,6 +1184,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                             sessionColor: const Color(0xFF0284C7),
                             sessionBg: const Color(0xFFF0F9FF),
                             sessionBorder: const Color(0xFFBAE6FD),
+                            scheduleState: scheduleState,
                           ),
                         ],
                       ],
@@ -987,11 +1202,24 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     required Color sessionColor,
     required Color sessionBg,
     required Color sessionBorder,
+    required ScheduleState scheduleState,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => ScheduleRoomDirectionModal.show(context, item: item),
+        onTap: () {
+          if (item.isCustom) {
+            ScheduleCustomDetailModal.show(
+              context,
+              item: item,
+              days: scheduleState.days,
+              weekRange: scheduleState.weekRange,
+            );
+          } else {
+            ScheduleRoomDirectionModal.show(context, item: item);
+          }
+        },
+        onLongPress: item.isCustom ? () => _showCustomItemOptions(item, scheduleState) : null,
         borderRadius: BorderRadius.circular(8),
         child: Container(
           decoration: BoxDecoration(
@@ -1034,15 +1262,26 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                       ),
                     ),
                     if (item.isCustom)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFDE68A),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: const Text(
-                          'Tự thêm',
-                          style: TextStyle(fontSize: 7, fontWeight: FontWeight.w800, color: Color(0xFF92400E)),
+                      GestureDetector(
+                        onTap: () => _showCustomItemOptions(item, scheduleState),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFDE68A),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.edit_calendar, size: 8, color: Color(0xFF92400E)),
+                              SizedBox(width: 2),
+                              Text(
+                                'Tự thêm',
+                                style: TextStyle(fontSize: 7.5, fontWeight: FontWeight.w800, color: Color(0xFF92400E)),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                   ],
@@ -1227,19 +1466,332 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     );
   }
 
-  void _showAddScheduleModal(BuildContext context, WidgetRef ref, ScheduleState scheduleState) {
+  // ─── EMPTY DAY STATE ───
+  Widget _buildEmptyDayState(ScheduleState scheduleState) {
+    final isWeekEmpty = scheduleState.items.isEmpty;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 68,
+            height: 68,
+            decoration: const BoxDecoration(
+              color: Color(0xFFF1F5F9),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.calendar_today_rounded,
+              size: 32,
+              color: Color(0xFF94A3B8),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            isWeekEmpty ? 'Không có lịch học' : 'Không có tiết học',
+            style: const TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            isWeekEmpty
+                ? 'Bạn không có lịch học trong tuần này!'
+                : 'Bạn được nghỉ trong ngày này!',
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(
+            onPressed: () => _showAddScheduleModal(
+              context,
+              ref,
+              scheduleState,
+              initialDayNum: _selectedDay,
+            ),
+            icon: const Icon(Icons.add_circle_outline, size: 16),
+            label: Text('Thêm lịch cho ${_dayNumToName(_selectedDay)}'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddScheduleModal(
+    BuildContext context,
+    WidgetRef ref,
+    ScheduleState scheduleState, {
+    int? initialDayNum,
+  }) {
     ScheduleAddCustomModal.show(
       context,
       days: scheduleState.days,
-      onSave: (newItem) {
-        ref.read(scheduleProvider.notifier).addCustomSchedule(newItem);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Đã thêm lịch học "${newItem.courseName}"'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+      weekRange: scheduleState.weekRange,
+      initialDayNum: initialDayNum,
+      onSave: (newItem) async {
+        final success = await ref.read(scheduleProvider.notifier).addCustomSchedule(newItem);
+        if (context.mounted) {
+          // Tự động chuyển sang ngày của môn vừa thêm để người dùng nhìn thấy ngay
+          setState(() {
+            _selectedDay = newItem.dayNum;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(success ? Icons.check_circle : Icons.error_outline, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      success
+                          ? 'Đã thêm lịch học "${newItem.courseName}" vào ${newItem.cleanDay}!'
+                          : 'Thêm lịch học thất bại. Vui lòng thử lại.',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: success ? AppColors.success : AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
       },
+    );
+  }
+
+  void _showEditScheduleModal(BuildContext context, WidgetRef ref, ScheduleState scheduleState, ScheduleItem item) {
+    ScheduleAddCustomModal.show(
+      context,
+      initialItem: item,
+      days: scheduleState.days,
+      weekRange: scheduleState.weekRange,
+      onSave: (updatedItem) async {
+        final success = await ref.read(scheduleProvider.notifier).updateCustomSchedule(item.id, updatedItem);
+        if (context.mounted) {
+          setState(() {
+            _selectedDay = updatedItem.dayNum;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(success ? Icons.check_circle : Icons.error_outline, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      success
+                          ? 'Đã cập nhật lịch học "${updatedItem.courseName}"!'
+                          : 'Cập nhật lịch học thất bại.',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: success ? AppColors.success : AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+      },
+      onDelete: () {
+        Navigator.of(context).pop();
+        _confirmDeleteSchedule(context, ref, item);
+      },
+    );
+  }
+
+  void _confirmDeleteSchedule(BuildContext context, WidgetRef ref, ScheduleItem item) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: Color(0xFFDC2626)),
+            SizedBox(width: 8),
+            Text('Xóa lịch học', style: TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa ca học "${item.courseName}" (${item.timeSlot}, ${item.room}) khỏi thời khóa biểu không?',
+          style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Hủy', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final success = await ref.read(scheduleProvider.notifier).deleteCustomSchedule(item.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(success ? Icons.check_circle : Icons.error_outline, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            success
+                                ? 'Đã xóa lịch học "${item.courseName}"!'
+                                : 'Xóa lịch học thất bại.',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: success ? AppColors.success : AppColors.error,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Xóa', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCustomItemOptions(ScheduleItem item, ScheduleState scheduleState) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: const Text(
+                    'Lịch tự thêm',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    item.courseName,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textForeground),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${item.timeSlot} • ${item.room} • ${item.cleanDay}',
+              style: const TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+            const SizedBox(height: 6),
+            ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(color: Color(0xFFEEF2FF), shape: BoxShape.circle),
+                child: const Icon(Icons.near_me_outlined, size: 18, color: AppColors.primary),
+              ),
+              title: const Text('Xem chỉ đường phòng học', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              subtitle: const Text('Bóc tách vị trí, lộ trình các bước đến tòa nhà', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
+              contentPadding: EdgeInsets.zero,
+              onTap: () {
+                Navigator.of(ctx).pop();
+                ScheduleRoomDirectionModal.show(context, item: item);
+              },
+            ),
+            ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(color: Color(0xFFE0F2FE), shape: BoxShape.circle),
+                child: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF0284C7)),
+              ),
+              title: const Text('Chỉnh sửa ca học này', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              subtitle: const Text('Cập nhật tên môn, phòng học, tiết, ngày', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
+              contentPadding: EdgeInsets.zero,
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showEditScheduleModal(context, ref, scheduleState, item);
+              },
+            ),
+            ListTile(
+              leading: Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(color: Color(0xFFFEE2E2), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFDC2626)),
+              ),
+              title: const Text('Xóa khỏi thời khóa biểu', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w700, fontSize: 14)),
+              subtitle: const Text('Hủy bỏ ca học tự tạo này', style: TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8))),
+              contentPadding: EdgeInsets.zero,
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _confirmDeleteSchedule(context, ref, item);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

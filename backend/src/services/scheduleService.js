@@ -220,6 +220,34 @@ function getDayNameFromDate(dateInput) {
   return `Thứ ${jsDay + 1}`;
 }
 
+// Lấy khoảng tuần hiện tại
+function getCurrentWeekRange(d = new Date()) {
+  const day = d.getDay();
+  const distToMon = (day + 6) % 7;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - distToMon);
+  mon.setHours(0, 0, 0, 0);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  sun.setHours(23, 59, 59, 999);
+  const pad = (n) => String(n).padStart(2, '0');
+  const sStr = `${pad(mon.getDate())}/${pad(mon.getMonth() + 1)}/${mon.getFullYear()}`;
+  const eStr = `${pad(sun.getDate())}/${pad(sun.getMonth() + 1)}/${sun.getFullYear()}`;
+  return `Từ ngày ${sStr} đến ngày ${eStr}`;
+}
+
+// Lấy ngày DD/MM/YYYY của một Thứ trong khoảng tuần cụ thể
+function getDateForDayInWeekRange(dayName, weekRangeText) {
+  const { startDate } = parseWeekRangeDates(weekRangeText);
+  if (!startDate) return null;
+  const dayNum = getDayNumber(dayName);
+  const offset = dayNum === 1 ? 6 : dayNum - 2;
+  const d = new Date(startDate);
+  d.setDate(d.getDate() + offset);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
 // Lọc lịch học thủ công cho một tuần cụ thể, tránh việc lịch tuần này hiện sang tuần khác
 function filterCustomItemsForWeek(customItems, weekRangeText, isCurrentWeek = false) {
   if (!Array.isArray(customItems) || customItems.length === 0) return [];
@@ -627,5 +655,7 @@ module.exports = {
   parseDateVN,
   getWeekRangeFromDate,
   getDayNameFromDate,
+  getCurrentWeekRange,
+  getDateForDayInWeekRange,
   filterCustomItemsForWeek,
 };

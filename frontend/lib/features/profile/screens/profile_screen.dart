@@ -2,23 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/home_widget_service.dart';
-import '../../../core/services/notification_service.dart';
 import '../../../core/widgets/nav_header.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../grades/providers/grades_provider.dart';
-import '../../home/providers/home_provider.dart';
-import '../../schedule/providers/schedule_provider.dart';
-import '../../../core/network/api_client.dart';
-import '../../../core/widgets/server_config_dialog.dart';
+import '../widgets/app_settings_modal.dart';
 import '../widgets/avatar_picker_modal.dart';
 import '../widgets/edit_profile_modal.dart';
 import '../widgets/logout_confirm_dialog.dart';
 
 /// Màn hình Hồ sơ sinh viên
-/// Tuân thủ quy chuẩn: Clean Architecture, Small Widgets (<300 lines), Const constructors,
-/// Touch Target >= 44px, Riverpod state management.
+/// Tách rời Modal Cài đặt ứng dụng (AppSettingsModal) riêng biệt
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -26,25 +19,59 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final user = authState.user;
+    final isGuest = user?.isGuest ?? true;
 
-    final fullName = user?.fullName.isNotEmpty == true ? user!.fullName : 'Nguyễn Huy Hoàng';
-    final studentId = user?.studentId.isNotEmpty == true ? user!.studentId : '23103023';
-    final faculty = user?.faculty?.isNotEmpty == true ? user!.faculty! : 'KHTN &CN';
-    final studentClass = user?.studentClass?.isNotEmpty == true ? user!.studentClass! : 'K23';
-    final email = user?.email?.isNotEmpty == true ? user!.email! : '$studentId@sv.ttn.edu.vn';
-    final phone = user?.phone?.isNotEmpty == true ? user!.phone! : '0329106783';
-    final avatarUrl = user?.avatarUrl ?? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+    // Tự động fallback dựa trên vai trò thực tế của người dùng đang đăng nhập
+    final fullName = user?.fullName.isNotEmpty == true 
+        ? user!.fullName 
+        : (isGuest ? 'Khách tham quan' : 'Sinh viên');
+    final studentId = user?.studentId.isNotEmpty == true 
+        ? user!.studentId 
+        : (isGuest ? 'GUEST' : '--');
+    final faculty = user?.faculty?.isNotEmpty == true 
+        ? user!.faculty! 
+        : (isGuest ? 'Trường ĐH Tây Nguyên' : 'Chưa cập nhật khoa');
+    final studentClass = user?.studentClass?.isNotEmpty == true 
+        ? user!.studentClass! 
+        : (isGuest ? 'Khách' : 'Chưa cập nhật lớp');
+    final email = user?.email?.isNotEmpty == true 
+        ? user!.email! 
+        : (isGuest ? 'Chưa liên kết email' : (studentId != '--' ? '$studentId@sv.ttn.edu.vn' : 'Chưa cập nhật'));
+    final phone = user?.phone?.isNotEmpty == true 
+        ? user!.phone! 
+        : 'Chưa cập nhật SĐT';
+    final avatarUrl = (user?.avatarUrl?.isNotEmpty == true)
+        ? user!.avatarUrl!
+        : 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          // ─── 1. NAVHEADER (Navy #132F73) ───
+          // ─── 1. NAVHEADER (Navy #132F73) VỚI NÚT CÀI ĐẶT & SỬA HỒ SƠ ───
           NavHeader(
             title: 'Hồ sơ sinh viên',
             subtitle: 'Thông tin cá nhân & Tài khoản',
-            rightIcon: Icons.edit_outlined,
-            onRight: () => EditProfileModal.show(context, currentUser: user),
+            rightElement: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: () => AppSettingsModal.show(context),
+                  icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 20),
+                  tooltip: 'Cài đặt ứng dụng',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => EditProfileModal.show(context, currentUser: user),
+                  icon: const Icon(Icons.edit_outlined, color: Colors.white, size: 20),
+                  tooltip: 'Chỉnh sửa hồ sơ',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
           ),
 
           // ─── 2. SCROLLABLE BODY ───
@@ -81,7 +108,7 @@ class ProfileScreen extends ConsumerWidget {
 
                 // 5. SECURITY & SETTINGS
                 const Text(
-                  'Bảo mật tài khoản',
+                  'Cài đặt & Bảo mật',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -92,20 +119,7 @@ class ProfileScreen extends ConsumerWidget {
                 _SecuritySettingsCard(currentUser: user),
                 const SizedBox(height: 24),
 
-                // 6. CÀI ĐẶT ỨNG DỤNG & THÔNG BÁO (NHẮC NHỞ LỊCH HỌC 1 TIẾNG & THỬ GỬI)
-                const Text(
-                  'Cài đặt ứng dụng',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textForeground,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const _AppSettingsCard(),
-                const SizedBox(height: 24),
-
-                // 7. LOGOUT BUTTON
+                // 6. LOGOUT BUTTON
                 const _LogoutButton(),
               ],
             ),
@@ -388,6 +402,41 @@ class _SecuritySettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // Cài đặt ứng dụng & Thông báo (Mở Modal riêng AppSettingsModal)
+        InkWell(
+          onTap: () => AppSettingsModal.show(context),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.cardBorder, width: 1),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.settings_outlined, size: 18, color: AppColors.primary),
+                    SizedBox(width: 12),
+                    Text(
+                      'Cài đặt ứng dụng & Thông báo',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textForeground,
+                      ),
+                    ),
+                  ],
+                ),
+                Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
         // Đổi mật khẩu
         InkWell(
           onTap: () => context.push('/profile/change-password'),
@@ -492,359 +541,6 @@ class _LogoutButton extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ─── 5. APP SETTINGS & NOTIFICATIONS COMPONENT ───
-class _AppSettingsCard extends ConsumerStatefulWidget {
-  const _AppSettingsCard();
-
-  @override
-  ConsumerState<_AppSettingsCard> createState() => _AppSettingsCardState();
-}
-
-class _AppSettingsCardState extends ConsumerState<_AppSettingsCard> {
-  bool _scheduleReminder = true;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.cardBorder, width: 1),
-      ),
-      child: Column(
-        children: [
-          // Row 1: Nhắc nhở lịch học trước 1 tiếng
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.alarm_on_outlined,
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Nhắc nhở lịch học',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textForeground,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Thông báo trước khi bắt đầu 1 tiếng',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                Switch.adaptive(
-                  value: _scheduleReminder,
-                  activeTrackColor: AppColors.primary,
-                  onChanged: (val) {
-                    setState(() {
-                      _scheduleReminder = val;
-                    });
-                    if (val) {
-                      final scheduleItems = ref.read(scheduleProvider).items;
-                      NotificationService.instance.syncAllScheduleReminders(scheduleItems);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã bật tính năng nhắc nhở lịch học trước 1 tiếng!'),
-                          duration: Duration(seconds: 2),
-                          backgroundColor: AppColors.primary,
-                        ),
-                      );
-                    } else {
-                      NotificationService.instance.cancelAll();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã tắt toàn bộ thông báo nhắc nhở lịch học.'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.cardBorder),
-
-          // Row 2: Thử gửi thông báo
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.notifications_active_outlined,
-                        color: Color(0xFFD97706),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Kiểm tra thông báo',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textForeground,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Gửi thông báo mẫu lên thiết bị',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final nextClass = ref.read(nextClassProvider);
-                    final subject = nextClass.subject.isNotEmpty ? nextClass.subject : 'LS Đảng CS VN';
-                    final time = nextClass.time.isNotEmpty ? nextClass.time : 'Tiết 1-4';
-                    final room = nextClass.room.isNotEmpty ? nextClass.room : '2.21 (CLC)';
-
-                    await NotificationService.instance.sendTestNotification(
-                      title: '🔔 Nhắc nhở ca học: $subject',
-                      body: 'Ca học bắt đầu lúc $time tại phòng $room. Hãy chuẩn bị trước 1 tiếng!',
-                    );
-
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã gửi thông báo thử nghiệm thành công!'),
-                          backgroundColor: AppColors.primary,
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.send_outlined, size: 14),
-                  label: const Text('Thử gửi', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    elevation: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.cardBorder),
-
-          // Row 3: Widget Launcher màn hình chính
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF0FDF4),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.widgets_outlined,
-                        color: Color(0xFF16A34A),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Widget màn hình chính',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textForeground,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Đồng bộ ra màn hình điện thoại',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final nextClass = ref.read(nextClassProvider);
-                    final gradesState = ref.read(gradesProvider);
-
-                    await HomeWidgetService.instance.updateWidgetData(
-                      subject: nextClass.subject.isNotEmpty ? nextClass.subject : '--',
-                      time: nextClass.time.isNotEmpty ? nextClass.time : '--',
-                      room: nextClass.room.isNotEmpty ? nextClass.room : '--',
-                      status: nextClass.capsuleLabel.isNotEmpty ? nextClass.capsuleLabel : 'LỊCH HỌC',
-                      countdown: nextClass.countdownText,
-                      gpa: gradesState.gpa4.toStringAsFixed(2),
-                      credits: '${gradesState.accumulatedCredits} TC',
-                      rank: gradesState.summary.academicRank.isNotEmpty ? gradesState.summary.academicRank : '--',
-                    );
-
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã đồng bộ dữ liệu ra Widget Launcher!'),
-                          backgroundColor: Color(0xFF16A34A),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.sync_outlined, size: 14),
-                  label: const Text('Đồng bộ', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.cardBorder),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.cardBorder),
-
-          // Row 4: Máy chủ kết nối
-          InkWell(
-            onTap: () => ServerConfigDialog.show(context),
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEFF6FF),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.dns_outlined,
-                            color: Color(0xFF2563EB),
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Máy chủ kết nối',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.textForeground,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                ref.watch(serverUrlProvider),
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  color: AppColors.textSecondary,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'monospace',
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  OutlinedButton.icon(
-                    onPressed: () => ServerConfigDialog.show(context),
-                    icon: const Icon(Icons.tune_rounded, size: 14),
-                    label: const Text('Cấu hình', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      side: const BorderSide(color: AppColors.cardBorder),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -354,6 +354,7 @@ class CampusDijkstraRouter {
 
   /// Tim cong truong gan nhat voi vi tri nguoi dung
   static CampusGate findNearestGate(LatLng point, List<CampusGate> gates) {
+    if (gates.isEmpty) return CampusConstants.defaultGate;
     CampusGate bestGate = gates.first;
     double bestDist = double.infinity;
     for (final g in gates) {

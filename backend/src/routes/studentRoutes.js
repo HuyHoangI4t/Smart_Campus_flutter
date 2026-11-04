@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const studentController = require('../controllers/studentController');
 const campusController = require('../controllers/campusController');
+const { optionalAuth, verifyToken } = require('../middlewares/authMiddleware');
+
+// [SECURITY] optionalAuth cho tất cả student routes — gán req.user nếu có token
+router.use(optionalAuth);
 
 /**
  * @swagger
@@ -92,7 +96,7 @@ router.post('/grades/:mssv', studentController.getGrades);
  *       201:
  *         description: Tạo lịch học thủ công thành công
  */
-router.post('/schedule/custom', studentController.createCustomSchedule);
+router.post('/schedule/custom', optionalAuth, studentController.createCustomSchedule);
 
 /**
  * @swagger
@@ -132,8 +136,8 @@ router.post('/schedule/custom', studentController.createCustomSchedule);
  *       200:
  *         description: Xóa lịch học thành công
  */
-router.put('/schedule/custom/:id', studentController.updateCustomSchedule);
-router.delete('/schedule/custom/:id', studentController.deleteCustomSchedule);
+router.put('/schedule/custom/:id', optionalAuth, studentController.updateCustomSchedule);
+router.delete('/schedule/custom/:id', optionalAuth, studentController.deleteCustomSchedule);
 
 /**
  * @swagger

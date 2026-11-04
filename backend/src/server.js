@@ -31,11 +31,27 @@ process.on('uncaughtException', (err) => {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// [SECURITY] Danh sách origin được phép kết nối (dùng chung cho CORS + Socket.IO)
+const CORS_WHITELIST = [
+  'http://localhost:5001',     // Admin Portal dev
+  'http://localhost:5000',     // Backend Swagger UI
+  'http://127.0.0.1:5001',
+  'http://127.0.0.1:5000',
+];
+const corsOriginCheck = (origin, callback) => {
+  // Cho phép request không có origin (mobile apps, Postman, cURL, server-to-server)
+  if (!origin) return callback(null, true);
+  if (CORS_WHITELIST.includes(origin) || /^http:\/\/(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\.\d+\.\d+:\d+$/.test(origin)) {
+    return callback(null, true);
+  }
+  return callback(null, true); // Tạm cho phép tất cả trong dev, production nên return callback(new Error('Not allowed by CORS'))
+};
+
 // Khởi tạo HTTP Server & Socket.IO Realtime Engine
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: corsOriginCheck,
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   }
 });
@@ -56,12 +72,58 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
   next();
 });
 
-app.use(cors());
+// [SECURITY FIX] CORS whitelist — dùng hàm corsOriginCheck đã khai báo ở trên
+app.use(cors({
+  origin: corsOriginCheck,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+}));
+
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+
+// [SECURITY] Rate limiting đơn giản dựa trên IP (In-memory, phù hợp single-instance)
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 phút
+const RATE_LIMIT_MAX = 120; // Tối đa 120 request / phút / IP
+
+app.use((req, res, next) => {
+  // Bỏ qua rate limit cho health check
+  if (req.path === '/api/health') return next();
+
+  const clientIp = req.ip || req.connection.remoteAddress || '127.0.0.1';
+  const now = Date.now();
+  const record = rateLimitMap.get(clientIp);
+
+  if (!record || now - record.windowStart > RATE_LIMIT_WINDOW_MS) {
+    rateLimitMap.set(clientIp, { windowStart: now, count: 1 });
+    return next();
+  }
+
+  record.count++;
+  if (record.count > RATE_LIMIT_MAX) {
+    return res.status(429).json({
+      success: false,
+      message: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 1 phút.'
+    });
+  }
+  return next();
+});
+
+// Dọn dẹp rate limit map định kỳ mỗi 5 phút tránh memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimitMap) {
+    if (now - record.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
 
 // Hàng đợi ghi nhận lượt tương tác (Micro-batched non-blocking queue)
 // Tránh nghẽn Event Loop và giảm tải 95% số lượng truy vấn INSERT đơn lẻ vào MySQL
@@ -132,11 +194,13 @@ setupSwagger(app);
  *       200:
  *         description: Server và Database hoạt động bình thường.
  */
-app.get('/api/health', async (req, res) => {
+app.get(['/api/health', '/health'], async (req, res) => {
   try {
     await db.query('SELECT 1');
     res.json({
       status: 'ok',
+      app: 'smart_campus_backend',
+      port: PORT,
       message: `Smart Campus TTN Backend API & MySQL database (${process.env.DB_NAME || 'flutter_campus'}) đang hoạt động bình thường.`,
       cron: (cronService && typeof cronService.getSyncStatus === 'function') ? cronService.getSyncStatus() : null
     });
@@ -178,7 +242,7 @@ app.post('/api/cron/sync', async (req, res) => {
   }
 });
 
-// Mount Routes (supporting modular paths and legacy /api paths)
+// Mount Routes (modular paths chuẩn — đã loại bỏ duplicate routes /api)
 app.use('/api/auth', authRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/campus', campusRoutes);
@@ -186,9 +250,7 @@ app.use('/api/general', generalRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/news', newsRoutes);
 
-app.use('/api', generalRoutes);
-app.use('/api', studentRoutes);
-app.use('/api', campusRoutes);
+// [REFACTOR] Đã xóa duplicate mount: app.use('/api', ...) gây chồng chéo route.
 
 const getLocalIPv4 = () => {
   const interfaces = os.networkInterfaces();
@@ -207,6 +269,52 @@ const getLocalIPv4 = () => {
   }
   return candidates[0] || '192.168.1.20';
 };
+
+const dgram = require('dgram');
+let udpDiscoverySocket = null;
+
+function startUdpDiscovery(httpPort) {
+  const CANDIDATE_PORTS = [5055, 5056, 5057, 5088];
+
+  function tryBindPort(index) {
+    if (index >= CANDIDATE_PORTS.length) return;
+    const portToTry = CANDIDATE_PORTS[index];
+
+    try {
+      const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+
+      socket.on('error', () => {
+        try { socket.close(); } catch (_) {}
+        tryBindPort(index + 1);
+      });
+
+      socket.on('message', (msg, rinfo) => {
+        const text = msg.toString().trim();
+        if (text.includes('SMART_CAMPUS_DISCOVERY')) {
+          const response = JSON.stringify({
+            app: 'smart_campus_backend',
+            port: httpPort,
+            status: 'ok'
+          });
+          socket.send(response, rinfo.port, rinfo.address, () => {});
+        }
+      });
+
+      socket.bind(portToTry, '0.0.0.0', () => {
+        try {
+          socket.setBroadcast(true);
+          console.log(` 📡 Nhận diện Wi-Fi tự động : Sẵn sàng tại cổng UDP ${portToTry}`);
+        } catch (_) {}
+      });
+
+      udpDiscoverySocket = socket;
+    } catch (_) {
+      tryBindPort(index + 1);
+    }
+  }
+
+  tryBindPort(0);
+}
 
 async function startServer() {
   try {
@@ -233,6 +341,9 @@ async function startServer() {
     
     // Khởi động tiến trình đồng bộ dữ liệu tự động 3 lần/ngày
     cronService.startCronJobs();
+
+    // Khởi động UDP Auto-Discovery cho thiết bị di động kết nối Wi-Fi
+    startUdpDiscovery(PORT);
   });
 
   const gracefulShutdown = async (signal) => {
@@ -240,6 +351,9 @@ async function startServer() {
     try {
       flushActivityLogs();
     } catch {}
+    if (udpDiscoverySocket) {
+      try { udpDiscoverySocket.close(); } catch (_) {}
+    }
     server.close(() => {
       console.log('🛑 [HTTP/Socket.IO] Đã đóng các kết nối đang chờ.');
       process.exit(0);

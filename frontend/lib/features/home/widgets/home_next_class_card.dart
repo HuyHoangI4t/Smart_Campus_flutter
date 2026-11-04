@@ -287,7 +287,7 @@ class HomeNextClassCard extends ConsumerWidget {
                           ),
                         ),
                         child: Text(
-                          timeDisplay.startsWith('Tiết') ? timeDisplay : 'Tiết $timeDisplay',
+                          timeDisplay.trim().startsWith('Tiết') ? timeDisplay.trim() : 'Tiết ${timeDisplay.trim()}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 11.5,

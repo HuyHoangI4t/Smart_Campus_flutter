@@ -3,19 +3,24 @@ import 'package:flutter/foundation.dart';
 class ApiEndpoints {
   ApiEndpoints._();
 
-  // IP máy tính chủ trên mạng LAN / Wi-Fi (IPv4 hiện tại: 10.196.33.54)
-  static const String lanHost = '10.196.33.54';
   static const int port = 5000;
 
-  // URL cho máy thật (Wi-Fi), máy thật (USB adb reverse), giả lập, web
-  static const String lanBaseUrl = 'http://$lanHost:$port/api';
+  // 1. CẮM DÂY MẶC ĐỊNH (USB ADB Reverse & Localhost)
+  // Khi cắm dây USB (adb reverse tcp:5000 tcp:5000), máy thật Android truy cập trực tiếp qua 127.0.0.1
   static const String localhostBaseUrl = 'http://127.0.0.1:$port/api';
+  // Khi chạy trên máy ảo Android Emulator
   static const String emulatorBaseUrl = 'http://10.0.2.2:$port/api';
 
-  // Mặc định kết nối trực tiếp đến IP máy tính qua Wi-Fi
-  static const String defaultBaseUrl = lanBaseUrl;
+  // Tương thích ngược:
+  static const String lanBaseUrl = localhostBaseUrl;
+  static const String lanHost = '127.0.0.1';
+
+  // Mặc định toàn bộ logic là cắm dây (127.0.0.1:5000)
+  static const String defaultCableBaseUrl = localhostBaseUrl;
+  static const String defaultBaseUrl = defaultCableBaseUrl;
   static const String webBaseUrl = localhostBaseUrl;
 
+  // URL tùy chỉnh / Tự động nhận diện khi dùng Wi-Fi
   static String? customBaseUrl;
 
   static String get activeBaseUrl {
@@ -29,7 +34,8 @@ class ApiEndpoints {
     if (defaultTargetPlatform == TargetPlatform.windows) {
       return localhostBaseUrl;
     }
-    return defaultBaseUrl;
+    // Mặc định thiết bị di động (Android / iOS): Ưu tiên cắm dây 127.0.0.1:5000
+    return defaultCableBaseUrl;
   }
 
   // Auth Endpoints

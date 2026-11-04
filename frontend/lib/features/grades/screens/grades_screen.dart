@@ -16,12 +16,12 @@ class GradesScreen extends ConsumerStatefulWidget {
 }
 
 class _GradesScreenState extends ConsumerState<GradesScreen> {
-  final List<String> _semesters = [
+  // [DATA-FLOW FIX] Đồng bộ danh sách học kỳ động từ API backend thay vì hardcode tĩnh
+  static const List<String> _fallbackSemesters = [
     'Tất cả',
     'HK1 (2026)',
     'HK2 (2025)',
     'HK1 (2025)',
-    'HK2 (2024)',
   ];
 
   @override
@@ -115,9 +115,9 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
 
                   // 6. GRADE ITEMS (WIREFRAME SKELETON / EMPTY STATE)
                   if (gradesState.isLoading) ...[
-                    const WireframeScheduleCard(),
-                    const WireframeScheduleCard(),
-                    const WireframeScheduleCard(),
+                    const WireframeGradeDetailItem(),
+                    const WireframeGradeDetailItem(),
+                    const WireframeGradeDetailItem(),
                   ] else if (items.isEmpty) ...[
                     const WireframeEmptyState(
                       icon: Icons.school_outlined,
@@ -363,7 +363,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
   Widget _buildSemesterFilter(GradesState gradesState) {
     final semesters = gradesState.availableSemesters.isNotEmpty
         ? gradesState.availableSemesters
-        : _semesters;
+        : _fallbackSemesters;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,

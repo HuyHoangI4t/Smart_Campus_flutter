@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/nav_header.dart';
+import '../../../core/widgets/wireframe_widgets.dart';
 import '../models/grade_model.dart';
 import '../providers/grades_provider.dart';
 
@@ -17,12 +18,12 @@ class _GradesDetailScreenState extends ConsumerState<GradesDetailScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedSemester = 'Tất cả';
 
-  final List<String> _semesters = [
+  // [DATA-FLOW FIX] Dự phòng khi backend chưa phản hồi
+  static const List<String> _fallbackSemesters = [
     'Tất cả',
     'HK1 (2026)',
     'HK2 (2025)',
     'HK1 (2025)',
-    'HK2 (2024)',
   ];
 
   @override
@@ -160,10 +161,10 @@ class _GradesDetailScreenState extends ConsumerState<GradesDetailScreen> {
                   height: 34,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: (gradesState.availableSemesters.isNotEmpty ? gradesState.availableSemesters : _semesters).length,
+                    itemCount: (gradesState.availableSemesters.isNotEmpty ? gradesState.availableSemesters : _fallbackSemesters).length,
                     separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (context, index) {
-                      final sems = gradesState.availableSemesters.isNotEmpty ? gradesState.availableSemesters : _semesters;
+                      final sems = gradesState.availableSemesters.isNotEmpty ? gradesState.availableSemesters : _fallbackSemesters;
                       final sem = sems[index];
                       final isSelected = sem == _selectedSemester;
                       return GestureDetector(
@@ -245,25 +246,32 @@ class _GradesDetailScreenState extends ConsumerState<GradesDetailScreen> {
 
           // ─── 3. DETAILED GRADE CARDS LIST ───
           Expanded(
-            child: filtered.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.inbox_outlined, size: 48, color: Color(0xFFCBD5E1)),
-                        SizedBox(height: 10),
-                        Text(
-                          'Không tìm thấy học phần',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textForeground),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Vui lòng thử từ khóa tìm kiếm hoặc học kỳ khác',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
+            child: gradesState.isLoading
+                ? ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
+                    itemCount: 6,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (_, _) => const WireframeGradeDetailItem(),
                   )
+                : filtered.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.inbox_outlined, size: 48, color: Color(0xFFCBD5E1)),
+                            SizedBox(height: 10),
+                            Text(
+                              'Không tìm thấy học phần',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textForeground),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Vui lòng thử từ khóa tìm kiếm hoặc học kỳ khác',
+                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
                     itemCount: filtered.length,

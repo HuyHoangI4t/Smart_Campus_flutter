@@ -3,7 +3,8 @@ const bcrypt = require('bcryptjs');
 const { invalidateMapCache } = require('./campusController');
 
 const statsCache = new Map();
-const STATS_CACHE_TTL = 3000;
+// [PERF] Tăng TTL từ 3s lên 30s để giảm tải DB khi nhiều admin xem dashboard
+const STATS_CACHE_TTL = 30000;
 
 const invalidateAdminStatsCache = () => {
   statsCache.clear();

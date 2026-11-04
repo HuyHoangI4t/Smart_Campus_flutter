@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # 1. Cơ sở dữ liệu MySQL 8.0
+  mysql_db:
+    image: mysql:8.0
+    container_name: smartcampus_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ''
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+      MYSQL_DATABASE: flutter_campus
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - campus_net
+
+  # 2. Máy chủ Backend Node.js Express API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartcampus_backend
+    restart: always
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      DB_HOST: mysql_db
+      DB_USER: root
+      DB_PASSWORD: ''
+      DB_NAME: flutter_campus
+      DB_PORT: 3306
+    ports:
+      - '5000:5000'
+    depends_on:
+      - mysql_db
+    networks:
+      - campus_net
+
+  # 3. Web Admin Portal
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: smartcampus_admin
+    restart: always
+    environment:
+      PORT: 5001
+      API_URL: http://localhost:5000
+    ports:
+      - '5001:5001'
+    depends_on:
+      - backend
+    networks:
+      - campus_net
+
+volumes:
+  mysql_data:
+
+networks:
+  campus_net:
+    driver: bridge

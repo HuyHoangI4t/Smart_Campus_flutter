@@ -21,8 +21,9 @@ const NotificationsModule = {
       }
 
       if (!data || !data.success) {
-        const res = await fetch('/api/campus/notifications');
-        data = await res.json().catch(() => ({ success: false }));
+        if (window.AdminAPI && typeof window.AdminAPI.request === 'function') {
+          data = await window.AdminAPI.request('/api/campus/notifications');
+        }
       }
 
       this.notifications = (data && (data.data || data.notifications)) || [];

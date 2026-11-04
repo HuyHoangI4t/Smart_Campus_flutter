@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/constants/api_endpoints.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/widgets/nav_header.dart';
+import '../providers/feedback_provider.dart';
 
 class FeedbackScreen extends ConsumerStatefulWidget {
   const FeedbackScreen({super.key});
@@ -17,9 +16,8 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
   final _formKey = GlobalKey<FormState>();
   final _contentController = TextEditingController();
   String _category = 'Cơ sở vật chất';
-  bool _isSubmitting = false;
 
-  final List<String> _categories = [
+  final List<String> _categories = const [
     'Cơ sở vật chất',
     'Chất lượng đào tạo',
     'Dịch vụ sinh viên',
@@ -146,43 +144,37 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
     );
   }
 
-  Future<void> _submitFeedback() async {
+  Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isSubmitting = true);
+    final content = _contentController.text.trim();
+    final success = await ref.read(feedbackProvider.notifier).submitFeedback(
+          category: _category,
+          content: content,
+        );
 
-    try {
-      final dio = ref.read(dioProvider);
-      await dio.post(
-        ApiEndpoints.feedback,
-        data: {
-          'title': '[$_category] Góp ý từ ứng dụng sinh viên',
-          'category': _category,
-          'content': _contentController.text.trim(),
-          'rating': 5,
-        },
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
+    if (success) {
       _showFeedbackPopup(
         isSuccess: true,
         title: 'Gửi phản hồi thành công',
         message: 'Cảm ơn bạn! Ý kiến đóng góp đã được tiếp nhận và chuyển đến phòng ban phụ trách để xem xét xử lý trong thời gian sớm nhất.',
       );
-    } catch (_) {
-      if (!mounted) return;
+    } else {
       _showFeedbackPopup(
         isSuccess: true,
         title: 'Đã ghi nhận ý kiến',
         message: 'Ý kiến đóng góp của bạn đã được lưu lại thành công trên hệ thống cơ sở dữ liệu của Nhà trường.',
       );
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final feedbackState = ref.watch(feedbackProvider);
+    final isSubmitting = feedbackState.isSubmitting;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
@@ -257,8 +249,8 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
 
                       // Nút gửi
                       ElevatedButton(
-                        onPressed: _isSubmitting ? null : _submitFeedback,
-                        child: _isSubmitting
+                        onPressed: isSubmitting ? null : _handleSubmit,
+                        child: isSubmitting
                             ? const SizedBox(
                                 width: 22,
                                 height: 22,

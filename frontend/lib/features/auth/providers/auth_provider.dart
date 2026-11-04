@@ -47,7 +47,15 @@ class AuthNotifier extends Notifier<AuthState> {
       final isGuest = await storage.isGuestMode();
 
       if (isGuest) {
-        state = AuthState(user: UserModel.guest(), isLoading: false);
+        UserModel guestUser = UserModel.guest();
+        final userJson = await storage.getUserData();
+        if (userJson != null) {
+          try {
+            final Map<String, dynamic> data = jsonDecode(userJson);
+            guestUser = UserModel.fromJson(data);
+          } catch (_) {}
+        }
+        state = AuthState(user: guestUser, isLoading: false);
         return;
       }
 
@@ -210,26 +218,42 @@ class AuthNotifier extends Notifier<AuthState> {
     state = const AuthState(user: null, isLoading: false);
   }
 
-  Future<void> updateUser(UserModel updatedUser) async {
+  Future<bool> updateUser(UserModel updatedUser) async {
     final storage = ref.read(storageServiceProvider);
-    try {
-      await _dio.put(
-        ApiEndpoints.updateProfile,
-        data: {
-          'mssv': updatedUser.studentId,
-          'fullName': updatedUser.fullName,
-          'ho_ten': updatedUser.fullName,
-          'email': updatedUser.email,
-          'phone': updatedUser.phone,
-          'so_dien_thoai': updatedUser.phone,
-          'lop': updatedUser.studentClass,
-          'khoa': updatedUser.faculty,
-          'avatar': updatedUser.avatarUrl,
-        },
-      );
-    } catch (_) {}
+    bool apiSuccess = false;
+
+    // Chỉ gọi API backend nếu không phải khách tham quan và có studentId hợp lệ
+    if (!updatedUser.isGuest && updatedUser.studentId.isNotEmpty && updatedUser.studentId != 'GUEST') {
+      try {
+        final res = await _dio.put(
+          ApiEndpoints.updateProfile,
+          data: {
+            'mssv': updatedUser.studentId,
+            'student_id': updatedUser.studentId,
+            'fullName': updatedUser.fullName,
+            'ho_ten': updatedUser.fullName,
+            'email': updatedUser.email,
+            'phone': updatedUser.phone,
+            'so_dien_thoai': updatedUser.phone,
+            'lop': updatedUser.studentClass,
+            'khoa': updatedUser.faculty,
+            'avatar': updatedUser.avatarUrl,
+            'avatar_url': updatedUser.avatarUrl,
+            'avatarUrl': updatedUser.avatarUrl,
+          },
+        );
+        if (res.statusCode == 200) {
+          apiSuccess = true;
+        }
+      } catch (_) {}
+    } else {
+      apiSuccess = true;
+    }
+
+    // Luôn lưu vào local storage để trải nghiệm người dùng tức thì & offline
     await storage.saveUserData(jsonEncode(updatedUser.toJson()));
     state = state.copyWith(user: updatedUser);
+    return apiSuccess;
   }
 }
 

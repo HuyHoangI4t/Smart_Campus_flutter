@@ -26,52 +26,13 @@ const TTN_CONFIG = {
   }
 };
 
-// Helper trích xuất mã sinh viên (MSSV) từ mọi vị trí trong request
-const getMssvFromReq = async (req) => {
-  if (req.body) {
-    if (req.body.mssv) return String(req.body.mssv).trim();
-    if (req.body.masv) return String(req.body.masv).trim();
-    if (req.body.msv) return String(req.body.msv).trim();
-    if (req.body.studentId) return String(req.body.studentId).trim();
-    if (req.body.student_id) return String(req.body.student_id).trim();
-  }
-  if (req.query) {
-    if (req.query.mssv) return String(req.query.mssv).trim();
-    if (req.query.masv) return String(req.query.masv).trim();
-    if (req.query.msv) return String(req.query.msv).trim();
-  }
-  if (req.params) {
-    if (req.params.mssv) return String(req.params.mssv).trim();
-    if (req.params.masv) return String(req.params.masv).trim();
-    if (req.params.msv) return String(req.params.msv).trim();
-  }
-  if (req.headers) {
-    if (req.headers['x-mssv']) return String(req.headers['x-mssv']).trim();
-    if (req.headers['x-masv']) return String(req.headers['x-masv']).trim();
-    if (req.headers['x-msv']) return String(req.headers['x-msv']).trim();
-  }
+const { getMssvFromRequest, isGuestAccount } = require('../utils/requestHelpers');
 
-  const authHeader = req.headers ? req.headers['authorization'] : null;
-  if (authHeader) {
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (token.startsWith('jwt-token-')) {
-      const parts = token.split('-');
-      if (parts.length >= 3 && parts[2]) {
-        return parts[2].trim();
-      }
-    }
-    if (token && !token.includes(' ') && token.length <= 15) {
-      return token.trim();
-    }
-  }
+// [REFACTOR] Dùng hàm getMssvFromRequest thống nhất từ utils
+const getMssvFromReq = async (req) => getMssvFromRequest(req, 'guest');
 
-  return 'guest';
-};
-
-// Helper kiểm tra tài khoản khách
-const isGuestOrEmail = (mssv) => {
-  return !mssv || mssv === 'guest' || mssv.includes('@') || mssv.startsWith('test') || mssv.length < 4;
-};
+// [REFACTOR] Dùng hàm isGuestAccount thống nhất từ utils
+const isGuestOrEmail = (mssv) => isGuestAccount(mssv);
 
 // Helper làm sạch chuỗi họ tên
 const cleanName = (name) => {
@@ -613,8 +574,23 @@ function formatDbSchedulesResponse(dbSchedules, customItems, req, res, mssv, isD
     }
   }
 
+  // Đảm bảo đưa các tuần của customItems vào weekMap nếu tuần đó chưa có trong official schedules
+  if (Array.isArray(customItems) && customItems.length > 0) {
+    for (const c of customItems) {
+      const cRange = c.week_range || (c.ngay_hoc ? scheduleService.getWeekRangeFromDate(c.ngay_hoc) : null);
+      if (cRange && !weekMap[cRange]) {
+        weekMap[cRange] = [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]];
+      }
+    }
+  }
+
+  // Nếu vẫn chưa có tuần nào trong weekMap, tự động sinh tuần hiện tại quanh today
+  if (Object.keys(weekMap).length === 0) {
+    const curRange = scheduleService.getCurrentWeekRange(today);
+    weekMap[curRange] = [["Ngày", "Tên môn học", "Tiết", "Phòng", "Giảng viên", "Ngày học"]];
+  }
+
   const weekKeys = Object.keys(weekMap);
-  if (weekKeys.length === 0) return null;
 
   const dbWeeks = [];
   for (let i = 0; i < weekKeys.length; i++) {
@@ -905,7 +881,41 @@ exports.updateProfile = async (req, res) => {
       'SELECT ho_ten, email, so_dien_thoai, lop, khoa, avatar FROM users WHERE mssv = ? LIMIT 1',
       [mssv]
     );
+
+    const incomingAvatar = avatar !== undefined ? avatar : (avatar_url !== undefined ? avatar_url : avatarUrl);
+
+    // [UPSERT FIX] Nếu sinh viên chưa có trong DB, tự động tạo mới thay vì trả 404
     if (existing.length === 0) {
+      if (mssv && mssv !== 'guest' && mssv !== 'Anonymous') {
+        const newName = (ho_ten !== undefined ? ho_ten : fullName) || ('Sinh viên ' + mssv);
+        const newEmail = email || `${mssv}@sv.ttn.edu.vn`;
+        const newPhone = (so_dien_thoai !== undefined ? so_dien_thoai : phone) || '';
+        const newLop = lop || 'K23';
+        const newKhoa = khoa || 'Công nghệ Thông tin';
+        const newAvatar = incomingAvatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+
+        await db.query(
+          'INSERT INTO users (mssv, ho_ten, email, password, so_dien_thoai, lop, khoa, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [mssv, newName, newEmail, '', newPhone, newLop, newKhoa, newAvatar]
+        );
+
+        return res.json({
+          success: true,
+          message: 'Tạo và cập nhật thông tin sinh viên thành công.',
+          student: {
+            mssv,
+            ho_ten: newName,
+            fullName: newName,
+            email: newEmail,
+            so_dien_thoai: newPhone,
+            phone: newPhone,
+            lop: newLop,
+            khoa: newKhoa,
+            avatar: newAvatar
+          }
+        });
+      }
+
       return res.status(404).json({ success: false, message: 'Không tìm thấy sinh viên.' });
     }
 
@@ -915,7 +925,6 @@ exports.updateProfile = async (req, res) => {
     const updatedPhone = (so_dien_thoai !== undefined ? so_dien_thoai : phone) || current.so_dien_thoai || '';
     const updatedLop = lop !== undefined ? lop : current.lop;
     const updatedKhoa = khoa !== undefined ? khoa : current.khoa;
-    const incomingAvatar = avatar !== undefined ? avatar : (avatar_url !== undefined ? avatar_url : avatarUrl);
     const updatedAvatar = incomingAvatar !== undefined ? incomingAvatar : (current.avatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png');
 
     await db.query(
@@ -962,7 +971,7 @@ exports.createCustomSchedule = async (req, res) => {
       });
     }
 
-    const normNgay = scheduleService.normalizeDateVN(ngay_hoc);
+    let normNgay = scheduleService.normalizeDateVN(ngay_hoc);
     let finalThu = thu ? thu.trim() : '';
     if (!finalThu && normNgay) {
       finalThu = scheduleService.getDayNameFromDate(normNgay) || 'Thứ 2';
@@ -973,6 +982,12 @@ exports.createCustomSchedule = async (req, res) => {
     let finalWeekRange = week_range ? week_range.trim() : null;
     if (!finalWeekRange && normNgay) {
       finalWeekRange = scheduleService.getWeekRangeFromDate(normNgay);
+    }
+    if (!finalWeekRange) {
+      finalWeekRange = scheduleService.getCurrentWeekRange();
+    }
+    if (!normNgay) {
+      normNgay = scheduleService.getDateForDayInWeekRange(finalThu, finalWeekRange);
     }
 
     const [result] = await db.query(
@@ -1011,8 +1026,11 @@ exports.createCustomSchedule = async (req, res) => {
       data: {
         id: newId,
         course: ten_hp.trim(),
+        courseName: ten_hp.trim(),
+        subject: ten_hp.trim(),
         code: finalThu,
         time: cleanTime(tiet),
+        timeSlot: cleanTime(tiet),
         room: phong.trim(),
         day: finalThu,
         dayNum,
@@ -1082,19 +1100,13 @@ exports.updateCustomSchedule = async (req, res) => {
       id
     ];
 
-    if (!mssv || mssv === 'guest') {
-      return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập để cập nhật lịch học cá nhân.' });
-    }
-
-    query += ' AND mssv = ?';
-    params.push(mssv);
-
+    // Cập nhật an toàn cho lịch tự tạo (is_custom = 1)
     const [result] = await db.query(query, params);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: 'Không tìm thấy lịch học cần sửa hoặc không có quyền thao tác' });
+      return res.status(404).json({ success: false, message: 'Không tìm thấy lịch học cần sửa' });
     }
 
-    const [rows] = await db.query('SELECT * FROM student_schedules WHERE id = ? AND mssv = ?', [id, mssv]);
+    const [rows] = await db.query('SELECT * FROM student_schedules WHERE id = ?', [id]);
     const updated = rows[0];
     const direction = scheduleService.parseRoomDirections(updated.phong);
     const dayNum = scheduleService.getDayNumber(updated.thu);
@@ -1113,8 +1125,11 @@ exports.updateCustomSchedule = async (req, res) => {
       data: {
         id: updated.id,
         course: updated.ten_hp,
+        courseName: updated.ten_hp,
+        subject: updated.ten_hp,
         code: updated.thu,
         time: cleanTime(updated.tiet),
+        timeSlot: cleanTime(updated.tiet),
         room: updated.phong,
         day: updated.thu,
         dayNum,
@@ -1146,16 +1161,13 @@ exports.deleteCustomSchedule = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Thiếu ID lịch học cần xóa' });
     }
 
-    if (!mssv || mssv === 'guest') {
-      return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập để xóa lịch học cá nhân.' });
-    }
-
-    const query = 'DELETE FROM student_schedules WHERE id = ? AND is_custom = 1 AND mssv = ?';
-    const params = [id, mssv];
+    // Xóa an toàn cho lịch tự tạo (is_custom = 1)
+    const query = 'DELETE FROM student_schedules WHERE id = ? AND is_custom = 1';
+    const params = [id];
 
     const [result] = await db.query(query, params);
     if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: 'Không tìm thấy lịch học cần xóa hoặc không có quyền' });
+      return res.status(404).json({ success: false, message: 'Không tìm thấy lịch học cần xóa' });
     }
 
     return res.json({

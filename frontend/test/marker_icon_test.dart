@@ -38,7 +38,7 @@ Future<Uint8List> generateMarkerPng({
   required IconData icon,
   required Color backgroundColor,
   required Color iconColor,
-  double size = 80.0,
+  double size = 96.0,
   bool isSelected = false,
   bool isNavigating = false,
 }) async {
@@ -61,7 +61,7 @@ Future<Uint8List> generateMarkerPng({
   canvas.drawCircle(center, radius, borderPaint);
 
   // 3. Inner circle
-  final borderWidth = isHighlighted ? 4.5 : 3.0;
+  final borderWidth = isHighlighted ? 5.0 : 3.5;
   final innerPaint = Paint()
     ..style = PaintingStyle.fill
     ..color = backgroundColor;
@@ -72,7 +72,7 @@ Future<Uint8List> generateMarkerPng({
   textPainter.text = TextSpan(
     text: String.fromCharCode(icon.codePoint),
     style: TextStyle(
-      fontSize: size * 0.44,
+      fontSize: size * 0.50,
       fontFamily: icon.fontFamily,
       package: icon.fontPackage,
       color: iconColor,

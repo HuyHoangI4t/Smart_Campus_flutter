@@ -5,23 +5,42 @@ import '../models/schedule_model.dart';
 class ScheduleAddCustomModal extends StatefulWidget {
   final Function(ScheduleItem) onSave;
   final List<Map<String, String>>? days;
+  final ScheduleItem? initialItem;
+  final VoidCallback? onDelete;
+  final String? weekRange;
+  final int? initialDayNum;
 
   const ScheduleAddCustomModal({
     super.key,
     required this.onSave,
     this.days,
+    this.initialItem,
+    this.onDelete,
+    this.weekRange,
+    this.initialDayNum,
   });
 
   static Future<void> show(
     BuildContext context, {
     required Function(ScheduleItem) onSave,
     List<Map<String, String>>? days,
+    ScheduleItem? initialItem,
+    VoidCallback? onDelete,
+    String? weekRange,
+    int? initialDayNum,
   }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => ScheduleAddCustomModal(onSave: onSave, days: days),
+      builder: (ctx) => ScheduleAddCustomModal(
+        onSave: onSave,
+        days: days,
+        initialItem: initialItem,
+        onDelete: onDelete,
+        weekRange: weekRange,
+        initialDayNum: initialDayNum,
+      ),
     );
   }
 
@@ -41,6 +60,7 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
   String _selectedTime = 'Tiết 7-10';
   bool _periodDropdownOpen = false;
   bool _isCustomTime = false;
+  bool _isSaving = false;
   final TextEditingController _customTimeController = TextEditingController();
   late List<Map<String, String>> _weekDays;
 
@@ -125,8 +145,47 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
     }
     final now = DateTime.now();
     final todayIdx = (now.weekday - 1).clamp(0, _weekDays.length - 1);
-    _selectedDayIndex = todayIdx;
+    if (widget.initialDayNum != null) {
+      final targetIdx = widget.initialDayNum == 1 ? 6 : (widget.initialDayNum! - 2);
+      _selectedDayIndex = targetIdx.clamp(0, _weekDays.length - 1);
+    } else {
+      _selectedDayIndex = todayIdx;
+    }
     _dateInputController.text = _weekDays[_selectedDayIndex]['fullDate']!;
+
+    final initial = widget.initialItem;
+    if (initial != null) {
+      _courseController.text = initial.courseName;
+      _roomController.text = initial.room;
+      _lecturerController.text = initial.lecturer ?? '';
+      _noteController.text = initial.note ?? '';
+      if (initial.type != null && initial.type!.isNotEmpty) {
+        _selectedType = initial.type!;
+      }
+
+      final matches = _periodOptions.any((p) => p['label'] == initial.timeSlot);
+      if (matches) {
+        _selectedTime = initial.timeSlot;
+        _isCustomTime = false;
+      } else {
+        _isCustomTime = true;
+        _customTimeController.text = initial.timeSlot;
+      }
+
+      int foundIdx = -1;
+      if (initial.date != null && initial.date!.isNotEmpty) {
+        foundIdx = _weekDays.indexWhere((w) => w['fullDate'] == initial.date || w['date'] == initial.date);
+      }
+      if (foundIdx == -1) {
+        foundIdx = _weekDays.indexWhere((w) => initial.matchesDay(w['day'] ?? ''));
+      }
+      if (foundIdx != -1) {
+        _selectedDayIndex = foundIdx;
+        _dateInputController.text = _weekDays[_selectedDayIndex]['fullDate']!;
+      } else if (initial.date != null && initial.date!.isNotEmpty) {
+        _dateInputController.text = initial.date!;
+      }
+    }
   }
 
   @override
@@ -147,21 +206,30 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
     });
   }
 
-  void _saveSchedule() {
+  void _saveSchedule() async {
+    if (_isSaving) return;
     final course = _courseController.text.trim();
     final room = _roomController.text.trim();
     if (course.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập tên môn học')),
+        const SnackBar(
+          content: Text('Vui lòng nhập tên môn học hoặc hoạt động'),
+          backgroundColor: AppColors.danger,
+        ),
       );
       return;
     }
     if (room.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập phòng học')),
+        const SnackBar(
+          content: Text('Vui lòng nhập phòng học hoặc địa điểm'),
+          backgroundColor: AppColors.danger,
+        ),
       );
       return;
     }
+
+    setState(() => _isSaving = true);
 
     final time = _isCustomTime && _customTimeController.text.isNotEmpty
         ? _customTimeController.text.trim()
@@ -169,12 +237,14 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
 
     final selectedDay = _weekDays[_selectedDayIndex];
     final selectedDayName = selectedDay['day']!;
-    final selectedDate = selectedDay['fullDate']!;
+    final selectedDate = _dateInputController.text.trim().isNotEmpty
+        ? _dateInputController.text.trim()
+        : selectedDay['fullDate']!;
     final selectedDateShort = selectedDay['date']!;
     final calculatedDayNum = ScheduleItem.dayStrToNum(selectedDayName);
 
     final item = ScheduleItem(
-      id: DateTime.now().millisecondsSinceEpoch % 100000,
+      id: widget.initialItem?.id ?? (DateTime.now().millisecondsSinceEpoch % 100000),
       courseName: course,
       room: room,
       dayOfWeek: selectedDayName,
@@ -186,10 +256,17 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
       note: _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : null,
       type: _selectedType,
       isCustom: true,
+      weekRange: widget.weekRange ?? widget.initialItem?.weekRange,
     );
 
-    widget.onSave(item);
-    Navigator.of(context).pop();
+    try {
+      await widget.onSave(item);
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        Navigator.of(context).pop();
+      }
+    }
   }
 
   @override
@@ -219,30 +296,36 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
                     Container(
                       width: 38,
                       height: 38,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFEF3C7),
+                      decoration: BoxDecoration(
+                        color: widget.initialItem != null ? const Color(0xFFEFF6FF) : const Color(0xFFFEF3C7),
                         shape: BoxShape.circle,
                       ),
-                      child: const Center(
-                        child: Icon(Icons.add_circle_outline, color: Color(0xFFD97706), size: 20),
+                      child: Center(
+                        child: Icon(
+                          widget.initialItem != null ? Icons.edit_calendar_outlined : Icons.add_circle_outline,
+                          color: widget.initialItem != null ? AppColors.primary : const Color(0xFFD97706),
+                          size: 20,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Thêm lịch học / Thực hành',
-                          style: TextStyle(
+                          widget.initialItem != null ? 'Chỉnh sửa lịch học' : 'Thêm lịch học / Thực hành',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
                             color: AppColors.textForeground,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          'Lịch thực hành đột xuất, học bù, kiểm tra',
-                          style: TextStyle(
+                          widget.initialItem != null
+                              ? 'Cập nhật môn học, thời gian, phòng học'
+                              : 'Lịch thực hành đột xuất, học bù, kiểm tra',
+                          style: const TextStyle(
                             fontSize: 11.5,
                             color: Color(0xFF64748B),
                           ),
@@ -328,7 +411,7 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
 
                 // 8. Action Buttons
                 ElevatedButton(
-                  onPressed: _saveSchedule,
+                  onPressed: _isSaving ? null : _saveSchedule,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -336,18 +419,41 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     elevation: 0,
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_circle_outline, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        'Lưu vào thời khóa biểu',
-                        style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(widget.initialItem != null ? Icons.check_circle_outline : Icons.add_circle_outline, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.initialItem != null ? 'Lưu thay đổi' : 'Lưu vào thời khóa biểu',
+                              style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
                 ),
+                if (widget.initialItem != null && widget.onDelete != null) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: widget.onDelete,
+                    icon: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFDC2626)),
+                    label: const Text(
+                      'Xóa lịch học này',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFFDC2626)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFDC2626),
+                      side: const BorderSide(color: Color(0xFFFECACA), width: 1.2),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Center(
                   child: TextButton(
@@ -560,9 +666,11 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
                   const SizedBox(width: 4),
                   GestureDetector(
                     onTap: () {
+                      final now = DateTime.now();
+                      final todayIdx = (now.weekday - 1).clamp(0, _weekDays.length - 1);
                       setState(() {
-                        _selectedDayIndex = 0; // Thứ 2
-                        _dateInputController.text = _weekDays[0]['fullDate']!;
+                        _selectedDayIndex = todayIdx;
+                        _dateInputController.text = _weekDays[todayIdx]['fullDate']!;
                       });
                     },
                     child: Container(

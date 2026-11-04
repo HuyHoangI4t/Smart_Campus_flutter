@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const campusController = require('../controllers/campusController');
 const generalController = require('../controllers/generalController');
-const { optionalAuth } = require('../middlewares/authMiddleware');
+const { optionalAuth, verifyToken, requireRole } = require('../middlewares/authMiddleware');
 
 /**
  * @swagger
@@ -169,7 +169,8 @@ router.get('/sos/config', campusController.getSosConfig);
  *         description: Đã tạo thông báo thành công
  */
 router.get('/notifications', generalController.getNotifications);
-router.post('/notifications', generalController.createNotification);
+// [SECURITY FIX] Thêm auth cho tạo/xóa thông báo — trước đây ai cũng tạo được
+router.post('/notifications', verifyToken, requireRole('admin'), generalController.createNotification);
 
 /**
  * @swagger
@@ -188,7 +189,7 @@ router.post('/notifications', generalController.createNotification);
  *       200:
  *         description: Đã xóa thông báo
  */
-router.delete('/notifications/:id', generalController.deleteNotification);
+router.delete('/notifications/:id', verifyToken, requireRole('admin'), generalController.deleteNotification);
 
 // Cổng ra vào khuôn viên trường
 router.get('/gates', campusController.getCampusGates);

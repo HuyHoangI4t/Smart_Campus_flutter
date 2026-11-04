@@ -300,11 +300,59 @@ async function fetchNewsFromRss() {
         });
       }
     });
+
+    // Bổ sung nhanh ảnh bìa cho các bài viết mà RSS không chèn thẻ <img> trong description
+    for (const it of items) {
+      if ((!it.imageUrl || !it.imageUrl.startsWith('http')) && it.link && it.link.startsWith('http')) {
+        try {
+          const detail = await fetchFullArticleDetail(it.link);
+          if (detail) {
+            if (detail.images && detail.images.length > 0) {
+              it.imageUrl = detail.images[0];
+            }
+            if (detail.fullContent && detail.fullContent.length > 20) {
+              it.content = detail.fullContent;
+            }
+            if (detail.attachments && detail.attachments.length > 0) {
+              it.attachments = detail.attachments;
+            }
+          }
+        } catch (_) {}
+      }
+    }
   } catch (error) {
     console.warn('Lỗi lấy RSS Tin tức:', error.message);
   }
 
   return deduplicateArticles(items);
+}
+
+// ─── 2.5 BẢO LƯU DỮ LIỆU ĐÃ ENRICH TỪ DB VÀO BẢN RSS MỚI ──────────────────────
+async function preserveCachedFields(items) {
+  if (!Array.isArray(items) || items.length === 0) return items;
+  try {
+    const [rows] = await db.query('SELECT guid, link, image_url, content FROM news_cache');
+    if (!rows || rows.length === 0) return items;
+    const dbMap = new Map();
+    for (const r of rows) {
+      if (r.guid) dbMap.set(r.guid, r);
+      if (r.link) dbMap.set(r.link, r);
+    }
+    for (const item of items) {
+      const existing = (item.guid && dbMap.get(item.guid)) || (item.link && dbMap.get(item.link));
+      if (existing) {
+        if ((!item.imageUrl || !item.imageUrl.startsWith('http')) && existing.image_url) {
+          item.imageUrl = existing.image_url;
+        }
+        if (existing.content && existing.content.length > (item.content || '').length) {
+          item.content = existing.content;
+        }
+      }
+    }
+  } catch (err) {
+    // Không làm gián đoạn luồng chính
+  }
+  return items;
 }
 
 // ─── 3. LƯU BỘ ĐỆM VÀO MYSQL (news_cache) ───────────────────────────────────
@@ -326,16 +374,16 @@ async function saveItemsToDb(items) {
          ON DUPLICATE KEY UPDATE 
            title = VALUES(title),
            summary = VALUES(summary),
-           content = VALUES(content),
+           content = IF(CHAR_LENGTH(VALUES(content)) > CHAR_LENGTH(news_cache.content), VALUES(content), news_cache.content),
            pub_date = VALUES(pub_date),
            raw_date = VALUES(raw_date),
            author = VALUES(author),
            category = VALUES(category),
-           image_url = VALUES(image_url),
+           image_url = COALESCE(VALUES(image_url), news_cache.image_url),
            badge = VALUES(badge),
            badge_color = VALUES(badge_color),
            source_name = VALUES(source_name),
-           attachments = VALUES(attachments),
+           attachments = IF(VALUES(attachments) != '[]' AND VALUES(attachments) IS NOT NULL, VALUES(attachments), news_cache.attachments),
            updated_at = NOW()`,
         [
           guid,
@@ -550,10 +598,17 @@ async function _syncNewsInBackground() {
   try {
     const live = await fetchNewsFromRss();
     if (live && live.length > 0) {
+      await preserveCachedFields(live);
       await saveItemsToDb(live);
-      enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
       newsMemCache = sortByNewestDate(live);
       newsCacheTime = Date.now();
+
+      enrichItemsWithDetails(live)
+        .then(async (enriched) => {
+          await saveItemsToDb(enriched);
+          newsMemCache = sortByNewestDate(enriched);
+        })
+        .catch(() => {});
     }
   } catch (err) {
     // Chạy nền bỏ qua lỗi
@@ -632,8 +687,14 @@ async function getNewsWithFallback(forceRefresh = false) {
   try {
     const live = await fetchNewsFromRss();
     if (live && live.length > 0) {
+      await preserveCachedFields(live);
       await saveItemsToDb(live);
-      enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
+      enrichItemsWithDetails(live)
+        .then(async (enriched) => {
+          await saveItemsToDb(enriched);
+          newsMemCache = sortByNewestDate(enriched);
+        })
+        .catch(() => {});
       const sorted = sortByNewestDate(live);
       newsMemCache = sorted;
       newsCacheTime = now;
@@ -829,6 +890,7 @@ module.exports = {
   getAnnouncementsWithFallback,
   getNewsWithFallback,
   fetchFullArticleDetail,
+  preserveCachedFields,
   deduplicateArticles,
   formatRssDate,
   parseArticleTimestamp,

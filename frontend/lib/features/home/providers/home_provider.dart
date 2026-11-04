@@ -156,17 +156,20 @@ class HomeNotifier extends Notifier<HomeState> {
         final List rawData = response.data['data'] ?? [];
 
         List<NewsModel> announcements = rawAnnouncements
-            .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item as Map)))
+            .whereType<Map>()
+            .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
             .toList();
 
         List<NewsModel> news = rawNews
-            .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item as Map)))
+            .whereType<Map>()
+            .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
             .toList();
 
         // Fallback: nếu API chưa phân tách announcements và news riêng thì tự động phân loại
         if (announcements.isEmpty || news.isEmpty) {
           final all = rawData
-              .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item as Map)))
+              .whereType<Map>()
+              .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
               .toList();
 
           if (announcements.isEmpty) {

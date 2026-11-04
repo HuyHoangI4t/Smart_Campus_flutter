@@ -1,4 +1,5 @@
 const newsService = require('../services/newsService');
+const { sanitizeProxyUrl } = require('../utils/requestHelpers');
 
 /**
  * GET /api/news
@@ -109,30 +110,10 @@ exports.proxyImage = async (req, res) => {
     return res.status(400).send('Thiếu tham số url');
   }
 
-  let targetUrl = String(imageUrl).trim();
-
-  // Tháo gỡ các lớp URL proxy bị lồng nhau nếu có
-  while (targetUrl.includes('image-proxy?url=') || targetUrl.includes('image-proxy%3Furl%3D')) {
-    const match = targetUrl.match(/image-proxy\?url=(.+)$/i) || targetUrl.match(/image-proxy%3Furl%3D(.+)$/i);
-    if (match && match[1]) {
-      try {
-        targetUrl = decodeURIComponent(match[1]);
-      } catch {
-        targetUrl = match[1];
-      }
-    } else {
-      break;
-    }
-  }
-
-  try {
-    targetUrl = decodeURIComponent(targetUrl);
-  } catch (e) {
-    // keep as is
-  }
-
-  if (!targetUrl.startsWith('http')) {
-    targetUrl = `https://www.ttn.edu.vn${targetUrl.startsWith('/') ? '' : '/'}${targetUrl}`;
+  // [SECURITY FIX] Chặn SSRF - chỉ cho phép proxy ảnh từ domain ttn.edu.vn
+  const { valid, url: targetUrl, error } = sanitizeProxyUrl(imageUrl);
+  if (!valid) {
+    return res.status(403).json({ success: false, message: error });
   }
 
   try {
@@ -195,9 +176,10 @@ exports.downloadAttachment = async (req, res) => {
     return res.status(400).send('Thiếu tham số url');
   }
 
-  let targetUrl = String(fileUrl).trim();
-  if (!targetUrl.startsWith('http')) {
-    targetUrl = `https://www.ttn.edu.vn${targetUrl.startsWith('/') ? '' : '/'}${targetUrl}`;
+  // [SECURITY FIX] Chặn SSRF - chỉ cho phép tải file từ domain ttn.edu.vn
+  const { valid, url: targetUrl, error } = sanitizeProxyUrl(fileUrl);
+  if (!valid) {
+    return res.status(403).json({ success: false, message: error });
   }
 
   try {

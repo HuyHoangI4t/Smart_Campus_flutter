@@ -32,6 +32,7 @@ class MapState {
   final bool isLoadingPaths;
   final bool pathsFromApi;
   final String? routingError;
+  final String? routingNotice;
 
   const MapState({
     this.locations = CampusConstants.campusLocations,
@@ -47,6 +48,7 @@ class MapState {
     this.isLoadingPaths = false,
     this.pathsFromApi = false,
     this.routingError,
+    this.routingNotice,
   });
 
   List<CampusLocationItem> get filteredLocations {
@@ -140,6 +142,7 @@ class MapState {
     bool? isLoadingPaths,
     bool? pathsFromApi,
     Object? routingError = const _Sentinel(),
+    Object? routingNotice = const _Sentinel(),
   }) {
     return MapState(
       locations: locations ?? this.locations,
@@ -163,6 +166,9 @@ class MapState {
       routingError: routingError is _Sentinel
           ? this.routingError
           : routingError as String?,
+      routingNotice: routingNotice is _Sentinel
+          ? this.routingNotice
+          : routingNotice as String?,
     );
   }
 }
@@ -261,6 +267,19 @@ class MapNotifier extends Notifier<MapState> {
         return;
       }
 
+      // 1. Lấy ngay vị trí ban đầu (không cần đợi người dùng di chuyển 3 mét)
+      try {
+        final initialPos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        ).timeout(const Duration(seconds: 4));
+        final initLatLng = LatLng(initialPos.latitude, initialPos.longitude);
+        state = state.copyWith(userPosition: initLatLng);
+        if (state.isNavigating && state.selectedLocation != null) {
+          _updateLiveNavigation(initLatLng);
+        }
+      } catch (_) {}
+
+      // 2. Lắng nghe vị trí di chuyển liên tục
       _positionSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
@@ -306,15 +325,19 @@ class MapNotifier extends Notifier<MapState> {
       start.latitude, start.longitude, gateCoord.latitude, gateCoord.longitude,
     );
 
+    // Khi ở ngoài trường quá xa hơn 2km -> Lấy vị trí 3 cổng trường làm mốc xuất phát
     if (directDist > 2000.0) {
+      final gateToUse = (state.selectedGate.id != CampusConstants.defaultGate.id)
+          ? state.selectedGate
+          : nearestGate;
       final km = (directDist / 1000).toStringAsFixed(1);
       state = state.copyWith(
-        routingError:
-            'Vị trí hiện tại cách trường ${km}km (vượt quá bán kính hỗ trợ 2km). Vui lòng chọn xuất phát trực tiếp từ Cổng trường.',
-        isNavigating: false,
-        activeRoute: null,
+        selectedGate: gateToUse,
+        routingNotice:
+            'Vị trí hiện tại cách trường ${km}km (>2km). Lộ trình xuất phát từ ${gateToUse.name}.',
+        routingError: null,
       );
-      return DijkstraResult.empty;
+      return _router.findShortestRoute(gateToUse.coordinate, destination);
     }
 
     final externalService = ExternalRoutingService(ref.read(dioProvider));
@@ -359,6 +382,15 @@ class MapNotifier extends Notifier<MapState> {
       );
       if (route.coordinates.isNotEmpty && state.isNavigating) {
         state = state.copyWith(activeRoute: route);
+      }
+    } else {
+      // Khi ở xa > 2km, giữ lộ trình từ cổng đã chọn đến đích
+      if (state.activeRoute == null || state.activeRoute!.coordinates.isEmpty) {
+        final gateToUse = state.selectedGate;
+        final route = _router.findShortestRoute(gateToUse.coordinate, destination.coordinate);
+        if (route.coordinates.isNotEmpty && state.isNavigating) {
+          state = state.copyWith(activeRoute: route);
+        }
       }
     }
   }
@@ -455,12 +487,25 @@ class MapNotifier extends Notifier<MapState> {
   void selectGate(CampusGate gate) {
     state = state.copyWith(selectedGate: gate);
     if (state.isNavigating && state.selectedLocation != null) {
-      startNavigationTo(state.selectedLocation!);
+      // Khi chọn cổng mới, tính lại tuyến đường từ cổng đã chọn đến đích
+      final route = _router.findShortestRoute(
+        gate.coordinate,
+        state.selectedLocation!.coordinate,
+      );
+      if (route.coordinates.isNotEmpty) {
+        state = state.copyWith(activeRoute: route, routingError: null);
+      } else {
+        startNavigationTo(state.selectedLocation!);
+      }
     }
   }
 
   void clearRoutingError() {
     state = state.copyWith(routingError: null);
+  }
+
+  void clearRoutingNotice() {
+    state = state.copyWith(routingNotice: null);
   }
 
   Future<void> startNavigationTo(CampusLocationItem destination) async {

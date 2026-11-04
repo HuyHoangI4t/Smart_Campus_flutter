@@ -12,17 +12,20 @@ exports.getNotifications = async (req, res) => {
   const offset = (page - 1) * limit;
 
   try {
+    // [FIX] Lấy tổng số thông báo thực tế để hỗ trợ pagination chính xác
+    const [[{ totalCount }]] = await db.query('SELECT COUNT(*) AS totalCount FROM notifications');
     const [rows] = await db.query('SELECT * FROM notifications ORDER BY id DESC LIMIT ? OFFSET ?', [limit, offset]);
     res.json({
       success: true,
       page,
       limit,
-      total: rows.length,
+      total: totalCount,
+      totalPages: Math.ceil(totalCount / limit),
       notifications: rows,
       data: rows
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Lỗi lấy danh sách thông báo', error: error.message });
+    res.status(500).json({ success: false, message: 'Lỗi lấy danh sách thông báo' });
   }
 };
 
@@ -36,7 +39,7 @@ exports.getNotificationById = async (req, res) => {
     }
     res.json({ success: true, notification: rows[0], data: rows[0] });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Lỗi lấy chi tiết thông báo', error: error.message });
+    res.status(500).json({ success: false, message: 'Lỗi lấy chi tiết thông báo' });
   }
 };
 

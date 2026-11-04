@@ -1,32 +1,10 @@
-// Campus & Utility Controller - Handled Feedback, SOS and Map locations
+﻿// Campus & Utility Controller - Handled Feedback, SOS and Map locations
 const db = require('../config/db');
 
-// Helper to get mssv from request
-const getMssvFromReq = (req) => {
-  if (req.user && req.user.mssv) return req.user.mssv;
-  if (req.body && req.body.mssv) return req.body.mssv;
-  if (req.body && req.body.msv) return req.body.msv;
-  if (req.query && req.query.mssv) return req.query.mssv;
-  if (req.query && req.query.msv) return req.query.msv;
-  if (req.headers['x-mssv']) return req.headers['x-mssv'];
-  if (req.headers['x-masv']) return req.headers['x-masv'];
+const { getMssvFromRequest } = require('../utils/requestHelpers');
 
-  const authHeader = req.headers['authorization'];
-  if (authHeader) {
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (token.startsWith('jwt-token-')) {
-      const parts = token.split('-');
-      if (parts.length >= 3 && parts[2]) {
-        return parts[2];
-      }
-    }
-    if (token && !token.includes(' ') && token.length <= 15) {
-      return token;
-    }
-  }
-
-  return 'Anonymous';
-};
+// [REFACTOR] Dùng hàm getMssvFromRequest thống nhất từ utils
+const getMssvFromReq = (req) => getMssvFromRequest(req, 'Anonymous');
 
 // Submit Feedback
 exports.submitFeedback = async (req, res) => {
@@ -495,7 +473,9 @@ exports.getCampusGates = (req, res) => {
 
 
 // Cache cho road route ngoai truong (OSRM)
+// [PERF FIX] Giới hạn tối đa 500 entries để tránh rò rỉ bộ nhớ (memory leak)
 const roadRouteCache = new Map();
+const MAX_ROAD_CACHE_SIZE = 500;
 const ROAD_ROUTE_TTL = 30 * 60 * 1000; // 30 phut
 
 // Proxy OSRM Foot routing cho doan duong ngoai truong (nhu Google Maps)
@@ -545,6 +525,11 @@ exports.getRoadRoute = async (req, res) => {
         coordinates: best.geometry.coordinates.map(c => [c[1], c[0]]), // [lat, lng]
       };
 
+      // Evict entry cũ nhất nếu vượt quá giới hạn
+      if (roadRouteCache.size >= MAX_ROAD_CACHE_SIZE) {
+        const firstKey = roadRouteCache.keys().next().value;
+        if (firstKey) roadRouteCache.delete(firstKey);
+      }
       roadRouteCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
       return res.json({

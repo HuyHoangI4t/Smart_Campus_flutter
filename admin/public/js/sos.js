@@ -32,7 +32,7 @@ const SosModule = {
     if (this.alerts.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6" class="py-12 text-center text-slate-400">
+          <td colspan="7" class="py-12 text-center text-slate-400">
             <i data-lucide="shield-check" class="w-10 h-10 mx-auto mb-2 text-emerald-500 opacity-80"></i>
             <p class="text-sm font-semibold text-slate-700">Khuôn viên an toàn</p>
             <p class="text-xs text-slate-400 mt-0.5">Hiện không có cảnh báo cứu trợ khẩn cấp nào</p>

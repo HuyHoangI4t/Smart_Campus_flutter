@@ -27,6 +27,7 @@ class ScheduleItem {
   final String? statusLabel;
   final int? startMinutesRaw;
   final int? endMinutesRaw;
+  final String? weekRange;
 
   String get subject => courseName;
   String get courseCode => code ?? 'HP${id.toString().padLeft(3, '0')}';
@@ -71,6 +72,12 @@ class ScheduleItem {
     return false;
   }
 
+  /// So sánh ID an toàn không phụ thuộc kiểu dữ liệu (int vs String)
+  bool isSameId(dynamic otherId) {
+    if (otherId == null) return false;
+    return id.toString().trim() == otherId.toString().trim();
+  }
+
   const ScheduleItem({
     required this.id,
     required this.courseName,
@@ -90,6 +97,7 @@ class ScheduleItem {
     this.statusLabel,
     this.startMinutesRaw,
     this.endMinutesRaw,
+    this.weekRange,
   });
 
   factory ScheduleItem.fromJson(Map<String, dynamic> json) {
@@ -143,7 +151,11 @@ class ScheduleItem {
       lecturer: json['lecturer'] ?? json['teacher'] ?? json['giang_vien'],
       isCustom: json['is_custom'] == 1 ||
           json['is_custom'] == true ||
-          json['isCustom'] == true,
+          json['isCustom'] == true ||
+          json['is_custom'] == '1' ||
+          json['isCustom'] == 'true' ||
+          json['code'] == 'TH-CUSTOM' ||
+          json['ma_hp'] == 'TH-CUSTOM',
       code: json['code'] ?? json['ma_hp'],
       note: json['note']?.toString() ?? json['ghi_chu']?.toString(),
       type: json['type']?.toString() ?? json['loai_lich']?.toString(),
@@ -160,6 +172,7 @@ class ScheduleItem {
       endMinutesRaw: json['endMinutes'] is int
           ? json['endMinutes'] as int
           : (json['end_minutes'] is int ? json['end_minutes'] as int : null),
+      weekRange: json['weekRange']?.toString() ?? json['week_range']?.toString(),
     );
   }
 
@@ -185,7 +198,54 @@ class ScheduleItem {
       'ghi_chu': note,
       'type': type ?? 'dot_xuat',
       'loai_lich': type ?? 'dot_xuat',
+      'date': date,
+      'ngay_hoc': date,
+      'week_range': weekRange,
     };
+  }
+
+  ScheduleItem copyWith({
+    int? id,
+    String? courseName,
+    String? room,
+    String? dayOfWeek,
+    int? dayNum,
+    String? timeSlot,
+    String? lecturer,
+    bool? isCustom,
+    String? code,
+    String? note,
+    String? type,
+    RoomDirectionInfo? direction,
+    String? date,
+    String? dateShort,
+    String? status,
+    String? statusLabel,
+    int? startMinutesRaw,
+    int? endMinutesRaw,
+    String? weekRange,
+  }) {
+    return ScheduleItem(
+      id: id ?? this.id,
+      courseName: courseName ?? this.courseName,
+      room: room ?? this.room,
+      dayOfWeek: dayOfWeek ?? this.dayOfWeek,
+      dayNum: dayNum ?? this.dayNum,
+      timeSlot: timeSlot ?? this.timeSlot,
+      lecturer: lecturer ?? this.lecturer,
+      isCustom: isCustom ?? this.isCustom,
+      code: code ?? this.code,
+      note: note ?? this.note,
+      type: type ?? this.type,
+      direction: direction ?? this.direction,
+      date: date ?? this.date,
+      dateShort: dateShort ?? this.dateShort,
+      status: status ?? this.status,
+      statusLabel: statusLabel ?? this.statusLabel,
+      startMinutesRaw: startMinutesRaw ?? this.startMinutesRaw,
+      endMinutesRaw: endMinutesRaw ?? this.endMinutesRaw,
+      weekRange: weekRange ?? this.weekRange,
+    );
   }
 
   /// Phân tích giờ bắt đầu và kết thúc theo chuẩn tiết học TTN

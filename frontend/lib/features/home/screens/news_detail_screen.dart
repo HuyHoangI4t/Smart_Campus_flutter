@@ -6,6 +6,7 @@ import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/widgets/nav_header.dart';
 import '../../../core/widgets/news_card_image.dart';
+import '../../../core/widgets/wireframe_widgets.dart';
 import '../models/news_model.dart';
 import '../providers/home_provider.dart';
 
@@ -24,6 +25,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
   List<NewsAttachment>? _fetchedAttachments;
   List<String>? _fetchedImages;
   List<ArticleContentBlock>? _fetchedBlocks;
+  String? _lastLoadedLink;
 
   @override
   void initState() {
@@ -33,12 +35,12 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     });
   }
 
-  Future<void> _loadArticleDetailIfNeeded() async {
+  Future<void> _loadArticleDetailIfNeeded([NewsModel? providedItem]) async {
     final homeState = ref.read(homeProvider);
     final targetIdStr = widget.id.toString();
     final allArticles = homeState.allArticles;
 
-    final item = allArticles.firstWhere(
+    final item = providedItem ?? allArticles.firstWhere(
       (n) => n.id == targetIdStr || n.id.contains(targetIdStr),
       orElse: () => allArticles.isNotEmpty
           ? allArticles.first
@@ -49,7 +51,13 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
       return;
     }
 
+    // Tránh fetch lặp lại cùng một link
+    if (_lastLoadedLink == item.link && _fetchedContent != null) {
+      return;
+    }
+
     setState(() => _isLoadingDetail = true);
+    _lastLoadedLink = item.link;
 
     try {
       final dio = ref.read(dioProvider);
@@ -152,6 +160,13 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
           : const NewsModel(id: '0', title: 'Thông báo sinh viên', summary: ''),
     );
 
+    // [DATA-FLOW FIX] Tự động tải toàn văn nếu ban đầu allArticles trống và vừa được fetch xong
+    if (item.link != null && item.link!.startsWith('http') && _lastLoadedLink != item.link && !_isLoadingDetail && _fetchedContent == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadArticleDetailIfNeeded(item);
+      });
+    }
+
     final resolvedContent = _fetchedContent ?? item.content ?? item.summary;
     final resolvedAttachments = (_fetchedAttachments != null && _fetchedAttachments!.isNotEmpty)
         ? _fetchedAttachments!
@@ -159,6 +174,8 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     final resolvedBlocks = (_fetchedBlocks != null && _fetchedBlocks!.isNotEmpty)
         ? _fetchedBlocks!
         : item.contentBlocks;
+
+    final hasImageInBlocks = resolvedBlocks.any((b) => b.type == 'image' && b.url != null && b.url!.isNotEmpty);
 
     final rawImages = (_fetchedImages != null && _fetchedImages!.isNotEmpty)
         ? _fetchedImages!
@@ -188,11 +205,13 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
               valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
             ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: (_isLoadingDetail && _fetchedContent == null && (item.content == null || item.content!.isEmpty))
+                ? const WireframeArticleDetail()
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                   // Badge & Date
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -253,15 +272,43 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   ),
                   const Divider(height: 28),
 
-                  // Cover Hero Image (chỉ hiển thị cho Tin tức; Thông báo SV là văn bản hành chính không hiển thị ảnh bìa)
-                  if (!item.isAnnouncement && coverImageUrl != null && coverImageUrl.isNotEmpty) ...[
-                    NewsCardImage(
-                      imageUrl: coverImageUrl,
-                      fallbackIndex: item.numericIndex,
-                      width: double.infinity,
-                      height: 210,
-                      fit: BoxFit.cover,
-                      borderRadius: BorderRadius.circular(14),
+                  // Cover Hero Image (chỉ hiển thị khi bài viết không có ảnh inline và không phải là thông báo văn bản)
+                  if (!hasImageInBlocks && !item.isAnnouncement && coverImageUrl != null && coverImageUrl.isNotEmpty) ...[
+                    GestureDetector(
+                      onTap: () => _showFullScreenImage(context, coverImageUrl, leadingCaption),
+                      child: Stack(
+                        children: [
+                          NewsCardImage(
+                            imageUrl: coverImageUrl,
+                            fallbackIndex: item.numericIndex,
+                            width: double.infinity,
+                            fit: BoxFit.fitWidth,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          Positioned(
+                            bottom: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Chạm để xem ảnh',
+                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     if (leadingCaption != null && leadingCaption.trim().isNotEmpty) ...[
                       const SizedBox(height: 6),
@@ -279,9 +326,9 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                     const SizedBox(height: 18),
                   ],
 
-                  // Content: Hiển thị các khối nội dung xen kẽ hình ảnh
+                  // Content: Hiển thị các khối nội dung xen kẽ hình ảnh tự nhiên
                   if (resolvedBlocks.isNotEmpty)
-                    ..._buildContentBlocks(resolvedBlocks, item.numericIndex, coverImageUrl, isAnnouncement: item.isAnnouncement)
+                    ..._buildContentBlocks(resolvedBlocks, item.numericIndex)
                   else
                     ..._buildParagraphs(resolvedContent),
 
@@ -360,73 +407,131 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     );
   }
 
-  bool _isSameImage(String? url1, String? url2) {
-    if (url1 == null || url2 == null) return false;
-    final u1 = url1.trim();
-    final u2 = url2.trim();
-    if (u1.isEmpty || u2.isEmpty) return false;
-    if (u1 == u2) return true;
-
-    try {
-      final file1 = u1.split('?').first.split('/').last.trim();
-      final file2 = u2.split('?').first.split('/').last.trim();
-      if (file1.isNotEmpty && file2.isNotEmpty && file1.toLowerCase() == file2.toLowerCase()) {
-        return true;
-      }
-    } catch (_) {}
-
-    return false;
+  void _showFullScreenImage(BuildContext context, String imageUrl, String? caption) {
+    if (imageUrl.isEmpty) return;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: true,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return Scaffold(
+            backgroundColor: Colors.black.withValues(alpha: 0.96),
+            body: SafeArea(
+              child: Stack(
+                children: [
+                  Center(
+                    child: InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4.0,
+                      child: NewsCardImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.contain,
+                        width: double.infinity,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 10,
+                    right: 16,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                      style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  if (caption != null && caption.trim().isNotEmpty)
+                    Positioned(
+                      bottom: 20,
+                      left: 20,
+                      right: 20,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.75),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          caption.trim(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   List<Widget> _buildContentBlocks(
     List<ArticleContentBlock> blocks,
     int articleId,
-    String? coverImageUrl, {
-    bool isAnnouncement = false,
-  }) {
-    bool hasSkippedLeadingImage = false;
-
+  ) {
     return blocks.map((block) {
       if (block.type == 'image') {
-        if (isAnnouncement) {
-          return const SizedBox.shrink();
-        }
         if (block.url != null && block.url!.isNotEmpty) {
-          // Tránh trùng lặp 2 hình ở đầu bài viết:
-          // Nếu đây là hình đầu tiên trong nội dung và giống ảnh bìa, hoặc là ảnh đầu bài viết ngay dưới bìa
-          if (!hasSkippedLeadingImage) {
-            final isSame = _isSameImage(block.url, coverImageUrl);
-            final isFirstImageBlock = blocks.indexWhere((b) => b.type == 'image') == blocks.indexOf(block);
-
-            if (isSame || (isFirstImageBlock && coverImageUrl != null && coverImageUrl.isNotEmpty)) {
-              hasSkippedLeadingImage = true;
-              return const SizedBox.shrink();
-            }
-          }
-
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                NewsCardImage(
-                  imageUrl: block.url,
-                  fallbackIndex: articleId,
-                  width: double.infinity,
-                  height: 220,
-                  fit: BoxFit.cover,
-                  borderRadius: BorderRadius.circular(12),
+                GestureDetector(
+                  onTap: () => _showFullScreenImage(context, block.url!, block.caption),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: NewsCardImage(
+                          imageUrl: block.url,
+                          fallbackIndex: articleId,
+                          width: double.infinity,
+                          fit: BoxFit.fitWidth,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                              SizedBox(width: 4),
+                              Text(
+                                'Chạm để xem ảnh',
+                                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 if (block.caption != null && block.caption!.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Text(
-                    block.caption!,
+                    block.caption!.trim(),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       fontStyle: FontStyle.italic,
                       color: Color(0xFF64748B),
-                      height: 1.4,
+                      height: 1.45,
                     ),
                   ),
                 ],

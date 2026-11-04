@@ -5,35 +5,47 @@ import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 
 const List<Map<String, String>> _presetAvatars = [
+  // 1. Sinh viên phong cách 3D hiện đại
   {
-    'id': '1',
-    'label': 'Sinh viên Nam 1',
-    'uri': 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&q=80',
-  },
-  {
-    'id': '2',
-    'label': 'Sinh viên Nữ 1',
-    'uri': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=250&q=80',
-  },
-  {
-    'id': '3',
-    'label': 'Sinh viên Nam 2',
-    'uri': 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=250&q=80',
-  },
-  {
-    'id': '4',
-    'label': 'Sinh viên Nữ 2',
-    'uri': 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=250&q=80',
-  },
-  {
-    'id': '5',
-    'label': 'Avatar 3D Nam',
+    'id': '3d_male',
+    'label': 'Nam sinh 3D',
     'uri': 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
   },
   {
-    'id': '6',
-    'label': 'Avatar 3D Nữ',
+    'id': '3d_female',
+    'label': 'Nữ sinh 3D',
     'uri': 'https://cdn-icons-png.flaticon.com/512/3135/3135789.png',
+  },
+  {
+    'id': '3d_grad',
+    'label': 'Tốt nghiệp',
+    'uri': 'https://cdn-icons-png.flaticon.com/512/3135/3135810.png',
+  },
+  {
+    'id': '3d_tech',
+    'label': 'Công nghệ TT',
+    'uri': 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png',
+  },
+  // 2. Avatar sinh viên thực tế (Unsplash CDN)
+  {
+    'id': 'real_male_1',
+    'label': 'Nam sinh 1',
+    'uri': 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&q=80',
+  },
+  {
+    'id': 'real_female_1',
+    'label': 'Nữ sinh 1',
+    'uri': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=250&q=80',
+  },
+  {
+    'id': 'real_male_2',
+    'label': 'Nam sinh 2',
+    'uri': 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=250&q=80',
+  },
+  {
+    'id': 'real_female_2',
+    'label': 'Nữ sinh 2',
+    'uri': 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=250&q=80',
   },
 ];
 
@@ -70,6 +82,7 @@ class AvatarPickerModal extends ConsumerStatefulWidget {
 
 class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
   final _urlController = TextEditingController();
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -78,13 +91,53 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
   }
 
   Future<void> _updateAvatar(String url) async {
-    final updated = (widget.currentUser ?? UserModel.guest()).copyWith(
-      avatarUrl: url,
-    );
-    await ref.read(authProvider.notifier).updateUser(updated);
-    if (!mounted) return;
-    Navigator.pop(context);
-    widget.onReturnToEdit?.call();
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    final targetUser = ref.read(authProvider).user ?? widget.currentUser ?? UserModel.guest();
+    final updated = targetUser.copyWith(avatarUrl: url);
+
+    try {
+      final success = await ref.read(authProvider.notifier).updateUser(updated);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  success
+                      ? 'Đã cập nhật ảnh đại diện thành công!'
+                      : 'Đã lưu ảnh đại diện vào thiết bị.',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+
+      Navigator.pop(context);
+      widget.onReturnToEdit?.call();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi cập nhật ảnh đại diện: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
@@ -142,7 +195,7 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
               itemBuilder: (context, i) {
                 final item = _presetAvatars[i];
                 return GestureDetector(
-                  onTap: () => _updateAvatar(item['uri']!),
+                  onTap: _isSaving ? null : () => _updateAvatar(item['uri']!),
                   child: Container(
                     width: 70,
                     height: 70,
@@ -154,7 +207,10 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
                       child: Image.network(
                         item['uri']!,
                         fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => const Icon(Icons.person),
+                        errorBuilder: (c, e, s) => Container(
+                          color: const Color(0xFFEFF6FF),
+                          child: const Icon(Icons.person, color: AppColors.primary),
+                        ),
                       ),
                     ),
                   ),
@@ -210,16 +266,31 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
-                onPressed: () {
-                  final url = _urlController.text.trim();
-                  if (url.isNotEmpty) {
-                    _updateAvatar(url);
-                  }
-                },
-                child: const Text(
-                  'Áp dụng',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                ),
+                onPressed: _isSaving
+                    ? null
+                    : () {
+                        final url = _urlController.text.trim();
+                        if (url.isNotEmpty && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image'))) {
+                          _updateAvatar(url);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Vui lòng nhập đường dẫn ảnh hợp lệ (http:// hoặc https://)'),
+                              backgroundColor: AppColors.warning,
+                            ),
+                          );
+                        }
+                      },
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text(
+                        'Áp dụng',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                      ),
               ),
             ],
           ),

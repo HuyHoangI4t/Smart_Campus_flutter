@@ -345,38 +345,84 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
 
   Future<bool> addCustomSchedule(ScheduleItem item) async {
     try {
+      final user = ref.read(authProvider).user;
+      final payload = item.toJson();
+      if (user != null && !user.isGuest && user.studentId.isNotEmpty) {
+        payload['mssv'] = user.studentId;
+      }
+
       final response = await _dio.post(
         ApiEndpoints.customSchedule,
-        data: item.toJson(),
+        data: payload,
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        state = state.copyWith(items: [...state.items, item]);
-        return true;
+      ScheduleItem savedItem = item;
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data != null &&
+          response.data['data'] != null) {
+        savedItem = ScheduleItem.fromJson(response.data['data'] as Map<String, dynamic>);
       }
-    } catch (_) {}
 
-    state = state.copyWith(items: [...state.items, item]);
-    return true;
+      final isCurrentWeek = state.selectedWeekIndex == state.currentWeekIndex;
+      final newCurrentWeekItems = isCurrentWeek
+          ? [...state.currentWeekItems, savedItem]
+          : state.currentWeekItems;
+
+      state = state.copyWith(
+        items: [...state.items, savedItem],
+        currentWeekItems: newCurrentWeekItems,
+      );
+
+      // Kích hoạt đồng bộ nền để cập nhật toàn bộ tuần học từ DB
+      Future.microtask(() => fetchSchedule(weekIndex: state.selectedWeekIndex));
+      return true;
+    } catch (_) {
+      state = state.copyWith(items: [...state.items, item]);
+      return true;
+    }
   }
 
   Future<bool> updateCustomSchedule(dynamic id, ScheduleItem updatedItem) async {
     try {
+      final user = ref.read(authProvider).user;
+      final payload = updatedItem.toJson();
+      if (user != null && !user.isGuest && user.studentId.isNotEmpty) {
+        payload['mssv'] = user.studentId;
+      }
+
       final response = await _dio.put(
         '${ApiEndpoints.customSchedule}/$id',
-        data: updatedItem.toJson(),
+        data: payload,
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final newItems = state.items.map((i) => i.id == id ? updatedItem : i).toList();
-        state = state.copyWith(items: newItems);
-        return true;
+      ScheduleItem finalItem = updatedItem;
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data != null &&
+          response.data['data'] != null) {
+        finalItem = ScheduleItem.fromJson(response.data['data'] as Map<String, dynamic>);
       }
-    } catch (_) {}
 
-    final newItems = state.items.map((i) => i.id == id ? updatedItem : i).toList();
-    state = state.copyWith(items: newItems);
-    return true;
+      final newItems = state.items.map((i) => i.isSameId(id) ? finalItem : i).toList();
+      final newCurrentWeekItems = state.currentWeekItems.map((i) => i.isSameId(id) ? finalItem : i).toList();
+      ScheduleItem? updatedNextClass = state.nextClassItem;
+      if (state.nextClassItem?.isSameId(id) == true) {
+        updatedNextClass = finalItem;
+      }
+
+      state = state.copyWith(
+        items: newItems,
+        currentWeekItems: newCurrentWeekItems,
+        nextClassItem: updatedNextClass,
+      );
+
+      Future.microtask(() => fetchSchedule(weekIndex: state.selectedWeekIndex));
+      return true;
+    } catch (_) {
+      final newItems = state.items.map((i) => i.isSameId(id) ? updatedItem : i).toList();
+      final newCurrentWeekItems = state.currentWeekItems.map((i) => i.isSameId(id) ? updatedItem : i).toList();
+      state = state.copyWith(items: newItems, currentWeekItems: newCurrentWeekItems);
+      return true;
+    }
   }
 
   Future<bool> deleteCustomSchedule(dynamic id) async {
@@ -386,14 +432,27 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
       );
 
       if (response.statusCode == 200) {
-        final newItems = state.items.where((i) => i.id != id).toList();
-        state = state.copyWith(items: newItems);
+        final newItems = state.items.where((i) => !i.isSameId(id)).toList();
+        final newCurrentWeekItems = state.currentWeekItems.where((i) => !i.isSameId(id)).toList();
+        ScheduleItem? updatedNextClass = state.nextClassItem;
+        if (state.nextClassItem?.isSameId(id) == true) {
+          updatedNextClass = null;
+        }
+
+        state = state.copyWith(
+          items: newItems,
+          currentWeekItems: newCurrentWeekItems,
+          nextClassItem: updatedNextClass,
+        );
+
+        Future.microtask(() => fetchSchedule(weekIndex: state.selectedWeekIndex));
         return true;
       }
     } catch (_) {}
 
-    final newItems = state.items.where((i) => i.id != id).toList();
-    state = state.copyWith(items: newItems);
+    final newItems = state.items.where((i) => !i.isSameId(id)).toList();
+    final newCurrentWeekItems = state.currentWeekItems.where((i) => !i.isSameId(id)).toList();
+    state = state.copyWith(items: newItems, currentWeekItems: newCurrentWeekItems);
     return true;
   }
 }

@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../core/constants/api_endpoints.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/widgets/nav_header.dart';
-import '../../auth/providers/auth_provider.dart';
+import '../providers/sos_provider.dart';
 
 class SosScreen extends ConsumerStatefulWidget {
   const SosScreen({super.key});
@@ -21,9 +18,8 @@ class _SosScreenState extends ConsumerState<SosScreen> {
   final TextEditingController _noteController = TextEditingController();
 
   String _selectedIncidentType = 'Cần hỗ trợ y tế';
-  bool _isSending = false;
 
-  final List<String> _incidentTypes = [
+  final List<String> _incidentTypes = const [
     'Cần hỗ trợ y tế',
     'Sự cố an ninh / va chạm',
     'Chập điện / Hỏa hoạn',
@@ -31,7 +27,7 @@ class _SosScreenState extends ConsumerState<SosScreen> {
     'Khác',
   ];
 
-  final List<Map<String, String>> _hotlines = [
+  final List<Map<String, String>> _hotlines = const [
     {
       'label': 'Bảo vệ & An ninh cơ sở (Huy Hoàng)',
       'phone': '0329106783',
@@ -61,8 +57,9 @@ class _SosScreenState extends ConsumerState<SosScreen> {
     super.dispose();
   }
 
-  Future<void> _triggerSosAlert() async {
-    if (_locationController.text.trim().isEmpty) {
+  Future<void> _handleTriggerSos() async {
+    final locationText = _locationController.text.trim();
+    if (locationText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Vui lòng nhập vị trí hiện tại của bạn để đội an ninh tiếp cận nhanh nhất.'),
@@ -72,43 +69,14 @@ class _SosScreenState extends ConsumerState<SosScreen> {
       return;
     }
 
-    setState(() => _isSending = true);
-
-    try {
-      Position? position;
-      try {
-        final permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          await Geolocator.requestPermission();
-        }
-        position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+    await ref.read(sosProvider.notifier).sendSosAlert(
+          location: locationText,
+          incidentType: _selectedIncidentType,
+          description: _noteController.text.trim(),
         );
-      } catch (_) {}
 
-      final dio = ref.read(dioProvider);
-      await dio.post(
-        ApiEndpoints.sos,
-        data: {
-          'incidentType': _selectedIncidentType,
-          'location': _locationController.text.trim(),
-          'description': _noteController.text.trim(),
-          'message': _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : 'Yêu cầu hỗ trợ SOS khẩn cấp',
-          'latitude': position?.latitude ?? 12.6515,
-          'longitude': position?.longitude ?? 108.0245,
-          'phone': ref.read(authProvider).user?.phone ?? '',
-        },
-      );
-
-      if (!mounted) return;
-      setState(() => _isSending = false);
-
-      _showSuccessDialog();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isSending = false);
-      _showSuccessDialog();
-    }
+    if (!mounted) return;
+    _showSuccessDialog();
   }
 
   void _showSuccessDialog() {
@@ -307,9 +275,13 @@ class _SosScreenState extends ConsumerState<SosScreen> {
                           minimumSize: const Size.fromHeight(52),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        onPressed: _isSending ? null : _triggerSosAlert,
-                        child: _isSending
-                            ? const CircularProgressIndicator(color: Colors.white)
+                        onPressed: ref.watch(sosProvider).isSending ? null : _handleTriggerSos,
+                        child: ref.watch(sosProvider).isSending
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                              )
                             : const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
