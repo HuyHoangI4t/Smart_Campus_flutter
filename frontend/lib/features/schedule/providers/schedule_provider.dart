@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/api_endpoints.dart';
@@ -109,6 +110,7 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
     final defaultDays = _generateDefaultDays(mon);
     final defaultWeeks = _generateDefaultWeeks(mon);
 
+    _loadFromCache();
     Future.microtask(() => fetchSchedule());
 
     return ScheduleState(
@@ -120,6 +122,37 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
       days: defaultDays,
       isLoading: true,
     );
+  }
+
+  Future<void> _loadFromCache() async {
+    try {
+      final user = ref.read(authProvider).user;
+      final mssvKey = (user != null && !user.isGuest) ? user.studentId : 'guest';
+      final storage = ref.read(storageServiceProvider);
+      final raw = await storage.getCache('schedule_cache_$mssvKey');
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        final List rawItems = decoded['items'] as List? ?? [];
+        final items = rawItems.map((it) => ScheduleItem.fromJson(Map<String, dynamic>.from(it))).toList();
+
+        final List rawCurr = decoded['currentWeekItems'] as List? ?? [];
+        final currentWeekItems = rawCurr.map((it) => ScheduleItem.fromJson(Map<String, dynamic>.from(it))).toList();
+
+        ScheduleItem? nextItem;
+        if (decoded['nextClassItem'] is Map<String, dynamic>) {
+          nextItem = ScheduleItem.fromJson(decoded['nextClassItem'] as Map<String, dynamic>);
+        }
+
+        if (items.isNotEmpty || nextItem != null) {
+          state = state.copyWith(
+            items: items,
+            currentWeekItems: currentWeekItems.isNotEmpty ? currentWeekItems : items,
+            nextClassItem: nextItem,
+            isLoading: false,
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   static List<Map<String, dynamic>> _generateDefaultWeeks(DateTime mon) {
@@ -335,11 +368,25 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
           nextClassLabel: nextLabel,
           currentWeekItems: updatedCurrentWeekItems,
         );
-      } else {
+
+        // Lưu cache offline
+        try {
+          final storage = ref.read(storageServiceProvider);
+          final mssvKey = mssv ?? 'guest';
+          storage.saveCache('schedule_cache_$mssvKey', jsonEncode({
+            'items': items.map((it) => it.toJson()).toList(),
+            'currentWeekItems': updatedCurrentWeekItems.map((it) => it.toJson()).toList(),
+            'nextClassItem': parsedNextClass?.toJson(),
+          }));
+        } catch (_) {}
+      } else if (state.items.isEmpty) {
         state = state.copyWith(items: const [], isLoading: false);
+      } else {
+        state = state.copyWith(isLoading: false);
       }
     } catch (_) {
-      state = state.copyWith(items: const [], isLoading: false);
+      // Giữ nguyên lịch học đã có, không xóa trắng khi rớt mạng hoặc timeout
+      state = state.copyWith(isLoading: false);
     }
   }
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/api_endpoints.dart';
@@ -62,6 +63,20 @@ class GradesSummary {
       failedCourses: (json['failedCourses'] as num?)?.toInt() ?? 0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'totalCredits': totalCredits,
+    'accumulatedCredits': accumulatedCredits,
+    'inProgressCredits': inProgressCredits,
+    'unlearnedCredits': unlearnedCredits,
+    'gpa10': gpa10,
+    'gpa4': gpa4,
+    'academicRank': academicRank,
+    'totalCourses': totalCourses,
+    'passedCourses': passedCourses,
+    'inProgressCourses': inProgressCourses,
+    'failedCourses': failedCourses,
+  };
 }
 
 class GradesState {
@@ -204,8 +219,48 @@ class GradesNotifier extends Notifier<GradesState> {
 
   @override
   GradesState build() {
+    _loadFromCache();
     Future.microtask(() => fetchGrades());
     return const GradesState(isLoading: true);
+  }
+
+  Future<void> _loadFromCache() async {
+    try {
+      final user = ref.read(authProvider).user;
+      final mssvKey = (user != null && !user.isGuest) ? user.studentId : 'guest';
+      final storage = ref.read(storageServiceProvider);
+      final raw = await storage.getCache('grades_cache_$mssvKey');
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        final List rawList = decoded['data'] as List? ?? [];
+        final items = rawList.map((it) => GradeItem.fromJson(Map<String, dynamic>.from(it))).toList();
+
+        GradesSummary summary = state.summary;
+        if (decoded['summary'] is Map<String, dynamic>) {
+          summary = GradesSummary.fromJson(decoded['summary'] as Map<String, dynamic>);
+        }
+
+        Map<String, dynamic> semStats = {};
+        if (decoded['semesterStats'] is Map<String, dynamic>) {
+          semStats = decoded['semesterStats'] as Map<String, dynamic>;
+        }
+
+        List<String> semesters = state.semesters;
+        if (decoded['semesters'] is List) {
+          semesters = (decoded['semesters'] as List).map((e) => e.toString()).toList();
+        }
+
+        if (items.isNotEmpty || summary.accumulatedCredits > 0) {
+          state = state.copyWith(
+            items: items,
+            summary: summary,
+            semesterStats: semStats,
+            semesters: semesters,
+            isLoading: false,
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   void selectSemester(String semester) {
@@ -249,11 +304,26 @@ class GradesNotifier extends Notifier<GradesState> {
           semesters: semesters,
           isLoading: false,
         );
-      } else {
+
+        // Lưu cache offline
+        try {
+          final storage = ref.read(storageServiceProvider);
+          final mssvKey = mssv ?? 'guest';
+          storage.saveCache('grades_cache_$mssvKey', jsonEncode({
+            'data': items.map((it) => it.toJson()).toList(),
+            'summary': summary.toJson(),
+            'semesterStats': semStats,
+            'semesters': semesters,
+          }));
+        } catch (_) {}
+      } else if (state.items.isEmpty) {
         state = state.copyWith(items: const [], isLoading: false);
+      } else {
+        state = state.copyWith(isLoading: false);
       }
     } catch (_) {
-      state = state.copyWith(items: const [], isLoading: false);
+      // Giữ nguyên bảng điểm đã có, không xóa trắng khi rớt mạng
+      state = state.copyWith(isLoading: false);
     }
   }
 

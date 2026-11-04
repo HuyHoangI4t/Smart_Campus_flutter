@@ -78,4 +78,24 @@ class GradeItem {
   String get status => letter == 'X' || scoreOverall == 0
       ? 'Đang học'
       : (scoreOverall >= 4.0 ? 'Đạt' : 'Học lại');
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'course_code': courseCode,
+    'course_name': courseName,
+    'credits': credits,
+    'score_overall': scoreOverall,
+    'score_attendance': scoreAttendance,
+    'score_midterm': scoreMidterm,
+    'score_practical': scorePractical,
+    'score_final': scoreFinal,
+    'semester': semester,
+    'dbp': dbp,
+    'thi1': thi1,
+    'thi2': thi2,
+    'd1': d1,
+    'd2': d2,
+    'letter': letter,
+    'hoc_phi': hocPhi,
+  };
 }

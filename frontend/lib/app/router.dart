@@ -13,6 +13,7 @@ import '../features/home/screens/home_screen.dart';
 import '../features/home/screens/news_detail_screen.dart';
 import '../features/home/screens/news_screen.dart';
 import '../features/map/screens/campus_map_screen.dart';
+import '../features/profile/screens/app_settings_screen.dart';
 import '../features/profile/screens/change_password_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/schedule/screens/schedule_screen.dart';
@@ -138,6 +139,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/profile/change-password',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: '/profile/settings',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const AppSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const AppSettingsScreen(),
       ),
       GoRoute(
         path: '/grades/detail',

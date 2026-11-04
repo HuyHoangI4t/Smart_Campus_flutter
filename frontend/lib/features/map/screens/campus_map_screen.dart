@@ -603,7 +603,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
         _createSafeSymbolOptions(
           geometry: gate.coordinate.toMl(),
           iconImage: gateKey,
-          iconSize: isSelected ? 0.95 : 0.78,
+          iconSize: isSelected ? 1.25 : 1.05,
           textField: gate.name,
           textSize: 11.5,
           textColor: '#0F172A',
@@ -662,7 +662,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
         _createSafeSymbolOptions(
           geometry: loc.coordinate.toMl(),
           iconImage: locKey,
-          iconSize: isNav ? 1.05 : (isSelected ? 0.95 : 0.80),
+          iconSize: isNav ? 1.45 : (isSelected ? 1.30 : 1.08),
           textField: loc.name,
           textSize: isNav ? 12.5 : 11.0,
           textColor: '#0F172A',

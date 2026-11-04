@@ -96,11 +96,9 @@ class _EditProfileModalState extends ConsumerState<EditProfileModal> {
   }
 
   void _openAvatarPicker() {
-    Navigator.pop(context);
     AvatarPickerModal.show(
       context,
       currentUser: ref.read(authProvider).user ?? widget.currentUser,
-      onReturnToEdit: () => EditProfileModal.show(context, currentUser: ref.read(authProvider).user),
     );
   }
 

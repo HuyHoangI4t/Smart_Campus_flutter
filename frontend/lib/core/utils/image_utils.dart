@@ -18,8 +18,19 @@ String getNewsImageUrl(String? imageUrl, [int fallbackIndex = 0]) {
 
   final trimmed = imageUrl.trim();
 
-  // Nếu đã là link proxy rồi hoặc ảnh tĩnh thì giữ nguyên, không bọc lặp
-  if (trimmed.contains('/image-proxy') || trimmed.contains('unsplash.com')) {
+  // Nếu đã là link proxy, chuẩn hóa lại host theo ApiEndpoints.activeBaseUrl hiện tại
+  // để đảm bảo khi chuyển đổi giữa USB cắm dây và Wi-Fi ảnh luôn tải được
+  if (trimmed.contains('/image-proxy')) {
+    final idx = trimmed.indexOf('?url=');
+    if (idx != -1) {
+      final rawTarget = trimmed.substring(idx + 5);
+      final decoded = Uri.decodeComponent(rawTarget);
+      return '${ApiEndpoints.activeBaseUrl}${ApiEndpoints.newsImageProxy}?url=${Uri.encodeComponent(decoded)}';
+    }
+    return trimmed;
+  }
+
+  if (trimmed.contains('unsplash.com')) {
     return trimmed;
   }
 

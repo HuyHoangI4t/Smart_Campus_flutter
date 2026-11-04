@@ -23,6 +23,13 @@ class NewsAttachment {
       isPdf: json['isPdf'] == true || rawUrl.toLowerCase().contains('.pdf'),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'url': url,
+    'size': size,
+    'isPdf': isPdf,
+  };
 }
 
 class ArticleContentBlock {
@@ -46,6 +53,13 @@ class ArticleContentBlock {
       caption: json['caption']?.toString(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'text': text,
+    'url': url,
+    'caption': caption,
+  };
 }
 
 class NewsModel {
@@ -172,4 +186,18 @@ class NewsModel {
       contentBlocks: parsedBlocks,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'summary': summary,
+    'content': content,
+    'imageUrl': imageUrl,
+    'publishedAt': publishedAt,
+    'category': category,
+    'author': author,
+    'link': link,
+    'attachments': attachments.map((a) => a.toJson()).toList(),
+    'contentBlocks': contentBlocks.map((b) => b.toJson()).toList(),
+  };
 }

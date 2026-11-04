@@ -51,6 +51,30 @@ class StorageService {
     return prefs.getString(_serverUrlKey);
   }
 
+  // ─── OFFLINE DATA CACHING (Tin tức, Thời khóa biểu, Bảng điểm) ───
+  Future<void> saveCache(String key, String jsonString) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('cache_$key', jsonString);
+    } catch (_) {}
+  }
+
+  Future<String?> getCache(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('cache_$key');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> removeCache(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('cache_$key');
+    } catch (_) {}
+  }
+
   Future<void> clearAll() async {
     await _secureStorage.deleteAll();
     final prefs = await SharedPreferences.getInstance();

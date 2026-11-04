@@ -13,6 +13,8 @@ class NavHeader extends StatelessWidget {
   final IconData? rightIcon;
   final VoidCallback? onRight;
   final Color backgroundColor;
+  final BorderRadiusGeometry? borderRadius;
+  final List<BoxShadow>? boxShadow;
 
   const NavHeader({
     super.key,
@@ -25,6 +27,8 @@ class NavHeader extends StatelessWidget {
     this.rightIcon,
     this.onRight,
     this.backgroundColor = AppColors.primary,
+    this.borderRadius,
+    this.boxShadow,
   });
 
   @override
@@ -32,7 +36,11 @@ class NavHeader extends StatelessWidget {
     final topPadding = MediaQuery.paddingOf(context).top;
 
     return Container(
-      color: backgroundColor,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: borderRadius,
+        boxShadow: boxShadow,
+      ),
       padding: EdgeInsets.fromLTRB(20, topPadding + 10, 20, 16),
       child: Row(
         children: [

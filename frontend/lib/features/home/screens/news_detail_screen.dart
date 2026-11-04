@@ -79,8 +79,8 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
 
           final rawBlocks = data['contentBlocks'] as List? ?? [];
           final blocks = rawBlocks
-              .whereType<Map<String, dynamic>>()
-              .map((b) => ArticleContentBlock.fromJson(b))
+              .whereType<Map>()
+              .map((b) => ArticleContentBlock.fromJson(Map<String, dynamic>.from(b)))
               .toList();
 
           setState(() {

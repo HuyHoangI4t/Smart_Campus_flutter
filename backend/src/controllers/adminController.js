@@ -315,6 +315,8 @@ exports.createUser = async (req, res) => {
       avatar ? avatar.trim() : 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
     ]);
 
+    invalidateAdminStatsCache();
+
     res.status(201).json({
       success: true,
       message: 'Tạo tài khoản người dùng mới thành công.',
@@ -370,15 +372,24 @@ exports.deleteUser = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const [existing] = await db.query('SELECT mssv FROM users WHERE id = ?', [id]);
+    const [existing] = await db.query('SELECT id, mssv, role FROM users WHERE id = ?', [id]);
     if (existing.length === 0) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng cần xóa.' });
     }
 
     const mssv = existing[0].mssv;
+    if (mssv === 'admin' || (req.user && req.user.id === Number(id))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể xóa tài khoản Quản trị viên hệ thống hoặc tài khoản đang đăng nhập.'
+      });
+    }
+
     await db.query('DELETE FROM users WHERE id = ?', [id]);
     await db.query('DELETE FROM student_grades WHERE mssv = ?', [mssv]);
     await db.query('DELETE FROM student_schedules WHERE mssv = ?', [mssv]);
+
+    invalidateAdminStatsCache();
 
     res.json({
       success: true,
@@ -515,6 +526,8 @@ exports.updateFeedbackStatus = async (req, res) => {
   try {
     await db.query('UPDATE feedback SET status = ? WHERE id = ?', [newStatus, id]);
 
+    invalidateAdminStatsCache();
+
     // Bắn sự kiện Realtime qua Socket.IO
     const io = req.app.get('io');
     if (io) {
@@ -532,6 +545,8 @@ exports.deleteFeedback = async (req, res) => {
   const { id } = req.params;
   try {
     await db.query('DELETE FROM feedback WHERE id = ?', [id]);
+
+    invalidateAdminStatsCache();
 
     const io = req.app.get('io');
     if (io) {
@@ -569,6 +584,8 @@ exports.updateSosStatus = async (req, res) => {
   try {
     await db.query('UPDATE sos_alerts SET status = ? WHERE id = ?', [newStatus, id]);
 
+    invalidateAdminStatsCache();
+
     // Bắn sự kiện Realtime qua Socket.IO
     const io = req.app.get('io');
     if (io) {
@@ -586,6 +603,11 @@ exports.deleteSosAlert = async (req, res) => {
   const { id } = req.params;
   try {
     await db.query('DELETE FROM sos_alerts WHERE id = ?', [id]);
+    invalidateAdminStatsCache();
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('stats_update');
+    }
     res.json({ success: true, message: 'Đã xóa cảnh báo SOS.' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Lỗi xóa cảnh báo SOS: ' + error.message });

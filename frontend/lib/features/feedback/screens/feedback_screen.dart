@@ -106,8 +106,10 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
                           elevation: 0,
                         ),
                         onPressed: () {
-                          Navigator.pop(ctx);
-                          context.pop();
+                          Navigator.of(ctx).pop();
+                          if (mounted) {
+                            context.pop();
+                          }
                         },
                         child: const Text(
                           'Về trang chủ',

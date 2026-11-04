@@ -120,8 +120,10 @@ class _SosScreenState extends ConsumerState<SosScreen> {
         actions: [
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(ctx);
-              context.pop();
+              Navigator.of(ctx).pop();
+              if (mounted) {
+                context.pop();
+              }
             },
             child: const Text('Đã hiểu'),
           ),

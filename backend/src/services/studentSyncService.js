@@ -36,20 +36,19 @@ function enqueueTtnRequest(taskFn) {
 }
 
 function processTtnQueue() {
-  if (activeTtnRequests >= MAX_CONCURRENT_TTN || ttnRequestQueue.length === 0) {
-    return;
-  }
-  const { taskFn, resolve, reject } = ttnRequestQueue.shift();
-  activeTtnRequests++;
+  while (activeTtnRequests < MAX_CONCURRENT_TTN && ttnRequestQueue.length > 0) {
+    const { taskFn, resolve, reject } = ttnRequestQueue.shift();
+    activeTtnRequests++;
 
-  Promise.resolve()
-    .then(taskFn)
-    .then(resolve)
-    .catch(reject)
-    .finally(() => {
-      activeTtnRequests--;
-      setTimeout(processTtnQueue, 200); // Cách nhau tối thiểu 200ms bảo vệ cổng trường
-    });
+    Promise.resolve()
+      .then(taskFn)
+      .then(resolve)
+      .catch(reject)
+      .finally(() => {
+        activeTtnRequests--;
+        setTimeout(processTtnQueue, 200); // Cách nhau tối thiểu 200ms bảo vệ cổng trường
+      });
+  }
 }
 
 // Bảng theo dõi chống cào trùng lặp cùng thời điểm cho cùng 1 MSSV
@@ -430,7 +429,7 @@ async function syncScheduleForStudent(mssv, dk = '10') {
 
       let totalSaved = 0;
       if (parsedWeeks.length > 0) {
-        const newWeekRanges = parsedWeeks.map(w => w.weekRangeText);
+        const newWeekRanges = [...new Set(parsedWeeks.map(w => w.weekRangeText).filter(Boolean))];
         // Xóa các tuần trùng khớp vừa cào mới để cập nhật dữ liệu mới nhất
         if (newWeekRanges.length > 0) {
           await db.query(

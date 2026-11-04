@@ -68,25 +68,27 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          // ─── 1. SOLID NAVY BLUE HEADER ───
-          _buildHomeHeader(context, user),
+      body: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: () async {
+          await Future.wait<void>([
+            ref.read(homeProvider.notifier).fetchDashboard(forceRefresh: true),
+            ref.read(scheduleProvider.notifier).fetchSchedule(forceRefresh: true),
+            ref.read(gradesProvider.notifier).fetchGrades(),
+          ]);
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          children: [
+            // ─── 1. SOLID NAVY BLUE HEADER ───
+            _buildHomeHeader(context, user),
 
-          // ─── 2. SCROLLABLE BODY ───
-          Expanded(
-            child: RefreshIndicator(
-              color: AppColors.primary,
-              onRefresh: () async {
-                await Future.wait<void>([
-                  ref.read(homeProvider.notifier).fetchDashboard(forceRefresh: true),
-                  ref.read(scheduleProvider.notifier).fetchSchedule(forceRefresh: true),
-                  ref.read(gradesProvider.notifier).fetchGrades(),
-                ]);
-              },
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            // ─── 2. SCROLLABLE BODY CARDS ───
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 3. THẺ LỊCH HỌC HÔM NAY / SẮP TỚI
                   const HomeNextClassCard(),
@@ -123,8 +125,8 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -142,8 +144,18 @@ class HomeScreen extends ConsumerWidget {
         : (isGuest ? 'Khách tham quan' : 'Sinh viên');
 
     return Container(
-      color: AppColors.primary,
-      padding: EdgeInsets.fromLTRB(20, topPadding + 10, 20, 16),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.18),
+            offset: const Offset(0, 4),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      padding: EdgeInsets.fromLTRB(20, topPadding + 10, 20, 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -228,6 +240,8 @@ class HomeScreen extends ConsumerWidget {
                     child: user?.avatarUrl != null
                         ? Image.network(
                             user!.avatarUrl!,
+                            width: 44,
+                            height: 44,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) => const Icon(
                               Icons.person,

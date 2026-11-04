@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/api_endpoints.dart';
@@ -107,8 +108,38 @@ class HomeNotifier extends Notifier<HomeState> {
 
   @override
   HomeState build() {
+    _loadFromCache();
     Future.microtask(() => fetchDashboard());
     return const HomeState(isLoading: true);
+  }
+
+  Future<void> _loadFromCache() async {
+    try {
+      final storage = ref.read(storageServiceProvider);
+      final raw = await storage.getCache('home_news_cache');
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        final List rawAnn = decoded['announcements'] as List? ?? [];
+        final List rawNews = decoded['news'] as List? ?? [];
+
+        final announcements = rawAnn
+            .whereType<Map>()
+            .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+        final news = rawNews
+            .whereType<Map>()
+            .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+
+        if (announcements.isNotEmpty || news.isNotEmpty) {
+          state = state.copyWith(
+            news: news,
+            announcements: announcements,
+            isLoading: false,
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> fetchDashboard({bool forceRefresh = false}) async {
@@ -196,13 +227,25 @@ class HomeNotifier extends Notifier<HomeState> {
           news: news,
           announcements: announcements,
         );
-      } else {
+
+        // Lưu cache offline vào thiết bị
+        try {
+          final storage = ref.read(storageServiceProvider);
+          storage.saveCache('home_news_cache', jsonEncode({
+            'announcements': announcements.map((a) => a.toJson()).toList(),
+            'news': news.map((n) => n.toJson()).toList(),
+          }));
+        } catch (_) {}
+      } else if (state.news.isEmpty && state.announcements.isEmpty) {
         state = state.copyWith(news: const [], announcements: const []);
       }
     } catch (e, stack) {
       // ignore: avoid_print
       print('❌ [fetchNews Error] $e\n$stack');
-      state = state.copyWith(news: const [], announcements: const []);
+      // Giữ nguyên tin tức đã nạp trước đó nếu có, không xóa trắng màn hình khi lỗi mạng đột ngột
+      if (state.news.isEmpty && state.announcements.isEmpty) {
+        state = state.copyWith(news: const [], announcements: const []);
+      }
     }
   }
 }

@@ -97,12 +97,17 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
     final targetUser = ref.read(authProvider).user ?? widget.currentUser ?? UserModel.guest();
     final updated = targetUser.copyWith(avatarUrl: url);
 
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
     try {
       final success = await ref.read(authProvider.notifier).updateUser(updated);
 
-      if (!mounted) return;
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Row(
             children: [
@@ -121,14 +126,14 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 2),
         ),
       );
 
-      Navigator.pop(context);
       widget.onReturnToEdit?.call();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Lỗi cập nhật ảnh đại diện: $e'),
             backgroundColor: AppColors.danger,
@@ -206,8 +211,12 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
                     child: ClipOval(
                       child: Image.network(
                         item['uri']!,
+                        width: 70,
+                        height: 70,
                         fit: BoxFit.cover,
                         errorBuilder: (c, e, s) => Container(
+                          width: 70,
+                          height: 70,
                           color: const Color(0xFFEFF6FF),
                           child: const Icon(Icons.person, color: AppColors.primary),
                         ),

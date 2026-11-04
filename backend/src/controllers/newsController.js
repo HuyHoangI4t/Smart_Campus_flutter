@@ -43,7 +43,7 @@ exports.getAllNewsAndAnnouncements = async (req, res) => {
       total: result.length,
       isFallback: isFallback,
       isDbCached: isDbCached,
-      latestAnnouncements: announcements.slice(0, 6), // 6 Thông báo mới nhất
+      latestAnnouncements: announcements.slice(0, 3), // 3 Thông báo mới nhất
       latestNews: news.slice(0, 3),                  // 3 Tin tức mới nhất
       announcements: announcements,
       news: news,
@@ -98,7 +98,11 @@ exports.getNews = async (req, res) => {
 
 const axios = require('axios');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+const FALLBACK_IMAGE_PATH = path.resolve(__dirname, '../assets/images.jpg');
 
 /**
  * GET /api/news/image-proxy?url=...
@@ -120,7 +124,7 @@ exports.proxyImage = async (req, res) => {
     const response = await axios.get(targetUrl, {
       responseType: 'arraybuffer',
       httpsAgent,
-      timeout: 12000,
+      timeout: 10000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': 'https://www.ttn.edu.vn/'
@@ -135,8 +139,19 @@ exports.proxyImage = async (req, res) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     return res.send(Buffer.from(response.data));
   } catch (error) {
-    console.warn(`[Image Proxy] Lỗi tải ảnh (${targetUrl}):`, error.message);
-    // Trả về mã lỗi 404 thay vì redirect sang ảnh Unsplash làm sai lệch ảnh thực tế của bài viết
+    console.warn(`[Image Proxy] Không thể kết nối tới server trường (${targetUrl}): ${error.message}. Sử dụng ảnh khuôn viên nội bộ.`);
+
+    // Khi cổng trường TTN bảo trì / timeout / rớt mạng:
+    // Trả về ảnh khuôn viên trường mặc định để tránh màn hình app bị khoảng đen / lỗi vỡ ảnh
+    if (fs.existsSync(FALLBACK_IMAGE_PATH)) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      return res.sendFile(FALLBACK_IMAGE_PATH);
+    }
+
     return res.status(404).send('Không thể tải ảnh');
   }
 };

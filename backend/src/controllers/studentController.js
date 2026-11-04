@@ -423,11 +423,11 @@ exports.getSchedule = async (req, res) => {
   if (mssv && !isGuestOrEmail(mssv)) {
     try {
       const [allRows] = await db.query(
-        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc, created_at FROM student_schedules WHERE (mssv = ? OR (mssv = "guest" AND is_custom = 1)) ORDER BY id ASC',
+        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc, created_at FROM student_schedules WHERE mssv = ? ORDER BY id ASC',
         [mssv]
       );
       if (allRows && allRows.length > 0) {
-        customItems = allRows.filter(r => r.is_custom === 1);
+        customItems = allRows.filter(r => r.mssv === mssv && r.is_custom === 1);
         dbSchedules = allRows.filter(r => r.mssv === mssv);
         const officialSchedules = allRows.filter(r => r.mssv === mssv && (!r.is_custom || r.is_custom === 0));
         if (officialSchedules.length > 0) {
@@ -474,11 +474,11 @@ exports.getSchedule = async (req, res) => {
   if (mssv && !isGuestOrEmail(mssv)) {
     try {
       const [newRows] = await db.query(
-        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc FROM student_schedules WHERE (mssv = ? OR (mssv = "guest" AND is_custom = 1)) ORDER BY id ASC',
+        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc FROM student_schedules WHERE mssv = ? ORDER BY id ASC',
         [mssv]
       );
       if (newRows && newRows.length > 0) {
-        customItems = newRows.filter(r => r.is_custom === 1);
+        customItems = newRows.filter(r => r.mssv === mssv && r.is_custom === 1);
         dbSchedules = newRows.filter(r => r.mssv === mssv);
         if (dbSchedules.length > 0) {
           const handled = formatDbSchedulesResponse(dbSchedules, customItems, req, res, mssv, !scheduleSyncSuccess, today, isSunday, requestedWeek, requestedWeekOffset, requestedWeekIndex);
@@ -1086,7 +1086,7 @@ exports.updateCustomSchedule = async (req, res) => {
       loai_lich = COALESCE(?, loai_lich),
       ngay_hoc = COALESCE(?, ngay_hoc),
       week_range = COALESCE(?, week_range)
-      WHERE id = ? AND is_custom = 1`;
+      WHERE id = ? AND is_custom = 1 AND (mssv = ? OR mssv = 'guest' OR ? = 'admin')`;
     let params = [
       ten_hp !== undefined ? ten_hp.trim() : null,
       finalThu !== undefined ? finalThu : null,
@@ -1097,7 +1097,9 @@ exports.updateCustomSchedule = async (req, res) => {
       loai_lich !== undefined ? loai_lich.trim() : null,
       normNgay !== undefined ? normNgay : null,
       finalWeekRange !== undefined ? finalWeekRange : null,
-      id
+      id,
+      mssv || 'guest',
+      req.user?.role || ''
     ];
 
     // Cập nhật an toàn cho lịch tự tạo (is_custom = 1)
@@ -1161,9 +1163,9 @@ exports.deleteCustomSchedule = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Thiếu ID lịch học cần xóa' });
     }
 
-    // Xóa an toàn cho lịch tự tạo (is_custom = 1)
-    const query = 'DELETE FROM student_schedules WHERE id = ? AND is_custom = 1';
-    const params = [id];
+    // Xóa an toàn cho lịch tự tạo (is_custom = 1) và kiểm tra quyền sở hữu
+    const query = 'DELETE FROM student_schedules WHERE id = ? AND is_custom = 1 AND (mssv = ? OR mssv = "guest" OR ? = "admin")';
+    const params = [id, mssv || 'guest', req.user?.role || ''];
 
     const [result] = await db.query(query, params);
     if (result.affectedRows === 0) {
