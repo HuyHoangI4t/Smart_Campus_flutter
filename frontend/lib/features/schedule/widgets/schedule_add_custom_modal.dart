@@ -275,6 +275,7 @@ class _ScheduleAddCustomModalState extends State<ScheduleAddCustomModal> {
     final currentDay = _weekDays[_selectedDayIndex];
 
     return Container(
+      width: double.infinity,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.9,
       ),

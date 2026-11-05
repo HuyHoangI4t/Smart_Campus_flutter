@@ -174,13 +174,6 @@ class ProfileScreen extends ConsumerWidget {
                       label: 'Số điện thoại',
                       value: phone,
                     ),
-                    _InfoRowItem(
-                      icon: Icons.verified_user_outlined,
-                      label: 'Trạng thái học tập',
-                      value: isGuest ? 'Khách tham quan' : 'Bình thường (Đạt tiến độ)',
-                      valueColor: const Color(0xFF059669),
-                      isLast: true,
-                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -890,14 +883,12 @@ class _InfoRowItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  final Color? valueColor;
   final bool isLast;
 
   const _InfoRowItem({
     required this.icon,
     required this.label,
     required this.value,
-    this.valueColor,
     this.isLast = false,
   });
 
@@ -939,7 +930,7 @@ class _InfoRowItem extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: valueColor ?? AppColors.textForeground,
+                    color: AppColors.textForeground,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

@@ -117,7 +117,7 @@ class LogoutConfirmDialog extends ConsumerWidget {
                       Navigator.pop(context);
                       await ref.read(authProvider.notifier).logout();
                       if (context.mounted) {
-                        context.go('/login');
+                        context.go('/auth/login');
                       }
                     },
                     borderRadius: BorderRadius.circular(12),

@@ -76,16 +76,37 @@ class ScheduleCard extends StatelessWidget {
       locationDisplay = '${item.room} • ${direction.buildingCode}';
     }
 
+    final now = DateTime.now();
+    final weekdayMap = {
+      1: 'Thứ 2',
+      2: 'Thứ 3',
+      3: 'Thứ 4',
+      4: 'Thứ 5',
+      5: 'Thứ 6',
+      6: 'Thứ 7',
+      7: 'CN',
+    };
+    final todayDayName = weekdayMap[now.weekday] ?? '';
+    final isToday = item.matchesDay(todayDayName);
+    final nowMinutes = now.hour * 60 + now.minute;
+    final isOngoing = isToday && nowMinutes >= item.startMinutes && nowMinutes <= item.endMinutes;
+    final isCompleted = isToday && nowMinutes > item.endMinutes;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
+        border: Border.all(
+          color: isOngoing ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
+          width: isOngoing ? 1.5 : 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: isOngoing
+                ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.04),
             offset: const Offset(0, 3),
-            blurRadius: 10,
+            blurRadius: isOngoing ? 10 : 8,
           ),
         ],
       ),
@@ -99,7 +120,7 @@ class ScheduleCard extends StatelessWidget {
             bottom: 0,
             width: 4.5,
             child: Container(
-              color: accentColor,
+              color: isOngoing ? const Color(0xFF10B981) : accentColor,
             ),
           ),
 
@@ -114,33 +135,86 @@ class ScheduleCard extends StatelessWidget {
                   children: [
                     // Time Capsule
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
+                        color: isOngoing ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        border: Border.all(
+                          color: isOngoing ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.access_time_filled, size: 13, color: Color(0xFF475569)),
+                          Icon(
+                            Icons.access_time_filled,
+                            size: 13,
+                            color: isOngoing ? const Color(0xFF059669) : const Color(0xFF475569),
+                          ),
                           const SizedBox(width: 5),
                           Text(
-                            item.timeSlot,
-                            style: const TextStyle(
+                            '${item.startTime} – ${item.endTime}',
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF334155),
+                              color: isOngoing ? const Color(0xFF065F46) : const Color(0xFF334155),
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            '• ${item.periodDisplay}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isOngoing ? const Color(0xFF047857) : const Color(0xFF64748B),
                             ),
                           ),
                         ],
                       ),
                     ),
 
-                    // Type Badge
+                    // Type & Status Badges
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (isOngoing)
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFD1FAE5),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFF6EE7B7)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.circle, size: 6, color: Color(0xFF059669)),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Đang học',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF065F46),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else if (isCompleted)
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Đã qua',
+                              style: TextStyle(fontSize: 9.5, color: Color(0xFF64748B), fontWeight: FontWeight.w700),
+                            ),
+                          ),
                         if (item.isCustom)
                           Container(
                             margin: const EdgeInsets.only(right: 6),
@@ -160,7 +234,7 @@ class ScheduleCard extends StatelessWidget {
                             ),
                           ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: typeConfig['bg'] as Color,
                             borderRadius: BorderRadius.circular(8),

@@ -85,6 +85,41 @@ class NotificationService {
     );
   }
 
+  /// Thông báo khẩn cấp khi nhận được tín hiệu SOS từ sinh viên khác (tham khảo LTDDDNT)
+  Future<void> showSosAlertNotification({
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    await initialize();
+
+    const androidDetails = AndroidNotificationDetails(
+      'sos_emergency_channel',
+      'Cảnh báo SOS Khẩn cấp',
+      channelDescription: 'Thông báo báo động SOS khẩn cấp trong khuôn viên trường',
+      importance: Importance.max,
+      priority: Priority.high,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(
+        interruptionLevel: InterruptionLevel.critical,
+      ),
+    );
+
+    await _notificationsPlugin.show(
+      id: 9999 + (DateTime.now().millisecond % 1000),
+      title: title,
+      body: body,
+      notificationDetails: notificationDetails,
+      payload: payload ?? 'sos_alert',
+    );
+  }
+
   /// Lập lịch thông báo trước khi lịch học bắt đầu 1 tiếng (60 phút)
   Future<void> scheduleClassReminder({
     required ScheduleItem item,

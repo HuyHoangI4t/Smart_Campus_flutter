@@ -6,6 +6,7 @@ import '../features/auth/screens/forgot_password_screen.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/otp_verify_screen.dart';
 import '../features/auth/screens/register_screen.dart';
+import '../features/auth/screens/splash_screen.dart';
 import '../features/feedback/screens/feedback_screen.dart';
 import '../features/grades/screens/grades_detail_screen.dart';
 import '../features/grades/screens/grades_screen.dart';
@@ -22,30 +23,81 @@ import 'main_shell.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Lớp notifier cầu nối giữa AuthProvider và GoRouter
+/// Giúp lắng nghe trạng thái đăng nhập và kích hoạt redirect tự động
+class RouterNotifier extends ChangeNotifier {
+  final Ref _ref;
+
+  RouterNotifier(this._ref) {
+    _ref.listen<AuthState>(authProvider, (previous, next) {
+      if (previous?.isInitialized != next.isInitialized ||
+          previous?.isAuthenticated != next.isAuthenticated) {
+        notifyListeners();
+      }
+    });
+  }
+
+  AuthState get authState => _ref.read(authProvider);
+}
+
+final routerNotifierProvider = Provider<RouterNotifier>((ref) {
+  return RouterNotifier(ref);
+});
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  final notifier = ref.watch(routerNotifierProvider);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/home',
+    initialLocation: '/splash',
+    refreshListenable: notifier,
     redirect: (context, state) {
+      final authState = notifier.authState;
+      final isInitialized = authState.isInitialized;
       final isAuth = authState.isAuthenticated;
       final isAuthRoute = state.matchedLocation.startsWith('/auth');
+      final isSplash = state.matchedLocation == '/splash';
 
-      // Cho phép truy cập nếu đã xác thực hoặc đang ở các màn auth
-      if (!isAuth && !isAuthRoute) {
-        return '/auth/login';
+      // 1. Khi đang khởi động / kiểm tra phiên đăng nhập:
+      // Luôn giữ ở màn hình Splash / Loading, tuyệt đối không chớp sang Auth
+      if (!isInitialized) {
+        return isSplash ? null : '/splash';
       }
-      if (isAuth && isAuthRoute) {
+
+      // 2. Đã kiểm tra xong nhưng CHƯA đăng nhập:
+      if (!isAuth) {
+        // Đang ở Splash hoặc các route trong app cần xác thực -> Chuyển về màn hình Đăng nhập
+        if (isSplash || !isAuthRoute) {
+          return '/auth/login';
+        }
+        // Đang ở các màn Auth (đăng nhập, đăng ký, OTP, quên mật khẩu) -> Cho phép tiếp tục
+        return null;
+      }
+
+      // 3. Đã đăng nhập hợp lệ (có token hoặc khách):
+      // Nếu đang ở Splash hoặc bất kỳ màn Auth nào -> Chuyển thẳng vào Home, không hiển thị Auth
+      if (isSplash || isAuthRoute) {
         return '/home';
       }
+
       return null;
     },
     routes: [
+      // Màn hình Splash / Loading ban đầu
+      GoRoute(
+        path: '/splash',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SplashScreen(),
+      ),
+
       // Auth Routes
       GoRoute(
         path: '/auth/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        redirect: (context, state) => '/auth/login',
       ),
       GoRoute(
         path: '/auth/register',

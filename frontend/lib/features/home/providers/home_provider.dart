@@ -5,6 +5,7 @@ import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/api_client.dart';
 import '../../schedule/models/schedule_model.dart';
 import '../../schedule/providers/schedule_provider.dart';
+import '../models/fallback_campus_news.dart';
 import '../models/news_model.dart';
 
 class NextClassInfo {
@@ -110,7 +111,11 @@ class HomeNotifier extends Notifier<HomeState> {
   HomeState build() {
     _loadFromCache();
     Future.microtask(() => fetchDashboard());
-    return const HomeState(isLoading: true);
+    return const HomeState(
+      news: defaultFallbackNews,
+      announcements: defaultFallbackAnnouncements,
+      isLoading: false,
+    );
   }
 
   Future<void> _loadFromCache() async {
@@ -133,8 +138,8 @@ class HomeNotifier extends Notifier<HomeState> {
 
         if (announcements.isNotEmpty || news.isNotEmpty) {
           state = state.copyWith(
-            news: news,
-            announcements: announcements,
+            news: news.isNotEmpty ? news : defaultFallbackNews,
+            announcements: announcements.isNotEmpty ? announcements : defaultFallbackAnnouncements,
             isLoading: false,
           );
         }
@@ -143,7 +148,7 @@ class HomeNotifier extends Notifier<HomeState> {
   }
 
   Future<void> fetchDashboard({bool forceRefresh = false}) async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: state.news.isEmpty && state.announcements.isEmpty, error: null);
     await Future.wait([
       fetchNews(forceRefresh: forceRefresh),
       fetchAlerts(),
@@ -155,14 +160,17 @@ class HomeNotifier extends Notifier<HomeState> {
     try {
       final response = await _dio.get(ApiEndpoints.campusDashboard);
       if (response.statusCode == 200 && response.data != null) {
-        final List rawAlerts = response.data['alerts'] ?? response.data['notificationAlerts'] ?? [];
-        if (rawAlerts.isNotEmpty) {
-          final alerts = rawAlerts
-              .whereType<Map<String, dynamic>>()
-              .map((item) => HomeAlertItem.fromJson(item))
-              .toList();
-          state = state.copyWith(alerts: alerts);
-          return;
+        final dynamic raw = response.data is String ? jsonDecode(response.data) : response.data;
+        if (raw is Map) {
+          final List rawAlerts = raw['alerts'] ?? raw['notificationAlerts'] ?? [];
+          if (rawAlerts.isNotEmpty) {
+            final alerts = rawAlerts
+                .whereType<Map<String, dynamic>>()
+                .map((item) => HomeAlertItem.fromJson(item))
+                .toList();
+            state = state.copyWith(alerts: alerts);
+            return;
+          }
         }
       }
     } catch (_) {}
@@ -177,14 +185,15 @@ class HomeNotifier extends Notifier<HomeState> {
         queryParameters: forceRefresh ? {'refresh': 'true', 'reload': 'true'} : null,
       );
 
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        final List rawAnnouncements = response.data['announcements'] ??
-            response.data['latestAnnouncements'] ??
+      final dynamic data = response.data is String ? jsonDecode(response.data) : response.data;
+      if (response.statusCode == 200 && data is Map && (data['success'] == true || data['announcements'] != null || data['news'] != null)) {
+        final List rawAnnouncements = data['announcements'] ??
+            data['latestAnnouncements'] ??
             [];
-        final List rawNews = response.data['news'] ??
-            response.data['latestNews'] ??
+        final List rawNews = data['news'] ??
+            data['latestNews'] ??
             [];
-        final List rawData = response.data['data'] ?? [];
+        final List rawData = data['data'] ?? [];
 
         List<NewsModel> announcements = rawAnnouncements
             .whereType<Map>()
@@ -223,6 +232,14 @@ class HomeNotifier extends Notifier<HomeState> {
           }
         }
 
+        // Bảo đảm nếu danh sách trả về rỗng thì giữ dữ liệu mặc định
+        if (announcements.isEmpty) {
+          announcements = defaultFallbackAnnouncements;
+        }
+        if (news.isEmpty) {
+          news = defaultFallbackNews;
+        }
+
         state = state.copyWith(
           news: news,
           announcements: announcements,
@@ -236,15 +253,16 @@ class HomeNotifier extends Notifier<HomeState> {
             'news': news.map((n) => n.toJson()).toList(),
           }));
         } catch (_) {}
-      } else if (state.news.isEmpty && state.announcements.isEmpty) {
-        state = state.copyWith(news: const [], announcements: const []);
       }
     } catch (e, stack) {
       // ignore: avoid_print
       print('❌ [fetchNews Error] $e\n$stack');
-      // Giữ nguyên tin tức đã nạp trước đó nếu có, không xóa trắng màn hình khi lỗi mạng đột ngột
-      if (state.news.isEmpty && state.announcements.isEmpty) {
-        state = state.copyWith(news: const [], announcements: const []);
+      // Không bao giờ xóa trắng màn hình khi lỗi mạng - bảo đảm luôn có dữ liệu hiển thị
+      if (state.news.isEmpty) {
+        state = state.copyWith(news: defaultFallbackNews);
+      }
+      if (state.announcements.isEmpty) {
+        state = state.copyWith(announcements: defaultFallbackAnnouncements);
       }
     }
   }

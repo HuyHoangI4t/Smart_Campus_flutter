@@ -6,7 +6,7 @@ import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/widgets/nav_header.dart';
 import '../../../core/widgets/news_card_image.dart';
-import '../../../core/widgets/wireframe_widgets.dart';
+import '../models/fallback_campus_news.dart';
 import '../models/news_model.dart';
 import '../providers/home_provider.dart';
 
@@ -21,6 +21,7 @@ class NewsDetailScreen extends ConsumerStatefulWidget {
 
 class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
   bool _isLoadingDetail = false;
+  bool _hasLoadError = false;
   String? _fetchedContent;
   List<NewsAttachment>? _fetchedAttachments;
   List<String>? _fetchedImages;
@@ -35,28 +36,51 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     });
   }
 
-  Future<void> _loadArticleDetailIfNeeded([NewsModel? providedItem]) async {
+  NewsModel _findArticle(List<NewsModel> allArticles, String targetIdStr) {
+    // 1. Khớp chính xác ID tuyệt đối
+    for (final a in allArticles) {
+      if (a.id == targetIdStr) return a;
+    }
+    // 2. Khớp theo link hoặc GUID
+    for (final a in allArticles) {
+      if (a.link == targetIdStr) return a;
+    }
+    // 3. Khớp dự phòng
+    final fallbacks = [...defaultFallbackAnnouncements, ...defaultFallbackNews];
+    for (final f in fallbacks) {
+      if (f.id == targetIdStr || f.link == targetIdStr) return f;
+    }
+    // 4. Khớp chứa ID (chỉ khi targetIdStr đủ dài để tránh 1 khớp nhầm 10, 11)
+    if (targetIdStr.length > 3) {
+      for (final a in allArticles) {
+        if (a.id.contains(targetIdStr)) return a;
+      }
+    }
+    return allArticles.isNotEmpty
+        ? allArticles.first
+        : (fallbacks.isNotEmpty ? fallbacks.first : const NewsModel(id: '0', title: 'Thông báo', summary: ''));
+  }
+
+  Future<void> _loadArticleDetailIfNeeded([NewsModel? providedItem, bool force = false]) async {
     final homeState = ref.read(homeProvider);
     final targetIdStr = widget.id.toString();
     final allArticles = homeState.allArticles;
 
-    final item = providedItem ?? allArticles.firstWhere(
-      (n) => n.id == targetIdStr || n.id.contains(targetIdStr),
-      orElse: () => allArticles.isNotEmpty
-          ? allArticles.first
-          : const NewsModel(id: '0', title: 'Thông báo', summary: ''),
-    );
+    final item = providedItem ?? _findArticle(allArticles, targetIdStr);
 
     if (item.link == null || item.link!.isEmpty || !item.link!.startsWith('http')) {
       return;
     }
 
-    // Tránh fetch lặp lại cùng một link
-    if (_lastLoadedLink == item.link && _fetchedContent != null) {
+    // Tránh fetch lặp lại cùng một link trừ khi force refresh
+    if (!force && _lastLoadedLink == item.link && _fetchedContent != null) {
       return;
     }
 
-    setState(() => _isLoadingDetail = true);
+    setState(() {
+      _isLoadingDetail = true;
+      _hasLoadError = false;
+    });
     _lastLoadedLink = item.link;
 
     try {
@@ -88,11 +112,14 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
             if (attachments.isNotEmpty) _fetchedAttachments = attachments;
             if (images.isNotEmpty) _fetchedImages = images;
             if (blocks.isNotEmpty) _fetchedBlocks = blocks;
+            _hasLoadError = false;
           });
         }
+      } else {
+        if (mounted) setState(() => _hasLoadError = true);
       }
     } catch (_) {
-      // Giữ nguyên dữ liệu có sẵn từ cache DB
+      if (mounted) setState(() => _hasLoadError = true);
     } finally {
       if (mounted) {
         setState(() => _isLoadingDetail = false);
@@ -153,12 +180,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     final targetIdStr = widget.id.toString();
     final allArticles = homeState.allArticles;
 
-    final item = allArticles.firstWhere(
-      (n) => n.id == targetIdStr || n.id.contains(targetIdStr),
-      orElse: () => allArticles.isNotEmpty
-          ? allArticles.first
-          : const NewsModel(id: '0', title: 'Thông báo sinh viên', summary: ''),
-    );
+    final item = _findArticle(allArticles, targetIdStr);
 
     // [DATA-FLOW FIX] Tự động tải toàn văn nếu ban đầu allArticles trống và vừa được fetch xong
     if (item.link != null && item.link!.startsWith('http') && _lastLoadedLink != item.link && !_isLoadingDetail && _fetchedContent == null) {
@@ -205,200 +227,286 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
               valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
             ),
           Expanded(
-            child: (_isLoadingDetail && _fetchedContent == null && (item.content == null || item.content!.isEmpty))
-                ? const WireframeArticleDetail()
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            child: RefreshIndicator(
+              color: const Color(0xFF132F73),
+              onRefresh: () async {
+                await _loadArticleDetailIfNeeded(item, true);
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Badge & Date
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                  // Badge & Date
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFBFDBFE)),
-                        ),
-                        child: Text(
-                          item.category,
-                          style: const TextStyle(
-                            color: Color(0xFF2563EB),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
                           ),
-                        ),
-                      ),
-                      Text(
-                        item.publishedAt ?? 'Mới nhất',
-                        style: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Title
-                  Text(
-                    item.title,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F172A),
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Author
-                  Row(
-                    children: [
-                      const Icon(Icons.school_outlined, size: 16, color: Color(0xFF64748B)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          item.author ?? 'Ban Thông tin Trường Đại học Tây Nguyên',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 28),
-
-                  // Cover Hero Image (chỉ hiển thị khi bài viết không có ảnh inline và không phải là thông báo văn bản)
-                  if (!hasImageInBlocks && !item.isAnnouncement && coverImageUrl != null && coverImageUrl.isNotEmpty) ...[
-                    GestureDetector(
-                      onTap: () => _showFullScreenImage(context, coverImageUrl, leadingCaption),
-                      child: Stack(
-                        children: [
-                          NewsCardImage(
-                            imageUrl: coverImageUrl,
-                            fallbackIndex: item.numericIndex,
-                            width: double.infinity,
-                            fit: BoxFit.fitWidth,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          Positioned(
-                            bottom: 8,
-                            right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.zoom_in, color: Colors.white, size: 14),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Chạm để xem ảnh',
-                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                                  ),
-                                ],
-                              ),
+                          child: Text(
+                            item.category,
+                            style: const TextStyle(
+                              color: Color(0xFF2563EB),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
                             ),
                           ),
-                        ],
+                        ),
+                        Text(
+                          item.publishedAt ?? 'Mới nhất',
+                          style: const TextStyle(fontSize: 12.5, color: Color(0xFF94A3B8)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Title
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                        height: 1.35,
                       ),
                     ),
-                    if (leadingCaption != null && leadingCaption.trim().isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        leadingCaption,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontStyle: FontStyle.italic,
-                          color: Color(0xFF64748B),
-                          height: 1.4,
+                    const SizedBox(height: 10),
+
+                    // Author
+                    Row(
+                      children: [
+                        const Icon(Icons.school_outlined, size: 16, color: Color(0xFF64748B)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            item.author ?? 'Ban Thông tin Trường Đại học Tây Nguyên',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 28),
+
+                    // Thông báo tải chi tiết nếu đang nạp
+                    if (_isLoadingDetail) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: const Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Đang tải toàn văn văn bản và tệp đính kèm...',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Color(0xFF1D4ED8),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                    const SizedBox(height: 18),
-                  ],
 
-                  // Content: Hiển thị các khối nội dung xen kẽ hình ảnh tự nhiên
-                  if (resolvedBlocks.isNotEmpty)
-                    ..._buildContentBlocks(resolvedBlocks, item.numericIndex)
-                  else
-                    ..._buildParagraphs(resolvedContent),
-
-                  // Attachments Section
-                  if (resolvedAttachments.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEFF6FF),
-                                  borderRadius: BorderRadius.circular(8),
+                    // Banner báo lỗi và cho phép thử lại
+                    if (_hasLoadError && _fetchedContent == null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFECACA)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline, color: Color(0xFFDC2626), size: 20),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Chưa tải được toàn văn từ web trường. Vuốt xuống để thử lại.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF991B1B),
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                child: const Icon(Icons.attach_file, color: Color(0xFF2563EB), size: 18),
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Tệp đính kèm (${resolvedAttachments.length})',
-                                style: const TextStyle(
-                                  fontSize: 15,
+                            ),
+                            TextButton(
+                              onPressed: () => _loadArticleDetailIfNeeded(item, true),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text(
+                                'Tải lại',
+                                style: TextStyle(
+                                  fontSize: 12.5,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFF0F172A),
+                                  color: Color(0xFFDC2626),
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          ...resolvedAttachments.map((att) => _buildAttachmentCard(att)),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 24),
-
-                  // Open in Original TTN Website Button
-                  if (item.link != null && item.link!.startsWith('http')) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _openOriginalArticle(item.link),
-                        icon: const Icon(Icons.open_in_new, size: 16),
-                        label: const Text(
-                          'Xem trên cổng thông tin TTN.edu.vn',
-                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF2563EB),
-                          side: const BorderSide(color: Color(0xFFBFDBFE)),
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 32),
+                    ],
+
+                    // Cover Hero Image (chỉ hiển thị khi bài viết không có ảnh inline và không phải là thông báo văn bản)
+                    if (!hasImageInBlocks && !item.isAnnouncement && coverImageUrl != null && coverImageUrl.isNotEmpty) ...[
+                      GestureDetector(
+                        onTap: () => _showFullScreenImage(context, coverImageUrl, leadingCaption),
+                        child: Stack(
+                          children: [
+                            NewsCardImage(
+                              imageUrl: coverImageUrl,
+                              fallbackIndex: item.numericIndex,
+                              width: double.infinity,
+                              fit: BoxFit.fitWidth,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            Positioned(
+                              bottom: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Chạm để xem ảnh',
+                                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (leadingCaption != null && leadingCaption.trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          leadingCaption,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontStyle: FontStyle.italic,
+                            color: Color(0xFF64748B),
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                    ],
+
+                    // Content: Hiển thị các khối nội dung xen kẽ hình ảnh tự nhiên
+                    if (resolvedBlocks.isNotEmpty)
+                      ..._buildContentBlocks(resolvedBlocks, item.numericIndex)
+                    else
+                      ..._buildParagraphs(resolvedContent),
+
+                    // Attachments Section
+                    if (resolvedAttachments.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEFF6FF),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.attach_file, color: Color(0xFF2563EB), size: 18),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Tệp đính kèm (${resolvedAttachments.length})',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ...resolvedAttachments.map((att) => _buildAttachmentCard(att)),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 24),
+
+                    // Open in Original TTN Website Button
+                    if (item.link != null && item.link!.startsWith('http')) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _openOriginalArticle(item.link),
+                          icon: const Icon(Icons.open_in_new, size: 16),
+                          label: const Text(
+                            'Xem trên cổng thông tin TTN.edu.vn',
+                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF2563EB),
+                            side: const BorderSide(color: Color(0xFFBFDBFE)),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

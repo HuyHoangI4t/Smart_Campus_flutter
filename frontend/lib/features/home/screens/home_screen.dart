@@ -355,9 +355,9 @@ class HomeScreen extends ConsumerWidget {
                 border: Border.all(color: border, width: 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    offset: const Offset(0, 1),
-                    blurRadius: 3,
+                    color: fg.withValues(alpha: 0.15),
+                    offset: const Offset(0, 3),
+                    blurRadius: 8,
                   ),
                 ],
               ),
@@ -365,13 +365,14 @@ class HomeScreen extends ConsumerWidget {
                 child: Icon(icon, color: fg, size: 24),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 7),
             Text(
               label,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textSecondary,
+                color: AppColors.text,
+                letterSpacing: -0.1,
               ),
               textAlign: TextAlign.center,
               maxLines: 1,

@@ -33,6 +33,7 @@ class MapState {
   final bool pathsFromApi;
   final String? routingError;
   final String? routingNotice;
+  final bool isMapActive;
 
   const MapState({
     this.locations = CampusConstants.campusLocations,
@@ -49,6 +50,7 @@ class MapState {
     this.pathsFromApi = false,
     this.routingError,
     this.routingNotice,
+    this.isMapActive = false,
   });
 
   List<CampusLocationItem> get filteredLocations {
@@ -143,6 +145,7 @@ class MapState {
     bool? pathsFromApi,
     Object? routingError = const _Sentinel(),
     Object? routingNotice = const _Sentinel(),
+    bool? isMapActive,
   }) {
     return MapState(
       locations: locations ?? this.locations,
@@ -169,6 +172,7 @@ class MapState {
       routingNotice: routingNotice is _Sentinel
           ? this.routingNotice
           : routingNotice as String?,
+      isMapActive: isMapActive ?? this.isMapActive,
     );
   }
 }
@@ -183,19 +187,55 @@ class MapNotifier extends Notifier<MapState> {
   @override
   MapState build() {
     _initDijkstraRouter();
+
+    ref.onDispose(() {
+      _cancelSubscriptions();
+    });
+
+    return const MapState();
+  }
+
+  void _cancelSubscriptions() {
+    _compassSub?.cancel();
+    _compassSub = null;
+    _positionSub?.cancel();
+    _positionSub = null;
+    _compassSmoother?.dispose();
+    _compassSmoother = null;
+    _searchDebounce?.cancel();
+    _searchDebounce = null;
+  }
+
+  /// Kích hoạt khi người dùng chuyển vào tab Bản đồ:
+  /// Khởi động cảm biến la bàn, định vị GPS thực tế và đồng bộ dữ liệu bản đồ
+  void activateMap() {
+    if (state.isMapActive) return;
+    state = state.copyWith(isMapActive: true);
     _startCompassListening();
     _startLocationListening();
     fetchLocationsFromBackend();
     _fetchPathsFromBackend();
+  }
 
-    ref.onDispose(() {
-      _compassSub?.cancel();
-      _positionSub?.cancel();
-      _compassSmoother?.dispose();
-      _searchDebounce?.cancel();
-    });
+  /// Hủy toàn bộ cảm biến, stream và tác vụ nền khi người dùng chuyển sang tab khác:
+  /// Dừng cảm biến la bàn (FlutterCompass), dừng GPS watcher (Geolocator), dừng chỉ đường,
+  /// giải phóng bộ nhớ và ngăn chặn hao pin ngầm.
+  void deactivateMap() {
+    _cancelSubscriptions();
+    if (!state.isMapActive && !state.isNavigating && state.activeRoute == null && state.selectedLocation == null) {
+      return;
+    }
 
-    return const MapState();
+    state = state.copyWith(
+      isMapActive: false,
+      isNavigating: false,
+      activeRoute: null,
+      selectedLocation: null,
+      searchQuery: '',
+      selectedCategory: 'Tat ca',
+      routingError: null,
+      routingNotice: null,
+    );
   }
 
   void _initDijkstraRouter() {
@@ -208,6 +248,7 @@ class MapNotifier extends Notifier<MapState> {
     final dio = ref.read(dioProvider);
     try {
       final response = await dio.get(ApiEndpoints.campusPaths);
+      if (!ref.mounted) return;
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
         if (data is Map<String, dynamic> && data['paths'] is List) {
@@ -235,7 +276,9 @@ class MapNotifier extends Notifier<MapState> {
       }
     }
     // Fallback: giu nguyen graph tu offline constants
-    state = state.copyWith(isLoadingPaths: false);
+    if (ref.mounted) {
+      state = state.copyWith(isLoadingPaths: false);
+    }
   }
 
   void _startCompassListening() {
@@ -358,6 +401,7 @@ class MapNotifier extends Notifier<MapState> {
 
   /// Cap nhat khoang cach live khi user di chuyen
   Future<void> _updateLiveNavigation(LatLng currentPos) async {
+    if (!state.isNavigating) return;
     final destination = state.selectedLocation;
     if (destination == null) return;
 
@@ -424,6 +468,7 @@ class MapNotifier extends Notifier<MapState> {
     final dio = ref.read(dioProvider);
     try {
       final response = await dio.get(ApiEndpoints.campusLocations);
+      if (!ref.mounted) return;
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
         if (data is Map<String, dynamic> && data['locations'] is List) {
@@ -433,7 +478,7 @@ class MapNotifier extends Notifier<MapState> {
                   item as Map<String, dynamic>))
               .where((loc) => loc.lat != 0.0 && loc.lng != 0.0)
               .toList();
-          if (parsed.isNotEmpty) {
+          if (parsed.isNotEmpty && ref.mounted) {
             state = state.copyWith(locations: parsed);
           }
         }
@@ -446,6 +491,7 @@ class MapNotifier extends Notifier<MapState> {
 
     try {
       final gatesResponse = await dio.get(ApiEndpoints.campusGates);
+      if (!ref.mounted) return;
       if (gatesResponse.statusCode == 200 && gatesResponse.data != null) {
         final gData = gatesResponse.data;
         final rawGates = (gData is Map<String, dynamic>)
@@ -456,7 +502,7 @@ class MapNotifier extends Notifier<MapState> {
               .map((g) => CampusGate.fromJson(g as Map<String, dynamic>))
               .where((g) => g.lat != 0.0 && g.lng != 0.0)
               .toList();
-          if (parsedGates.isNotEmpty) {
+          if (parsedGates.isNotEmpty && ref.mounted) {
             state = state.copyWith(gates: parsedGates);
           }
         }
@@ -550,6 +596,8 @@ class MapNotifier extends Notifier<MapState> {
     state = state.copyWith(
       isNavigating: false,
       activeRoute: null,
+      routingError: null,
+      routingNotice: null,
     );
   }
 

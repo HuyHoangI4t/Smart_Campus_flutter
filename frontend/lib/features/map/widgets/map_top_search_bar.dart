@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
@@ -46,6 +47,7 @@ class MapTopSearchBar extends StatefulWidget {
 class _MapTopSearchBarState extends State<MapTopSearchBar> {
   bool _isExpanded = false;
   final FocusNode _focusNode = FocusNode();
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -59,6 +61,7 @@ class _MapTopSearchBarState extends State<MapTopSearchBar> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _focusNode.dispose();
     super.dispose();
   }
@@ -104,8 +107,11 @@ class _MapTopSearchBarState extends State<MapTopSearchBar> {
               controller: widget.searchController,
               focusNode: _focusNode,
               onChanged: (val) {
-                widget.onSearchChanged(val);
                 if (!_isExpanded) setState(() => _isExpanded = true);
+                _debounceTimer?.cancel();
+                _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+                  widget.onSearchChanged(val);
+                });
               },
               onTap: () => setState(() => _isExpanded = true),
               style: const TextStyle(fontSize: 13.5, color: AppColors.textForeground),

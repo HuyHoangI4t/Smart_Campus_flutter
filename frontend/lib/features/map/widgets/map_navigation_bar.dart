@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
 
@@ -73,7 +73,7 @@ class MapNavigationBar extends StatelessWidget {
                         child: Text(
                           isHybrid && viaGateName != null
                               ? 'NGOÀI TRƯỜNG ➔ VÀO ${viaGateName!.toUpperCase()}'
-                              : 'CỔNG: ${currentGate.name.toUpperCase()}',
+                              : 'CỔNG: ${(currentGate.shortName.isNotEmpty ? currentGate.shortName : currentGate.name).toUpperCase()}',
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -100,12 +100,14 @@ class MapNavigationBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '~${(distanceMeters.isInfinite || distanceMeters.isNaN) ? 100 : distanceMeters.round()}m • ~$walkingMinutes phut di bo',
+                  '~${(distanceMeters.isInfinite || distanceMeters.isNaN) ? 100 : distanceMeters.round()}m • ~$walkingMinutes phút đi bộ',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF059669),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -119,12 +121,16 @@ class MapNavigationBar extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 5),
-                    const Text(
-                      'Dinh vi truc tiep • Tu cap nhat khoang cach',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textMuted,
+                    const Expanded(
+                      child: Text(
+                        'Định vị trực tiếp • Tự cập nhật khoảng cách',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textMuted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -150,7 +156,7 @@ class MapNavigationBar extends StatelessWidget {
                   Icon(Icons.cancel_outlined, size: 16, color: Color(0xFFDC2626)),
                   SizedBox(width: 5),
                   Text(
-                    'Dung',
+                    'Dừng',
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w800,

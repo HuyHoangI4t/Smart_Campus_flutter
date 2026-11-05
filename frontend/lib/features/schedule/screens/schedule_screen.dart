@@ -5,6 +5,7 @@ import '../../../core/widgets/nav_header.dart';
 import '../../../core/widgets/wireframe_widgets.dart';
 import '../models/schedule_model.dart';
 import '../providers/schedule_provider.dart';
+import '../utils/schedule_date_utils.dart';
 import '../widgets/schedule_add_custom_modal.dart';
 import '../widgets/schedule_card.dart';
 import '../widgets/schedule_custom_detail_modal.dart';
@@ -71,52 +72,19 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         return 'Thứ Hai';
     }
   }
-  final List<Map<String, dynamic>> _weeks = [
-    {
-      'index': 0,
-      'label': 'Tuần trước',
-      'isCurrent': false,
-      'isNext': false,
-    },
-    {
-      'index': 1,
-      'label': 'Tuần này',
-      'isCurrent': true,
-      'isNext': false,
-    },
-    {
-      'index': 2,
-      'label': 'Tuần sau',
-      'isCurrent': false,
-      'isNext': true,
-    },
-    {
-      'index': 3,
-      'label': '2 tuần sau',
-      'isCurrent': false,
-      'isNext': false,
-    },
-  ];
-
-  final List<Map<String, String>> _days = [
-    {'day': 'Thứ 2', 'date': '19/10'},
-    {'day': 'Thứ 3', 'date': '20/10'},
-    {'day': 'Thứ 4', 'date': '21/10'},
-    {'day': 'Thứ 5', 'date': '22/10'},
-    {'day': 'Thứ 6', 'date': '23/10'},
-    {'day': 'Thứ 7', 'date': '24/10'},
-    {'day': 'CN', 'date': '25/10'},
-  ];
+  List<Map<String, dynamic>> get _dynamicWeeks => ScheduleDateUtils.generateDefaultAvailableWeeks();
+  List<Map<String, String>> get _dynamicDays => ScheduleDateUtils.generateWeekDays(ScheduleDateUtils.getMondayOfWeek(DateTime.now()));
 
   @override
   Widget build(BuildContext context) {
     final scheduleState = ref.watch(scheduleProvider);
+    final now = DateTime.now();
+    final dynamicDays = _dynamicDays;
     final weekSubtitle = scheduleState.weekRange.isNotEmpty
         ? scheduleState.weekRange
-        : 'Từ ngày 19/10/2026 đến ngày 25/10/2026';
+        : ScheduleDateUtils.getWeekRangeFromDate(now);
 
-    final now = DateTime.now();
-    final todayDayNum = now.weekday == 7 ? 1 : now.weekday + 1;
+    final todayDayNum = ScheduleDateUtils.getTodayDayNum(now);
     final isViewingCurrentWeek = scheduleState.selectedWeekIndex == scheduleState.currentWeekIndex;
 
     // Tính số tiết học cho mỗi thứ trong tuần
@@ -125,7 +93,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
       countMap[item.dayNum] = (countMap[item.dayNum] ?? 0) + 1;
     }
 
-    final days = scheduleState.days.isNotEmpty ? scheduleState.days : _days;
+    final days = scheduleState.days.isNotEmpty ? scheduleState.days : dynamicDays;
 
     // Lọc môn học của thứ đang chọn
     final selectedDayName = _dayNumToName(_selectedDay);
@@ -378,14 +346,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
 
   // ─── THANH ĐIỀU HƯỚNG TUẦN HIỆN ĐẠI (WEEK NAVIGATOR) ───
   Widget _buildWeekNavigator(ScheduleState scheduleState) {
-    final weeks = scheduleState.availableWeeks.isNotEmpty ? scheduleState.availableWeeks : _weeks;
+    final weeks = scheduleState.availableWeeks.isNotEmpty ? scheduleState.availableWeeks : _dynamicWeeks;
     final currentIdx = scheduleState.selectedWeekIndex;
     final canPrev = currentIdx > 0;
     final canNext = currentIdx < weeks.length - 1;
 
     // Dữ liệu tuần đang chọn
     final currentWeekData = weeks.firstWhere(
-      (w) => (w['index'] is int ? w['index'] as int : 0) == currentIdx,
+      (w) => ((w['index'] as num?)?.toInt() ?? 0) == currentIdx,
       orElse: () => weeks.isNotEmpty ? weeks.first : <String, dynamic>{},
     );
 
@@ -413,7 +381,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
 
     for (int i = 0; i < weeks.length; i++) {
       final w = weeks[i];
-      final wIdx = w['index'] is int ? w['index'] as int : i;
+      final wIdx = (w['index'] as num?)?.toInt() ?? i;
       final lbl = (w['label']?.toString() ?? '').toLowerCase();
       final diff = wIdx - curIdx;
 
@@ -873,7 +841,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   // ─── THỜI KHÓA BIỂU DẠNG BẢNG: THỨ THEO CHIỀU DỌC (T2 -> CN), CHỈ SÁNG & CHIỀU ───
   // ══════════════════════════════════════════════════════════════════════════
   Widget _buildVerticalTimetable(ScheduleState scheduleState) {
-    final days = scheduleState.days.isNotEmpty ? scheduleState.days : _days;
+    final days = scheduleState.days.isNotEmpty ? scheduleState.days : _dynamicDays;
     final isCurrentWeek = scheduleState.selectedWeekIndex == scheduleState.currentWeekIndex;
 
     return Container(

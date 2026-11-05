@@ -8,11 +8,13 @@ import '../models/user_model.dart';
 class AuthState {
   final UserModel? user;
   final bool isLoading;
+  final bool isInitialized;
   final String? error;
 
   const AuthState({
     this.user,
     this.isLoading = false,
+    this.isInitialized = false,
     this.error,
   });
 
@@ -22,11 +24,13 @@ class AuthState {
   AuthState copyWith({
     UserModel? user,
     bool? isLoading,
+    bool? isInitialized,
     String? error,
   }) {
     return AuthState(
       user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
+      isInitialized: isInitialized ?? this.isInitialized,
       error: error,
     );
   }
@@ -38,10 +42,11 @@ class AuthNotifier extends Notifier<AuthState> {
   @override
   AuthState build() {
     Future.microtask(() => checkAuthSession());
-    return const AuthState(isLoading: true);
+    return const AuthState(isLoading: true, isInitialized: false);
   }
 
   Future<void> checkAuthSession() async {
+    final stopwatch = Stopwatch()..start();
     try {
       final storage = ref.read(storageServiceProvider);
       final isGuest = await storage.isGuestMode();
@@ -55,7 +60,11 @@ class AuthNotifier extends Notifier<AuthState> {
             guestUser = UserModel.fromJson(data);
           } catch (_) {}
         }
-        state = AuthState(user: guestUser, isLoading: false);
+        final elapsed = stopwatch.elapsedMilliseconds;
+        if (elapsed < 900) {
+          await Future.delayed(Duration(milliseconds: 900 - elapsed));
+        }
+        state = AuthState(user: guestUser, isLoading: false, isInitialized: true);
         return;
       }
 
@@ -65,14 +74,27 @@ class AuthNotifier extends Notifier<AuthState> {
       if (token != null && userJson != null) {
         try {
           final Map<String, dynamic> data = jsonDecode(userJson);
-          state = AuthState(user: UserModel.fromJson(data), isLoading: false);
+          final user = UserModel.fromJson(data);
+          final elapsed = stopwatch.elapsedMilliseconds;
+          if (elapsed < 900) {
+            await Future.delayed(Duration(milliseconds: 900 - elapsed));
+          }
+          state = AuthState(user: user, isLoading: false, isInitialized: true);
           return;
         } catch (_) {}
       }
 
-      state = const AuthState(user: null, isLoading: false);
+      final elapsed = stopwatch.elapsedMilliseconds;
+      if (elapsed < 900) {
+        await Future.delayed(Duration(milliseconds: 900 - elapsed));
+      }
+      state = const AuthState(user: null, isLoading: false, isInitialized: true);
     } catch (e) {
-      state = const AuthState(user: null, isLoading: false);
+      final elapsed = stopwatch.elapsedMilliseconds;
+      if (elapsed < 900) {
+        await Future.delayed(Duration(milliseconds: 900 - elapsed));
+      }
+      state = const AuthState(user: null, isLoading: false, isInitialized: true);
     }
   }
 
@@ -101,19 +123,19 @@ class AuthNotifier extends Notifier<AuthState> {
         await storage.saveUserData(jsonEncode(userData));
         await storage.setGuestMode(false);
 
-        state = AuthState(user: user, isLoading: false);
+        state = AuthState(user: user, isLoading: false, isInitialized: true);
         return true;
       } else {
         final msg = response.data['message'] ?? 'Đăng nhập không thành công';
-        state = state.copyWith(isLoading: false, error: msg);
+        state = state.copyWith(isLoading: false, isInitialized: true, error: msg);
         return false;
       }
     } on DioException catch (e) {
       final msg = e.response?.data?['message'] ?? 'Lỗi kết nối máy chủ';
-      state = state.copyWith(isLoading: false, error: msg);
+      state = state.copyWith(isLoading: false, isInitialized: true, error: msg);
       return false;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, isInitialized: true, error: e.toString());
       return false;
     }
   }
@@ -121,7 +143,7 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> enterGuestMode() async {
     final storage = ref.read(storageServiceProvider);
     await storage.setGuestMode(true);
-    state = AuthState(user: UserModel.guest(), isLoading: false);
+    state = AuthState(user: UserModel.guest(), isLoading: false, isInitialized: true);
   }
 
   Future<bool> register({
@@ -215,7 +237,7 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> logout() async {
     final storage = ref.read(storageServiceProvider);
     await storage.clearAll();
-    state = const AuthState(user: null, isLoading: false);
+    state = const AuthState(user: null, isLoading: false, isInitialized: true);
   }
 
   Future<bool> updateUser(UserModel updatedUser) async {

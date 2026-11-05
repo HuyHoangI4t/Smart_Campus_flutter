@@ -1,0 +1,105 @@
+import 'news_model.dart';
+
+/// Dữ liệu mẫu dự phòng Thông báo sinh viên Trường Đại học Tây Nguyên
+/// Luôn hiển thị tức thì, bảo đảm không bao giờ bị trắng màn hình hoặc rỗng danh sách khi thiết bị offline
+const List<NewsModel> defaultFallbackAnnouncements = [
+  NewsModel(
+    id: 'ann-ttn-1',
+    title: 'Cảnh giác trước các thông tin giả mạo Trường Đại học Tây Nguyên',
+    summary: 'Cảnh báo sinh viên và phụ huynh về các thủ đoạn lừa đảo học bổng, đóng học phí qua tài khoản cá nhân mạo danh cán bộ nhà trường.',
+    content: 'Hiện nay trên mạng xã hội xuất hiện một số trang fanpage, tài khoản mạo danh Trường Đại học Tây Nguyên để gửi tin nhắn yêu cầu sinh viên chuyển tiền học phí, bảo hiểm hoặc đăng ký xét tuyển.\n\nNhà trường lưu ý sinh viên chỉ theo dõi thông tin từ cổng chính thức ttn.edu.vn và liên hệ trực tiếp các phòng ban chức năng khi có nghi vấn. Tuyệt đối không chuyển tiền vào tài khoản cá nhân.',
+    category: 'Thông báo SV',
+    author: 'Phòng Công tác sinh viên',
+    publishedAt: '29/10/2026',
+    link: 'https://www.ttn.edu.vn/index.php/svthongbao/7699-1129102602',
+  ),
+  NewsModel(
+    id: 'ann-ttn-2',
+    title: 'Thông báo nộp học phí học kỳ I năm học 2026 - 2027',
+    summary: 'Hướng dẫn thời gian và hình thức nộp học phí qua ứng dụng ngân hàng số, mã QR định danh sinh viên.',
+    content: 'Trường Đại học Tây Nguyên thông báo kế hoạch thu học phí học kỳ I năm học 2026-2027 đối với toàn thể sinh viên hệ chính quy.\n\nSinh viên thực hiện thanh toán trực tiếp qua cổng thanh toán số của ngân hàng liên kết hoặc qua ứng dụng Smart Campus trước ngày 20/11/2026. Quá hạn trên hệ thống sẽ tạm khóa đăng ký môn học.',
+    category: 'Học phí & Học vụ',
+    author: 'Phòng Kế hoạch - Tài chính',
+    publishedAt: '25/10/2026',
+    link: 'https://www.ttn.edu.vn/index.php/svthongbao',
+  ),
+  NewsModel(
+    id: 'ann-ttn-3',
+    title: 'Thông báo đăng ký xét cấp học bổng khuyến khích học tập',
+    summary: 'Kế hoạch nộp hồ sơ xét cấp học bổng khuyến khích học tập và học bổng doanh nghiệp tài trợ.',
+    content: 'Nhà trường thông báo đến các khoa và sinh viên về việc rà soát điều kiện xét cấp học bổng khuyến khích học tập kỳ vừa qua.\n\nSinh viên đạt điểm rèn luyện loại Tốt trở lên và điểm trung bình học tập tích lũy từ 2.80 khẩn trương hoàn thiện thông tin tại Văn phòng Khoa trước ngày 15/11/2026.',
+    category: 'Học bổng SV',
+    author: 'Phòng Công tác sinh viên',
+    publishedAt: '20/10/2026',
+    link: 'https://www.ttn.edu.vn/index.php/svthongbao',
+  ),
+  NewsModel(
+    id: 'ann-ttn-4',
+    title: 'Lịch thi kết thúc học phần đợt 1 học kỳ I',
+    summary: 'Công bố lịch thi, danh sách phòng thi và quy chế thi kết thúc học phần cho sinh viên các khoa.',
+    content: 'Phòng Quản lý Đào tạo thông báo lịch thi chi tiết các học phần chung và học phần chuyên ngành.\n\nSinh viên có mặt tại phòng thi trước giờ bắt đầu 15 phút và mang theo thẻ sinh viên hợp lệ. Mọi trường hợp vi phạm quy chế sẽ bị xử lý kỷ luật nghiêm túc.',
+    category: 'Khảo thí & Lịch thi',
+    author: 'Phòng Quản lý Đào tạo',
+    publishedAt: '15/10/2026',
+    link: 'https://www.ttn.edu.vn/index.php/svthongbao',
+  ),
+  NewsModel(
+    id: 'ann-ttn-5',
+    title: 'Rà soát bổ sung hồ sơ miễn giảm học phí cho SV diện chính sách',
+    summary: 'Thời hạn và thủ tục hoàn thiện hồ sơ miễn giảm học phí và trợ cấp xã hội theo Nghị định 81/2021/NĐ-CP.',
+    content: 'Đề nghị sinh viên thuộc diện chính sách, hộ nghèo, cận nghèo hoặc con thương bệnh binh khẩn trương nộp bản sao công chứng các giấy tờ liên quan tại Văn phòng Một cửa để kịp thời xét duyệt chế độ miễn giảm học phí theo quy định hiện hành.',
+    category: 'Chính sách SV',
+    author: 'Phòng Công tác sinh viên',
+    publishedAt: '10/10/2026',
+    link: 'https://www.ttn.edu.vn/index.php/svthongbao',
+  ),
+];
+
+/// Dữ liệu mẫu dự phòng Tin tức & Hoạt động Trường Đại học Tây Nguyên
+const List<NewsModel> defaultFallbackNews = [
+  NewsModel(
+    id: 'news-ttn-1',
+    title: 'Hội nghị nghiên cứu, học tập, quán triệt các văn bản của Trung ương và Tỉnh ủy Đắk Lắk',
+    summary: 'Đảng ủy Trường Đại học Tây Nguyên tổ chức Hội nghị nghiên cứu, học tập, quán triệt các nghị quyết và văn bản mới.',
+    content: 'Hội nghị tập trung triển khai các phương hướng, nhiệm vụ trọng tâm trong năm học mới, tăng cường ứng dụng khoa học công nghệ và nâng cao chất lượng phục vụ cộng đồng vùng Tây Nguyên.\n\nToàn thể cán bộ, giảng viên và đại diện đoàn thể tham dự đầy đủ, nghiêm túc tiếp thu các chỉ đạo cốt lõi.',
+    category: 'Tin hoạt động',
+    author: 'Ban Biên tập TTN',
+    publishedAt: '28/10/2026',
+    imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=800&auto=format&fit=crop&q=80',
+    link: 'https://www.ttn.edu.vn/index.php/mthongbao/tintuc',
+  ),
+  NewsModel(
+    id: 'news-ttn-2',
+    title: 'Tập huấn Đổi mới sáng tạo và chuyển đổi số sinh viên năm 2026',
+    summary: 'Chương trình tập huấn nâng cao kỹ năng số, chuyển đổi số và tinh thần khởi nghiệp sáng tạo cho sinh viên.',
+    content: 'Đoàn Thanh niên phối hợp với các trung tâm công nghệ tổ chức chuỗi hội thảo chuyên đề về AI, phát triển ứng dụng di động và kỹ năng số cho hơn 500 đoàn viên, sinh viên tiêu biểu.\n\nChương trình nhằm trang bị tư duy ứng dụng công nghệ thực tiễn phục vụ học tập và nghiên cứu.',
+    category: 'Đoàn - Hội SV',
+    author: 'Đoàn Thanh niên TTN',
+    publishedAt: '22/10/2026',
+    imageUrl: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=800&auto=format&fit=crop&q=80',
+    link: 'https://www.ttn.edu.vn/index.php/mthongbao/tintuc',
+  ),
+  NewsModel(
+    id: 'news-ttn-3',
+    title: 'Hội thảo nâng cao chất lượng đào tạo và nghiên cứu khoa học',
+    summary: 'Trao đổi kinh nghiệm giảng dạy, công bố quốc tế và kết nối hợp tác doanh nghiệp giai đoạn 2026-2030.',
+    content: 'Các nhà khoa học, giảng viên trong và ngoài trường đã cùng thảo luận về các giải pháp nâng cao chuẩn đầu ra, đào tạo gắn liền nhu cầu thực tế và phát triển các sản phẩm nghiên cứu ứng dụng cho vùng Tây Nguyên.',
+    category: 'Nghiên cứu khoa học',
+    author: 'Phòng Khoa học & HTQT',
+    publishedAt: '18/10/2026',
+    imageUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=80',
+    link: 'https://www.ttn.edu.vn/index.php/mthongbao/tintuc',
+  ),
+  NewsModel(
+    id: 'news-ttn-4',
+    title: 'Lễ khai mạc Giải thể thao truyền thống sinh viên Đại học Tây Nguyên',
+    summary: 'Sôi nổi các giải thi đấu bóng đá, bóng chuyền và điền kinh chào mừng năm học mới.',
+    content: 'Giải đấu thu hút hàng ngàn vận động viên sinh viên từ các khoa, viện tham gia tranh tài trong tinh thần đoàn kết, rèn luyện thân thể khỏe mạnh để học tập và cống hiến.',
+    category: 'Văn hóa - Thể thao',
+    author: 'Trung tâm GDTC & Thể thao',
+    publishedAt: '12/10/2026',
+    imageUrl: 'https://images.unsplash.com/photo-1562774053-701939374585?w=800&auto=format&fit=crop&q=80',
+    link: 'https://www.ttn.edu.vn/index.php/mthongbao/tintuc',
+  ),
+];
+

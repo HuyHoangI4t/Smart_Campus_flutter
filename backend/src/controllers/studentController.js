@@ -336,40 +336,40 @@ exports.getSchedule = async (req, res) => {
     const processedWeek1 = scheduleService.processSchedulePayload([{ tableIndex: 1, rows: week1Rows }], week1Range, customItems, { isCurrentWeek: false });
     const processedWeek2 = scheduleService.processSchedulePayload([{ tableIndex: 1, rows: week1Rows }], week2Range, customItems, { isCurrentWeek: false });
 
-    const availableWeeks = [
-      {
-        index: 0,
-        weekRange: weekPrevRange,
-        label: 'Tuần trước',
-        isCurrent: false,
-        isNext: false,
-        schedules: processedPrev.schedules
-      },
-      {
-        index: 1,
-        weekRange: week0Range,
-        label: 'Tuần này',
-        isCurrent: true,
-        isNext: false,
-        schedules: processedWeek0.schedules
-      },
-      {
-        index: 2,
-        weekRange: week1Range,
-        label: 'Tuần sau',
-        isCurrent: false,
-        isNext: true,
-        schedules: processedWeek1.schedules
-      },
-      {
-        index: 3,
-        weekRange: week2Range,
-        label: '2 tuần sau',
-        isCurrent: false,
-        isNext: false,
-        schedules: processedWeek2.schedules
-      }
-    ];
+    // const availableWeeks = [
+    //   {
+    //     index: 0,
+    //     weekRange: weekPrevRange,
+    //     label: 'Tuần trước',
+    //     isCurrent: false,
+    //     isNext: false,
+    //     schedules: processedPrev.schedules
+    //   },
+    //   {
+    //     index: 1,
+    //     weekRange: week0Range,
+    //     label: 'Tuần này',
+    //     isCurrent: true,
+    //     isNext: false,
+    //     schedules: processedWeek0.schedules
+    //   },
+    //   {
+    //     index: 2,
+    //     weekRange: week1Range,
+    //     label: 'Tuần sau',
+    //     isCurrent: false,
+    //     isNext: true,
+    //     schedules: processedWeek1.schedules
+    //   },
+    //   {
+    //     index: 3,
+    //     weekRange: week2Range,
+    //     label: '2 tuần sau',
+    //     isCurrent: false,
+    //     isNext: false,
+    //     schedules: processedWeek2.schedules
+    //   }
+    // ];
 
     let selectedWeekIdx = 1;
     const requestedWeek = req.query.week || req.body?.week;
@@ -423,7 +423,7 @@ exports.getSchedule = async (req, res) => {
   if (mssv && !isGuestOrEmail(mssv)) {
     try {
       const [allRows] = await db.query(
-        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc, created_at FROM student_schedules WHERE mssv = ? ORDER BY id ASC',
+        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc, created_at FROM student_schedules WHERE (mssv = ? OR (mssv = "guest" AND is_custom = 1)) ORDER BY id ASC',
         [mssv]
       );
       if (allRows && allRows.length > 0) {
@@ -474,7 +474,7 @@ exports.getSchedule = async (req, res) => {
   if (mssv && !isGuestOrEmail(mssv)) {
     try {
       const [newRows] = await db.query(
-        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc FROM student_schedules WHERE mssv = ? ORDER BY id ASC',
+        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc FROM student_schedules WHERE (mssv = ? OR (mssv = "guest" AND is_custom = 1)) ORDER BY id ASC',
         [mssv]
       );
       if (newRows && newRows.length > 0) {
@@ -962,7 +962,16 @@ exports.updateProfile = async (req, res) => {
 exports.createCustomSchedule = async (req, res) => {
   try {
     const mssv = await getMssvFromReq(req);
-    const { ten_hp, thu, tiet, phong, giang_vien, ghi_chu, loai_lich, ngay_hoc, week_range } = req.body || {};
+    const body = req.body || {};
+    const ten_hp = (body.ten_hp || body.subjectName || body.courseName || body.course_name || body.subject || body.course || '').trim();
+    const phong = (body.phong || body.room || '').trim();
+    const thu = (body.thu || body.dayOfWeek || body.day_of_week || body.day || '').trim();
+    const tiet = (body.tiet || body.timeSlot || body.time_slot || body.time || '').trim();
+    const giang_vien = (body.giang_vien || body.lecturer || body.teacher || '').trim();
+    const ghi_chu = (body.ghi_chu || body.note || '').trim();
+    const loai_lich = (body.loai_lich || body.type || 'dot_xuat').trim();
+    const ngay_hoc = body.ngay_hoc || body.date;
+    const week_range = body.week_range || body.weekRange;
 
     if (!ten_hp || !phong) {
       return res.status(400).json({
@@ -1060,7 +1069,16 @@ exports.updateCustomSchedule = async (req, res) => {
   try {
     const { id } = req.params;
     const mssv = await getMssvFromReq(req);
-    const { ten_hp, thu, tiet, phong, giang_vien, ghi_chu, loai_lich, ngay_hoc, week_range } = req.body || {};
+    const body = req.body || {};
+    const ten_hp = body.ten_hp ?? body.subjectName ?? body.courseName ?? body.course_name ?? body.subject ?? body.course;
+    const phong = body.phong ?? body.room;
+    const thu = body.thu ?? body.dayOfWeek ?? body.day_of_week ?? body.day;
+    const tiet = body.tiet ?? body.timeSlot ?? body.time_slot ?? body.time;
+    const giang_vien = body.giang_vien ?? body.lecturer ?? body.teacher;
+    const ghi_chu = body.ghi_chu ?? body.note;
+    const loai_lich = body.loai_lich ?? body.type;
+    const ngay_hoc = body.ngay_hoc ?? body.date;
+    const week_range = body.week_range ?? body.weekRange;
 
     if (!id) {
       return res.status(400).json({ success: false, message: 'Thiếu ID lịch học cần cập nhật' });

@@ -275,13 +275,16 @@ async function createAllTables(connection) {
   // Chỉ tạo các index thiết yếu nhất
   await safeAddIndex(connection, 'users', 'email', 'idx_users_email');
   await safeAddIndex(connection, 'student_schedules', 'mssv', 'idx_sched_mssv');
+  await safeAddIndex(connection, 'student_schedules', 'mssv, is_custom, id', 'idx_sched_mssv_custom');
   await safeAddIndex(connection, 'student_grades', 'mssv', 'idx_grades_mssv');
   await safeAddIndex(connection, 'news_cache', 'type', 'idx_news_type');
+  await safeAddIndex(connection, 'news_cache', 'type, id DESC', 'idx_news_type_id');
   await safeAddIndex(connection, 'feedback', 'mssv', 'idx_feedback_mssv');
   await safeAddIndex(connection, 'sos_alerts', 'mssv', 'idx_sos_mssv');
   await safeAddIndex(connection, 'password_resets', 'mssv', 'idx_pwd_mssv');
   await safeAddIndex(connection, 'registration_otps', 'mssv', 'idx_reg_mssv');
   await safeAddIndex(connection, 'activity_logs', 'mssv', 'idx_act_mssv');
+  await safeAddIndex(connection, 'activity_logs', 'created_at', 'idx_act_created_at');
 }
 
 module.exports = {

@@ -131,7 +131,9 @@ final dioProvider = Provider<Dio>((ref) {
             error.type == DioExceptionType.connectionError ||
             error.type == DioExceptionType.unknown) {
           Future.microtask(() {
-            ref.read(serverUrlProvider.notifier).autoDetectWifiServer();
+            try {
+              ref.read(serverUrlProvider.notifier).autoDetectWifiServer();
+            } catch (_) {}
           });
         }
         return handler.next(error);

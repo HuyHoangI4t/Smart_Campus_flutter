@@ -26,6 +26,7 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
     final RoomDirectionInfo direction = item.roomDirection;
 
     return Container(
+      width: double.infinity,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),

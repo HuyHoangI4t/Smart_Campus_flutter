@@ -714,7 +714,7 @@ async function fetchFullArticleDetail(articleUrl) {
   try {
     const res = await axios.get(articleUrl, {
       httpsAgent,
-      timeout: 9000,
+      timeout: 25000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://www.ttn.edu.vn/'
@@ -843,7 +843,7 @@ async function fetchFullArticleDetail(articleUrl) {
       }
     });
 
-    return {
+    const result = {
       url: articleUrl,
       images,
       paragraphs,
@@ -851,9 +851,48 @@ async function fetchFullArticleDetail(articleUrl) {
       attachments,
       fullContent: paragraphs.join('\n\n')
     };
+
+    // Tự động lưu cache chi tiết vào DB để các lần truy cập sau phản hồi tức thì 1ms
+    saveArticleDetailToCache(articleUrl, result).catch(() => {});
+
+    return result;
   } catch (err) {
     console.warn('Lỗi cào chi tiết bài viết:', err.message);
     return null;
+  }
+}
+
+// Lưu chi tiết bài viết đã cào thành công vào MySQL news_cache
+async function saveArticleDetailToCache(url, detail) {
+  if (!url || !detail) return;
+  try {
+    const fullContent = detail.fullContent || (detail.paragraphs ? detail.paragraphs.join('\n\n') : '');
+    const attachments = detail.attachments || [];
+    const firstImage = detail.images && detail.images.length > 0 ? detail.images[0] : null;
+
+    const updates = [];
+    const params = [];
+
+    if (fullContent && fullContent.trim().length > 10) {
+      updates.push('content = ?');
+      params.push(fullContent.trim());
+    }
+    if (attachments.length > 0) {
+      updates.push('attachments = ?');
+      params.push(JSON.stringify(attachments));
+    }
+    if (firstImage) {
+      updates.push('image_url = COALESCE(image_url, ?)');
+      params.push(firstImage);
+    }
+
+    if (updates.length > 0) {
+      const sql = `UPDATE news_cache SET ${updates.join(', ')} WHERE link = ? OR guid = ?`;
+      params.push(url, url);
+      await db.query(sql, params);
+    }
+  } catch (err) {
+    console.warn('[Cache Update] Lỗi lưu cache chi tiết:', err.message);
   }
 }
 
@@ -890,6 +929,7 @@ module.exports = {
   getAnnouncementsWithFallback,
   getNewsWithFallback,
   fetchFullArticleDetail,
+  saveArticleDetailToCache,
   preserveCachedFields,
   deduplicateArticles,
   formatRssDate,

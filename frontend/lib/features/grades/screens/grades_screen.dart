@@ -42,6 +42,14 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
           NavHeader(
             title: 'Kết quả học tập',
             subtitle: 'Bảng điểm của $userName',
+            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.16),
+                offset: const Offset(0, 4),
+                blurRadius: 10,
+              ),
+            ],
             rightElement: GestureDetector(
               onTap: () => _showDetailModal(context),
               child: Container(
@@ -94,7 +102,7 @@ class _GradesScreenState extends ConsumerState<GradesScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Học phần đã có điểm (${items.length})',
+                        'Tổng số học phần (${items.length})',
                         style: const TextStyle(
                           fontSize: 15.5,
                           fontWeight: FontWeight.w900,

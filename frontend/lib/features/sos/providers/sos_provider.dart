@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/services/socket_service.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class SosState {
@@ -59,9 +60,10 @@ class SosNotifier extends Notifier<SosState> {
       final phone = ref.read(authProvider).user?.phone ?? '';
       final note = description?.trim() ?? '';
 
-      await _dio.post(
+      final res = await _dio.post(
         ApiEndpoints.sos,
         data: {
+          'client_id': SocketService.instance.deviceId,
           'incidentType': incidentType,
           'location': location.trim(),
           'description': note,
@@ -71,6 +73,15 @@ class SosNotifier extends Notifier<SosState> {
           'phone': phone,
         },
       );
+
+      // Đánh dấu ID đã gửi để không tự kích hoạt chuông báo động trên chính máy này
+      if (res.data is Map) {
+        final d = res.data as Map;
+        final sosId = d['id'] ?? (d['data'] is Map ? d['data']['id'] : null);
+        if (sosId != null) {
+          SocketService.instance.markSosAsSelfSent(sosId);
+        }
+      }
 
       state = state.copyWith(isSending: false, isSuccess: true);
       return true;

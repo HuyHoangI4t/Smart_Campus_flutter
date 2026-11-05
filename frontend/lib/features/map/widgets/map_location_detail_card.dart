@@ -81,30 +81,36 @@ class MapLocationDetailCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFA7F3D0), width: 0.8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.near_me, size: 10, color: AppColors.success),
-                    const SizedBox(width: 4),
-                    Text(
-                      '~${distMeters}m • ~$walkMinutes phút đi bộ',
-                      style: const TextStyle(
-                        color: AppColors.success,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFFA7F3D0), width: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.near_me, size: 10, color: AppColors.success),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '~${distMeters}m • ~$walkMinutes phút đi bộ',
+                          style: const TextStyle(
+                            color: AppColors.success,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               GestureDetector(
                 onTap: onClose,
                 child: Container(

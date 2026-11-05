@@ -1,31 +1,87 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/constants/app_colors.dart';
+import '../features/grades/providers/grades_provider.dart';
+import '../features/home/providers/home_provider.dart';
 import '../features/map/providers/map_provider.dart';
+import '../features/schedule/providers/schedule_provider.dart';
 
-class MainShell extends ConsumerWidget {
+class MainShell extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
 
   const MainShell({super.key, required this.navigationShell});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends ConsumerState<MainShell> {
+  Timer? _preloadTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.navigationShell.currentIndex == 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(mapProvider.notifier).activateMap();
+      });
+    }
+
+    // Preload ngầm song song cho các phân hệ để chuyển tab tức thì (tham khảo LTDDDNT)
+    _preloadTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (!mounted) return;
+      try {
+        ref.read(homeProvider.notifier).fetchDashboard();
+        ref.read(scheduleProvider.notifier).fetchSchedule();
+        ref.read(gradesProvider.notifier).fetchGrades();
+        ref.read(mapProvider.notifier).fetchLocationsFromBackend();
+      } catch (_) {}
+    });
+  }
+
+  @override
+  void dispose() {
+    _preloadTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant MainShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final prevIndex = oldWidget.navigationShell.currentIndex;
+    final currIndex = widget.navigationShell.currentIndex;
+    if (prevIndex != currIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (prevIndex == 2 && currIndex != 2) {
+          ref.read(mapProvider.notifier).deactivateMap();
+        } else if (prevIndex != 2 && currIndex == 2) {
+          ref.read(mapProvider.notifier).activateMap();
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Tự động ẩn bottom navigation bar khi đang chỉ đường đi bộ trên bản đồ
     final isNavigatingOnMap = ref.watch(mapProvider.select((s) => s.isNavigating));
-    final isOnMapTab = navigationShell.currentIndex == 2;
+    final isOnMapTab = widget.navigationShell.currentIndex == 2;
     final shouldHideBottomNav = isOnMapTab && isNavigatingOnMap;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: navigationShell,
-      bottomNavigationBar: shouldHideBottomNav ? null : _buildBottomNav(context, ref),
+      body: widget.navigationShell,
+      bottomNavigationBar: shouldHideBottomNav ? null : _buildBottomNav(context),
     );
   }
 
-  Widget _buildBottomNav(BuildContext context, WidgetRef ref) {
+  Widget _buildBottomNav(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final currentIndex = navigationShell.currentIndex;
+    final currentIndex = widget.navigationShell.currentIndex;
 
     return Container(
       decoration: BoxDecoration(
@@ -51,7 +107,6 @@ class MainShell extends ConsumerWidget {
       child: Row(
         children: [
           _buildTabItem(
-            ref: ref,
             index: 0,
             icon: Icons.home_outlined,
             selectedIcon: Icons.home_rounded,
@@ -59,7 +114,6 @@ class MainShell extends ConsumerWidget {
             isSelected: currentIndex == 0,
           ),
           _buildTabItem(
-            ref: ref,
             index: 1,
             icon: Icons.calendar_today_outlined,
             selectedIcon: Icons.calendar_month_rounded,
@@ -67,7 +121,6 @@ class MainShell extends ConsumerWidget {
             isSelected: currentIndex == 1,
           ),
           _buildTabItem(
-            ref: ref,
             index: 2,
             icon: Icons.near_me_outlined,
             selectedIcon: Icons.near_me_rounded,
@@ -76,7 +129,6 @@ class MainShell extends ConsumerWidget {
             isCenter: true,
           ),
           _buildTabItem(
-            ref: ref,
             index: 3,
             icon: Icons.bar_chart_outlined,
             selectedIcon: Icons.bar_chart_rounded,
@@ -84,7 +136,6 @@ class MainShell extends ConsumerWidget {
             isSelected: currentIndex == 3,
           ),
           _buildTabItem(
-            ref: ref,
             index: 4,
             icon: Icons.person_outline_rounded,
             selectedIcon: Icons.person_rounded,
@@ -97,7 +148,6 @@ class MainShell extends ConsumerWidget {
   }
 
   Widget _buildTabItem({
-    required WidgetRef ref,
     required int index,
     required IconData icon,
     required IconData selectedIcon,
@@ -110,7 +160,7 @@ class MainShell extends ConsumerWidget {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => _onTabSelected(ref, index),
+        onTap: () => _onTabSelected(index),
         behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -148,19 +198,19 @@ class MainShell extends ConsumerWidget {
     );
   }
 
-  void _onTabSelected(WidgetRef ref, int index) {
-    if (navigationShell.currentIndex == 2 && index != 2) {
-      // Khi rời khỏi tab Bản đồ: tự động dọn sạch ô tìm kiếm, huỷ chọn toà nhà,
-      // TRỪ TRƯỜNG HỢP đang ở chế độ dẫn đường chỉ đường (isNavigating == true)
-      final mapState = ref.read(mapProvider);
-      if (!mapState.isNavigating) {
-        ref.read(mapProvider.notifier).resetExploreState();
-      }
+  void _onTabSelected(int index) {
+    final prevIndex = widget.navigationShell.currentIndex;
+    if (prevIndex == 2 && index != 2) {
+      // Khi rời khỏi tab Bản đồ: HỦY TOÀN BỘ stream, cảm biến và chỉ đường chạy ngầm
+      ref.read(mapProvider.notifier).deactivateMap();
+    } else if (prevIndex != 2 && index == 2) {
+      // Khi vào lại tab Bản đồ: Kích hoạt lại định vị và la bàn
+      ref.read(mapProvider.notifier).activateMap();
     }
 
-    navigationShell.goBranch(
+    widget.navigationShell.goBranch(
       index,
-      initialLocation: index == navigationShell.currentIndex,
+      initialLocation: index == widget.navigationShell.currentIndex,
     );
   }
 }

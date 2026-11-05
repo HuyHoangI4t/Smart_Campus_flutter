@@ -7,7 +7,7 @@ const pool = mysql.createPool({
   host: process.env.DB_HOST || '127.0.0.1',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'smartcampus',
+  database: process.env.DB_NAME || 'flutter_campus',
   port: Number(process.env.DB_PORT) || 3306,
   waitForConnections: true,
   connectionLimit: 25,
@@ -21,7 +21,7 @@ const pool = mysql.createPool({
 
 // Kiểm tra kết nối & tự động tạo Database nếu chưa tồn tại
 async function testConnection() {
-  const dbName = process.env.DB_NAME || 'smartcampus';
+  const dbName = process.env.DB_NAME || 'flutter_campus';
   try {
     // Tự động tạo Database nếu MySQL hoàn toàn mới tinh
     const rootConn = await mysql.createConnection({

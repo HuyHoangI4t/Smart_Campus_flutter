@@ -175,6 +175,7 @@ class ScheduleCustomDetailModal extends ConsumerWidget {
         : item.cleanDay;
 
     return Container(
+      width: double.infinity,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),

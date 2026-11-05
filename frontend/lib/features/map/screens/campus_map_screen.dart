@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -112,6 +111,8 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   ml.Line? _boundaryLine;
   ml.Line? _routeGlowLine;
   ml.Line? _routeCoreLine;
+  final List<ml.Line> _routeLines = [];
+  int _routeSyncToken = 0;
   ml.Circle? _userRing;
   ml.Circle? _userDot;
 
@@ -376,6 +377,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     _boundaryLine = null;
     _routeGlowLine = null;
     _routeCoreLine = null;
+    _routeLines.clear();
     _userRing = null;
     _userDot = null;
 
@@ -587,17 +589,21 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     final symbolOptionsList = <ml.SymbolOptions>[];
     final symbolDataList = <Map<String, dynamic>>[];
 
-    for (final gate in gates) {
+    await Future.wait(gates.map((gate) {
       final isSelected = gate.id == selectedGate.id;
       final gateKey = 'gate_${gate.id}_${isSelected ? "sel" : "norm"}';
-
-      await _ensureMarkerImage(
+      return _ensureMarkerImage(
         key: gateKey,
         icon: Icons.door_sliding_outlined,
         backgroundColor: const Color(0xFF0F172A),
         iconColor: Colors.white,
         isSelected: isSelected,
       );
+    }));
+
+    for (final gate in gates) {
+      final isSelected = gate.id == selectedGate.id;
+      final gateKey = 'gate_${gate.id}_${isSelected ? "sel" : "norm"}';
 
       symbolOptionsList.add(
         _createSafeSymbolOptions(
@@ -644,12 +650,11 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     final symbolOptionsList = <ml.SymbolOptions>[];
     final symbolDataList = <Map<String, dynamic>>[];
 
-    for (final loc in locations) {
+    await Future.wait(locations.map((loc) {
       final isSelected = loc.id == mapState.selectedLocation?.id;
       final isNav = mapState.isNavigating;
       final locKey = 'loc_${loc.id}_${isNav ? "nav" : (isSelected ? "sel" : "norm")}';
-
-      await _ensureMarkerImage(
+      return _ensureMarkerImage(
         key: locKey,
         icon: _getDisplayIcon(loc),
         backgroundColor: loc.color,
@@ -657,6 +662,12 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
         isSelected: isSelected,
         isNavigating: isNav,
       );
+    }));
+
+    for (final loc in locations) {
+      final isSelected = loc.id == mapState.selectedLocation?.id;
+      final isNav = mapState.isNavigating;
+      final locKey = 'loc_${loc.id}_${isNav ? "nav" : (isSelected ? "sel" : "norm")}';
 
       symbolOptionsList.add(
         _createSafeSymbolOptions(
@@ -679,8 +690,19 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     if (createdSymbols != null) _locationSymbols.addAll(createdSymbols);
   }
 
-  Future<void> _syncRoute() async {
-    if (_mapController == null || !_isStyleLoaded) return;
+  /// Xóa triệt để toàn bộ đường dẫn trên map mà không để lại đường rác (ghost polyline)
+  Future<void> _clearRouteLines() async {
+    if (_mapController == null) return;
+
+    if (_routeLines.isNotEmpty) {
+      final linesToRemove = List<ml.Line>.from(_routeLines);
+      _routeLines.clear();
+      for (final line in linesToRemove) {
+        try {
+          await _mapController?.removeLine(line);
+        } catch (_) {}
+      }
+    }
 
     if (_routeGlowLine != null) {
       try { await _mapController?.removeLine(_routeGlowLine!); } catch (_) {}
@@ -691,10 +713,35 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
       _routeCoreLine = null;
     }
 
-    final route = ref.read(mapProvider).activeRoute;
+    // Bảo hiểm: quét toàn bộ lines hiện có trên MapController
+    // và xóa bất kỳ line nào không phải đường biên giới khuôn viên (_boundaryLine)
+    try {
+      final currentLines = _mapController?.lines;
+      if (currentLines != null && currentLines.isNotEmpty) {
+        final orphaned = currentLines.where((l) => l != _boundaryLine).toList();
+        for (final l in orphaned) {
+          try {
+            await _mapController?.removeLine(l);
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _syncRoute() async {
+    if (_mapController == null || !_isStyleLoaded) return;
+    final currentToken = ++_routeSyncToken;
+
+    await _clearRouteLines();
+
+    final mapState = ref.read(mapProvider);
+    // Chỉ vẽ tuyến đường khi đang trong trạng thái điều hướng hợp lệ
+    if (!mapState.isNavigating) return;
+
+    final route = mapState.activeRoute;
     if (route != null && route.coordinates.isNotEmpty) {
       final coords = route.coordinates.toMl();
-      _routeGlowLine = await _mapController?.addLine(
+      final glowLine = await _mapController?.addLine(
         ml.LineOptions(
           geometry: coords,
           lineColor: '#3B82F6',
@@ -703,7 +750,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
           lineJoin: 'round',
         ),
       );
-      _routeCoreLine = await _mapController?.addLine(
+      final coreLine = await _mapController?.addLine(
         ml.LineOptions(
           geometry: coords,
           lineColor: '#2563EB',
@@ -712,6 +759,22 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
           lineJoin: 'round',
         ),
       );
+
+      // Nếu trong lúc chờ addLine đã có lệnh dừng hoặc token mới -> lập tức xóa ngay
+      if (_routeSyncToken != currentToken || !ref.read(mapProvider).isNavigating) {
+        if (glowLine != null) {
+          try { await _mapController?.removeLine(glowLine); } catch (_) {}
+        }
+        if (coreLine != null) {
+          try { await _mapController?.removeLine(coreLine); } catch (_) {}
+        }
+        return;
+      }
+
+      _routeGlowLine = glowLine;
+      _routeCoreLine = coreLine;
+      if (glowLine != null) _routeLines.add(glowLine);
+      if (coreLine != null) _routeLines.add(coreLine);
     }
   }
 
@@ -818,89 +881,37 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     );
   }
 
-  /// Khung hình camera thông minh khi bắt đầu hoặc đổi lộ trình chỉ đường
-  void _zoomToRoute(DijkstraResult? route, CampusLocationItem? destination, CampusGate? gate) {
+  /// Khung hình camera tập trung vào vị trí người dùng khi bắt đầu lộ trình điều hướng
+  void _zoomToUserStart({
+    required DijkstraResult? route,
+    required CampusLocationItem? destination,
+    required CampusGate? gate,
+  }) {
     if (_mapController == null || !_isStyleLoaded) return;
-    if (route == null || route.coordinates.isEmpty) {
-      if (destination != null) {
-        _mapController?.animateCamera(
-          ml.CameraUpdate.newCameraPosition(
-            ml.CameraPosition(
-              target: destination.coordinate.toMl(),
-              zoom: 17.5,
-              tilt: _is3D ? 45.0 : 0.0,
-            ),
-          ),
-        );
-      }
-      return;
-    }
 
-    final coords = route.coordinates;
-    double minLat = coords.first.latitude;
-    double maxLat = coords.first.latitude;
-    double minLng = coords.first.longitude;
-    double maxLng = coords.first.longitude;
+    final mapState = ref.read(mapProvider);
+    final userPos = mapState.userPosition;
 
-    for (final pt in coords) {
-      if (pt.latitude < minLat) minLat = pt.latitude;
-      if (pt.latitude > maxLat) maxLat = pt.latitude;
-      if (pt.longitude < minLng) minLng = pt.longitude;
-      if (pt.longitude > maxLng) maxLng = pt.longitude;
-    }
+    // Vị trí xuất phát ưu tiên: GPS người dùng -> Cổng đã chọn -> Tọa độ đầu tiên của route -> Điểm đến
+    final startCoordinate = userPos ??
+        gate?.coordinate ??
+        (route != null && route.coordinates.isNotEmpty
+            ? route.coordinates.first
+            : destination?.coordinate);
 
-    // Đảm bảo bounding box có kích thước tối thiểu để tránh zoom quá sát
-    final latDiff = (maxLat - minLat).abs();
-    final lngDiff = (maxLng - minLng).abs();
-    if (latDiff < 0.0006) {
-      final pad = (0.0006 - latDiff) / 2;
-      minLat -= pad;
-      maxLat += pad;
-    }
-    if (lngDiff < 0.0006) {
-      final pad = (0.0006 - lngDiff) / 2;
-      minLng -= pad;
-      maxLng += pad;
-    }
+    if (startCoordinate == null) return;
 
     try {
       _mapController?.animateCamera(
-        ml.CameraUpdate.newLatLngBounds(
-          ml.LatLngBounds(
-            southwest: ml.LatLng(minLat, minLng),
-            northeast: ml.LatLng(maxLat, maxLng),
-          ),
-          left: 45,
-          top: 115,
-          right: 45,
-          bottom: 165,
-        ),
-      );
-    } catch (_) {
-      final centerLat = (minLat + maxLat) / 2;
-      final centerLng = (minLng + maxLng) / 2;
-      final maxSpan = math.max((maxLat - minLat).abs(), (maxLng - minLng).abs());
-      double calcZoom = 17.5;
-      if (maxSpan > 0.015) {
-        calcZoom = 15.0;
-      } else if (maxSpan > 0.008) {
-        calcZoom = 15.8;
-      } else if (maxSpan > 0.004) {
-        calcZoom = 16.5;
-      } else if (maxSpan > 0.002) {
-        calcZoom = 17.2;
-      }
-
-      _mapController?.animateCamera(
         ml.CameraUpdate.newCameraPosition(
           ml.CameraPosition(
-            target: ml.LatLng(centerLat, centerLng),
-            zoom: calcZoom,
-            tilt: _is3D ? 45.0 : 0.0,
+            target: startCoordinate.toMl(),
+            zoom: 18.2,
+            tilt: _is3D ? 50.0 : 0.0,
           ),
         ),
       );
-    }
+    } catch (_) {}
   }
 
   @override
@@ -908,6 +919,14 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     final mapState = ref.watch(mapProvider);
 
     ref.listen<MapState>(mapProvider, (prev, next) {
+      if (!next.isMapActive) {
+        if (_searchController.text.isNotEmpty) {
+          _searchController.clear();
+        }
+        _selectedRoomName = null;
+        return;
+      }
+
       if (next.routingNotice != null && prev?.routingNotice != next.routingNotice) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -946,13 +965,16 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
         _syncLocations();
         _syncGates();
         _syncRoute();
-      }
-      if (prev?.activeRoute != next.activeRoute) {
+      } else if (prev?.activeRoute != next.activeRoute) {
         _syncRoute();
       }
       if ((prev?.isNavigating != next.isNavigating && next.isNavigating) ||
           (next.isNavigating && prev?.activeRoute != next.activeRoute && next.activeRoute != null)) {
-        _zoomToRoute(next.activeRoute, next.selectedLocation, next.selectedGate);
+        _zoomToUserStart(
+          route: next.activeRoute,
+          destination: next.selectedLocation,
+          gate: next.selectedGate,
+        );
       }
       if (prev?.selectedGate != next.selectedGate || prev?.gates != next.gates) {
         _syncGates();
@@ -1006,9 +1028,17 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
       body: Column(
         children: [
           // ─── 1. NAVHEADER (Navy #132F73) ───
-          const NavHeader(
+          NavHeader(
             title: 'Bản đồ khuôn viên',
             subtitle: 'Đại học Tây Nguyên • Vector 3D & Vệ tinh',
+            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.16),
+                offset: const Offset(0, 4),
+                blurRadius: 10,
+              ),
+            ],
           ),
 
           // ─── 2. MAP WITH OVERLAYS ───
@@ -1030,6 +1060,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                   onMapCreated: _onMapCreated,
                   onStyleLoadedCallback: _onStyleLoaded,
                   onMapClick: (point, coordinates) {
+                    FocusScope.of(context).unfocus();
                     if (ref.read(mapProvider).isNavigating) return;
 
                     // 1. Chống xung đột sự kiện onSymbolTapped và onMapClick cùng kích hoạt
@@ -1173,7 +1204,9 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                 // 2.3 Right Floating Controls (5 nút điều khiển)
                 Positioned(
                   right: 14,
-                  bottom: (mapState.selectedLocation != null || mapState.isNavigating) ? 170 : 16,
+                  bottom: mapState.isNavigating
+                      ? 115
+                      : (mapState.selectedLocation != null ? 245 : 16),
                   child: Column(
                     children: [
                       // Nút chuyển chế độ 3D / 2D
@@ -1231,8 +1264,21 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                       walkingMinutes: mapState.activeRoute?.estimatedWalkingMinutes ?? 10,
                       isHybrid: mapState.activeRoute?.isHybrid ?? false,
                       viaGateName: mapState.activeRoute?.viaGateName,
-                      onStopNavigation: () {
+                      onStopNavigation: () async {
+                        await _clearRouteLines();
                         ref.read(mapProvider.notifier).stopNavigation();
+                        final loc = mapState.selectedLocation;
+                        if (loc != null) {
+                          _mapController?.animateCamera(
+                            ml.CameraUpdate.newCameraPosition(
+                              ml.CameraPosition(
+                                target: loc.coordinate.toMl(),
+                                zoom: 17.5,
+                                tilt: _is3D ? 45.0 : 0.0,
+                              ),
+                            ),
+                          );
+                        }
                       },
                     ),
                   )
@@ -1269,34 +1315,39 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     String? badgeText,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-          border: Border.all(color: AppColors.cardBorder),
-        ),
-        child: Center(
-          child: badgeText != null
-              ? Text(
-                  badgeText,
-                  style: TextStyle(
-                    color: iconColor,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
-                )
-              : Icon(icon, color: iconColor, size: 20),
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+        border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.8)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Center(
+            child: badgeText != null
+                ? Text(
+                    badgeText,
+                    style: TextStyle(
+                      color: iconColor,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  )
+                : Icon(icon, color: iconColor, size: 20),
+          ),
         ),
       ),
     );

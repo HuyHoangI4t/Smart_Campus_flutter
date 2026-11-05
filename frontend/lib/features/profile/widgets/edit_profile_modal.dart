@@ -108,6 +108,7 @@ class _EditProfileModalState extends ConsumerState<EditProfileModal> {
     final avatar = liveUser?.avatarUrl ?? 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
 
     return Container(
+      width: double.infinity,
       decoration: const BoxDecoration(
         color: AppColors.cardBg,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -118,7 +119,7 @@ class _EditProfileModalState extends ConsumerState<EditProfileModal> {
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Header
               Row(
