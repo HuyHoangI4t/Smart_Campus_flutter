@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/avatar_image.dart';
 import '../../../core/widgets/nav_header.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -23,37 +24,37 @@ class ProfileScreen extends ConsumerWidget {
 
     final fullName = user?.fullName.isNotEmpty == true
         ? user!.fullName
-        : (isGuest ? 'Khách tham quan' : 'Sinh viên Đại học Tây Nguyên');
+        : (isGuest ? 'Khách tham quan' : 'Sinh viên');
     final studentId = user?.studentId.isNotEmpty == true
         ? user!.studentId
-        : (isGuest ? 'GUEST' : '23103023');
+        : (isGuest ? 'GUEST' : '');
     final faculty = user?.faculty?.isNotEmpty == true
         ? user!.faculty!
-        : (isGuest ? 'Trường Đại học Tây Nguyên' : 'Khoa KHTN & Công nghệ');
+        : (isGuest ? 'Trường Đại học Tây Nguyên' : 'Chưa cập nhật');
     final studentClass = user?.studentClass?.isNotEmpty == true
         ? user!.studentClass!
-        : (isGuest ? 'Khách tham quan' : 'K23 - Công nghệ thông tin');
+        : (isGuest ? 'Khách tham quan' : 'Chưa cập nhật');
     final email = user?.email?.isNotEmpty == true
         ? user!.email!
-        : (isGuest ? 'guest@ttn.edu.vn' : '$studentId@sv.ttn.edu.vn');
+        : (isGuest ? 'guest@ttn.edu.vn' : (studentId.isNotEmpty ? '$studentId@sv.ttn.edu.vn' : 'Chưa cập nhật'));
     final phone = user?.phone?.isNotEmpty == true
         ? user!.phone!
-        : (isGuest ? 'Chưa cập nhật' : '0329 106 783');
+        : 'Chưa cập nhật';
     final avatarUrl = (user?.avatarUrl?.isNotEmpty == true)
         ? user!.avatarUrl!
         : 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
 
-    // Chỉ số học vụ
-    final gpa4 = gradesState.gpa4 > 0 ? gradesState.gpa4.toStringAsFixed(2) : (isGuest ? '3.45' : '3.42');
+    // Chỉ số học vụ thực tế
+    final gpa4 = gradesState.gpa4 > 0 ? gradesState.gpa4.toStringAsFixed(2) : (isGuest ? '3.45' : '--');
     final gpa10 = gradesState.averageScore10 > 0
         ? gradesState.averageScore10.toStringAsFixed(1)
-        : (gradesState.summary.gpa10 > 0 ? gradesState.summary.gpa10.toStringAsFixed(1) : (isGuest ? '8.2' : '8.1'));
+        : (gradesState.summary.gpa10 > 0 ? gradesState.summary.gpa10.toStringAsFixed(1) : (isGuest ? '8.2' : '--'));
     final credits = gradesState.accumulatedCredits > 0
         ? '${gradesState.accumulatedCredits}'
-        : (isGuest ? '68' : '64');
+        : (isGuest ? '68' : '--');
     final academicRank = gradesState.summary.academicRank.isNotEmpty
         ? gradesState.summary.academicRank
-        : (isGuest ? 'Giỏi' : 'Khá');
+        : (isGuest ? 'Giỏi' : '--');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -502,25 +503,10 @@ class _DigitalStudentCard extends StatelessWidget {
                               ],
                             ),
                             child: ClipOval(
-                              child: Image.network(
-                                avatarUrl,
-                                width: 78,
-                                height: 78,
-                                fit: BoxFit.cover,
-                                errorBuilder: (ctx, err, stack) => Container(
-                                  width: 78,
-                                  height: 78,
-                                  color: const Color(0xFF1E3A8A),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    fullName.isNotEmpty ? fullName[0].toUpperCase() : 'S',
-                                    style: const TextStyle(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
+                              child: AvatarImage(
+                                avatarUrl: avatarUrl,
+                                size: 78,
+                                fallbackText: fullName,
                               ),
                             ),
                           ),

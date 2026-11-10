@@ -10,6 +10,7 @@ import '../features/auth/screens/splash_screen.dart';
 import '../features/feedback/screens/feedback_screen.dart';
 import '../features/grades/screens/grades_detail_screen.dart';
 import '../features/grades/screens/grades_screen.dart';
+import '../features/home/models/news_model.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/home/screens/news_detail_screen.dart';
 import '../features/home/screens/news_screen.dart';
@@ -21,7 +22,8 @@ import '../features/schedule/screens/schedule_screen.dart';
 import '../features/sos/screens/sos_screen.dart';
 import 'main_shell.dart';
 
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 /// Lớp notifier cầu nối giữa AuthProvider và GoRouter
 /// Giúp lắng nghe trạng thái đăng nhập và kích hoạt redirect tự động
@@ -48,7 +50,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
 
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: notifier,
     redirect: (context, state) {
@@ -86,7 +88,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Màn hình Splash / Loading ban đầu
       GoRoute(
         path: '/splash',
-        parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SplashScreen(),
       ),
 
@@ -179,53 +180,58 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Sub-screens & Modals
       GoRoute(
         path: '/sos',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const SosScreen(),
       ),
       GoRoute(
         path: '/feedback',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const FeedbackScreen(),
       ),
       GoRoute(
         path: '/profile/change-password',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const ChangePasswordScreen(),
       ),
       GoRoute(
         path: '/profile/settings',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const AppSettingsScreen(),
       ),
       GoRoute(
         path: '/settings',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const AppSettingsScreen(),
       ),
       GoRoute(
         path: '/grades/detail',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const GradesDetailScreen(),
       ),
       GoRoute(
         path: '/home/news',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const NewsScreen(),
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final tab = state.uri.queryParameters['tab'] ?? state.uri.queryParameters['category'];
+          return NewsScreen(initialCategory: tab);
+        },
       ),
       GoRoute(
         path: '/home/news/:id',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final id = state.pathParameters['id'] ?? state.uri.queryParameters['id'] ?? '1';
-          return NewsDetailScreen(id: id);
+          final article = state.extra is NewsModel ? state.extra as NewsModel : null;
+          return NewsDetailScreen(id: id, initialArticle: article);
         },
       ),
       GoRoute(
         path: '/home/news/detail',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final id = state.uri.queryParameters['id'] ?? '1';
-          return NewsDetailScreen(id: id);
+          final article = state.extra is NewsModel ? state.extra as NewsModel : null;
+          return NewsDetailScreen(id: id, initialArticle: article);
         },
       ),
     ],

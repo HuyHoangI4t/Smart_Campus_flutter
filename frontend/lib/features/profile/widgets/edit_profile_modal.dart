@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/avatar_image.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'avatar_picker_modal.dart';
@@ -38,11 +39,13 @@ class _EditProfileModalState extends ConsumerState<EditProfileModal> {
   void initState() {
     super.initState();
     final u = widget.currentUser;
-    _nameController = TextEditingController(text: u?.fullName ?? 'Nguyễn Huy Hoàng');
-    _emailController = TextEditingController(text: u?.email ?? '${u?.studentId ?? "23103023"}@sv.ttn.edu.vn');
-    _phoneController = TextEditingController(text: u?.phone ?? '0329106783');
-    _classController = TextEditingController(text: u?.studentClass ?? 'K23');
-    _facultyController = TextEditingController(text: u?.faculty ?? 'KHTN &CN');
+    _nameController = TextEditingController(text: u?.fullName ?? '');
+    _emailController = TextEditingController(
+      text: u?.email ?? (u?.studentId.isNotEmpty == true ? '${u!.studentId}@sv.ttn.edu.vn' : ''),
+    );
+    _phoneController = TextEditingController(text: u?.phone ?? '');
+    _classController = TextEditingController(text: u?.studentClass ?? '');
+    _facultyController = TextEditingController(text: u?.faculty ?? '');
   }
 
   @override
@@ -160,13 +163,10 @@ class _EditProfileModalState extends ConsumerState<EditProfileModal> {
                               border: Border.all(color: const Color(0xFFEEF2FF), width: 2),
                             ),
                             child: ClipOval(
-                              child: Image.network(
-                                avatar,
-                                fit: BoxFit.cover,
-                                errorBuilder: (c, e, s) => Container(
-                                  color: AppColors.primary,
-                                  child: const Icon(Icons.person, size: 36, color: Colors.white),
-                                ),
+                              child: AvatarImage(
+                                avatarUrl: avatar,
+                                size: 72,
+                                fallbackText: _nameController.text,
                               ),
                             ),
                           ),

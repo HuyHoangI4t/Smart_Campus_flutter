@@ -50,6 +50,14 @@ class DirectionStep {
       case 'location':
       case 'room':
         return Icons.location_on_outlined;
+      case 'video':
+      case 'videocam':
+        return Icons.videocam_outlined;
+      case 'wifi':
+        return Icons.wifi;
+      case 'log-in':
+      case 'login':
+        return Icons.login;
       default:
         return Icons.place_outlined;
     }
@@ -64,6 +72,10 @@ class RoomDirectionInfo {
   final String mapQuery;
   final List<DirectionStep> steps;
   final List<String> tips;
+  final bool? isOnline;
+  final String? meetingInfo;
+  final String? meetingUrl;
+  final String? meetingCode;
 
   const RoomDirectionInfo({
     required this.room,
@@ -73,6 +85,10 @@ class RoomDirectionInfo {
     required this.mapQuery,
     required this.steps,
     this.tips = const [],
+    this.isOnline = false,
+    this.meetingInfo,
+    this.meetingUrl,
+    this.meetingCode,
   });
 
   factory RoomDirectionInfo.fromJson(Map<String, dynamic> json) {
@@ -82,6 +98,11 @@ class RoomDirectionInfo {
         .toList();
     final rawTips = json['tips'] as List? ?? [];
     final tips = rawTips.map((t) => t.toString()).toList();
+
+    final isOnline = json['isOnline'] == true ||
+        json['is_online'] == true ||
+        (json['buildingCode']?.toString().toUpperCase() == 'ONLINE') ||
+        (json['building_code']?.toString().toUpperCase() == 'ONLINE');
 
     return RoomDirectionInfo(
       room: json['room']?.toString() ?? '',
@@ -95,6 +116,10 @@ class RoomDirectionInfo {
           '',
       steps: steps,
       tips: tips,
+      isOnline: isOnline,
+      meetingInfo: json['meetingInfo']?.toString() ?? json['meeting_info']?.toString(),
+      meetingUrl: json['meetingUrl']?.toString() ?? json['meeting_url']?.toString(),
+      meetingCode: json['meetingCode']?.toString() ?? json['meeting_code']?.toString(),
     );
   }
 
@@ -106,5 +131,9 @@ class RoomDirectionInfo {
         'mapQuery': mapQuery,
         'steps': steps.map((s) => s.toJson()).toList(),
         'tips': tips,
+        'isOnline': isOnline,
+        'meetingInfo': meetingInfo,
+        'meetingUrl': meetingUrl,
+        'meetingCode': meetingCode,
       };
 }

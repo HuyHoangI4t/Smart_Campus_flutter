@@ -142,13 +142,19 @@ function pushScheduleRow(headers, colIdx, buoi, currentLesson, parsedRows, weekR
     }
   }
 
+  let noteCombined = currentLesson.ghi_chu || '';
+  if (currentLesson.phan_mem) {
+    noteCombined = noteCombined ? `${noteCombined} | PM: ${currentLesson.phan_mem}` : `PM: ${currentLesson.phan_mem}`;
+  }
+
   parsedRows.push([
     dayName.trim(),
     currentLesson.ten_hp,
     currentLesson.tiet || (buoi === 'Sáng' ? '1-4' : '7-10'),
     currentLesson.phong || 'Chưa xếp',
     currentLesson.giang_vien || 'Giảng viên',
-    ngayHoc
+    ngayHoc,
+    noteCombined
   ]);
 }
 
@@ -362,7 +368,7 @@ async function syncScheduleForStudent(mssv, dk = '10') {
               if (!cellHtml.includes('HP:')) continue;
 
               const lines = cellHtml.split(/<br\s*\/?>/i);
-              let currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '' };
+              let currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '', phan_mem: '', ghi_chu: '' };
 
               lines.forEach(rawLine => {
                 const line = cheerio.load(rawLine).text().trim();
@@ -370,7 +376,7 @@ async function syncScheduleForStudent(mssv, dk = '10') {
                 if (line.startsWith('HP:')) {
                   if (currentLesson.ten_hp) {
                     pushScheduleRow(headers, colIdx, buoi, currentLesson, rows, weekRangeText);
-                    currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '' };
+                    currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '', phan_mem: '', ghi_chu: '' };
                   }
                   const match = line.match(/HP:\s*(.*?)\s*\(([\d\s-]+)\)/);
                   if (match) {
@@ -383,6 +389,10 @@ async function syncScheduleForStudent(mssv, dk = '10') {
                   currentLesson.giang_vien = line.replace('GV:', '').trim();
                 } else if (line.startsWith('Phòng:')) {
                   currentLesson.phong = line.replace('Phòng:', '').trim();
+                } else if (/^(PM|Phần mềm):/i.test(line)) {
+                  currentLesson.phan_mem = line.replace(/^(PM|Phần mềm):\s*/i, '').trim();
+                } else if (/^(Ghi chú|Note):/i.test(line)) {
+                  currentLesson.ghi_chu = line.replace(/^(Ghi chú|Note):\s*/i, '').trim();
                 }
               });
 
@@ -453,7 +463,7 @@ async function syncScheduleForStudent(mssv, dk = '10') {
                 r[4],
                 'HK1 (2025-2026)',
                 0,
-                '',
+                r[6] || '',
                 'chinh_khoa',
                 w.weekRangeText,
                 r[5] || null

@@ -12,8 +12,9 @@ import '../providers/home_provider.dart';
 
 class NewsDetailScreen extends ConsumerStatefulWidget {
   final dynamic id;
+  final NewsModel? initialArticle;
 
-  const NewsDetailScreen({super.key, required this.id});
+  const NewsDetailScreen({super.key, required this.id, this.initialArticle});
 
   @override
   ConsumerState<NewsDetailScreen> createState() => _NewsDetailScreenState();
@@ -32,11 +33,12 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadArticleDetailIfNeeded();
+      _loadArticleDetailIfNeeded(widget.initialArticle);
     });
   }
 
   NewsModel _findArticle(List<NewsModel> allArticles, String targetIdStr) {
+    if (widget.initialArticle != null) return widget.initialArticle!;
     // 1. Khớp chính xác ID tuyệt đối
     for (final a in allArticles) {
       if (a.id == targetIdStr) return a;
@@ -66,7 +68,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     final targetIdStr = widget.id.toString();
     final allArticles = homeState.allArticles;
 
-    final item = providedItem ?? _findArticle(allArticles, targetIdStr);
+    final item = providedItem ?? widget.initialArticle ?? _findArticle(allArticles, targetIdStr);
 
     if (item.link == null || item.link!.isEmpty || !item.link!.startsWith('http')) {
       return;
@@ -180,7 +182,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     final targetIdStr = widget.id.toString();
     final allArticles = homeState.allArticles;
 
-    final item = _findArticle(allArticles, targetIdStr);
+    final item = widget.initialArticle ?? _findArticle(allArticles, targetIdStr);
 
     // [DATA-FLOW FIX] Tự động tải toàn văn nếu ban đầu allArticles trống và vừa được fetch xong
     if (item.link != null && item.link!.startsWith('http') && _lastLoadedLink != item.link && !_isLoadingDetail && _fetchedContent == null) {
@@ -759,6 +761,8 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
           ElevatedButton(
             onPressed: () => _openAttachment(att),
             style: ElevatedButton.styleFrom(
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               backgroundColor: const Color(0xFF2563EB),
               foregroundColor: Colors.white,
               elevation: 0,

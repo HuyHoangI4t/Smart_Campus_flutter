@@ -101,6 +101,91 @@ class NewsModel {
       id.contains('-ann-') ||
       id.startsWith('sample-ann');
 
+  static bool _isSampleOrSlideshow(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('slideshow') ||
+        lower.contains('slideshow2') ||
+        lower.contains('unsplash.com') ||
+        lower.contains('sample') ||
+        lower.contains('demo') ||
+        lower.contains('mod_languages') ||
+        lower.contains('/banner/') ||
+        lower.contains('com_attachments') ||
+        lower.contains('file_icons');
+  }
+
+  /// Trích xuất ảnh đầu tiên có trong bài viết (từ contentBlocks, mảng images, HTML content, thẻ img)
+  /// và loại bỏ các ảnh mẫu/slideshow/stock để hiển thị ảnh thực tế
+  static String? extractFirstArticleImage({
+    String? rawImageUrl,
+    dynamic rawImages,
+    List<ArticleContentBlock>? blocks,
+    String? content,
+    String? summary,
+    String? description,
+  }) {
+    // 1. Kiểm tra rawImageUrl trực tiếp nếu có và KHÔNG phải là ảnh slideshow/mẫu
+    if (rawImageUrl != null && rawImageUrl.trim().isNotEmpty) {
+      final trimmed = rawImageUrl.trim();
+      if (!_isSampleOrSlideshow(trimmed)) {
+        return trimmed;
+      }
+    }
+
+    // 2. Kiểm tra mảng images (json['images'])
+    if (rawImages is List && rawImages.isNotEmpty) {
+      for (final im in rawImages) {
+        final str = im?.toString().trim();
+        if (str != null && str.isNotEmpty && !_isSampleOrSlideshow(str)) {
+          return str;
+        }
+      }
+    }
+
+    // 3. Kiểm tra parsedBlocks (block đầu tiên có type == 'image')
+    if (blocks != null && blocks.isNotEmpty) {
+      for (final b in blocks) {
+        if (b.type == 'image' && b.url != null && b.url!.trim().isNotEmpty) {
+          final str = b.url!.trim();
+          if (!_isSampleOrSlideshow(str)) {
+            return str;
+          }
+        }
+      }
+    }
+
+    // 4. Trích xuất thẻ <img> đầu tiên trong content hoặc summary (HTML)
+    final htmlSources = [content, summary, description];
+    final imgRegex = RegExp(r'''<img[^>]+src=["']([^"']+)["']''', caseSensitive: false);
+    for (final html in htmlSources) {
+      if (html != null && html.isNotEmpty) {
+        final match = imgRegex.firstMatch(html);
+        if (match != null) {
+          final src = match.group(1)?.trim();
+          if (src != null && src.isNotEmpty && !_isSampleOrSlideshow(src)) {
+            return src;
+          }
+        }
+      }
+    }
+
+    // 5. Trích xuất markdown image: ![...](...)
+    final mdRegex = RegExp(r'!\[.*?\]\((https?://[^\s\)]+|\/[^\s\)]+)\)');
+    for (final text in htmlSources) {
+      if (text != null && text.isNotEmpty) {
+        final match = mdRegex.firstMatch(text);
+        if (match != null) {
+          final src = match.group(1)?.trim();
+          if (src != null && src.isNotEmpty && !_isSampleOrSlideshow(src)) {
+            return src;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
   factory NewsModel.fromJson(Map<String, dynamic> json) {
     final rawId = json['id']?.toString() ??
         json['guid']?.toString() ??
@@ -169,8 +254,27 @@ class NewsModel {
     final rawImg = json['image_url'] ?? json['imageUrl'] ?? json['image'];
     final digits = rawId.replaceAll(RegExp(r'[^0-9]'), '');
     final fallbackIdx = int.tryParse(digits) ?? rawId.hashCode.abs();
-    // Thông báo sinh viên là văn bản hành chính, không dùng ảnh ngẫu nhiên hoặc ảnh fallback
-    final proxiedImageUrl = isAnn ? null : getNewsImageUrl(rawImg?.toString(), fallbackIdx);
+
+    // Lấy ảnh đầu tiên trong bài viết (bỏ ảnh mẫu/slideshow)
+    String? proxiedImageUrl;
+    if (!isAnn) {
+      String? firstImage = extractFirstArticleImage(
+        rawImageUrl: rawImg?.toString(),
+        rawImages: json['images'],
+        blocks: parsedBlocks,
+        content: json['content']?.toString(),
+        summary: json['summary']?.toString(),
+        description: json['description']?.toString(),
+      );
+
+      if (firstImage != null && firstImage.isNotEmpty) {
+        if (!firstImage.startsWith('http')) {
+          firstImage = 'https://www.ttn.edu.vn${firstImage.startsWith('/') ? '' : '/'}$firstImage';
+        }
+        final proxied = getNewsImageUrl(firstImage, fallbackIdx);
+        proxiedImageUrl = proxied.isNotEmpty ? proxied : null;
+      }
+    }
 
     return NewsModel(
       id: rawId,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../app/router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_header.dart';
@@ -48,7 +49,10 @@ class OtpVerifyScreen extends ConsumerWidget {
                     .verifyOtp(studentId, otp);
 
                 if (context.mounted && success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  final messenger = rootScaffoldMessengerKey.currentState ??
+                      ScaffoldMessenger.maybeOf(context);
+                  messenger?.hideCurrentSnackBar();
+                  messenger?.showSnackBar(
                     const SnackBar(
                       content: Text(
                         'Xác thực tài khoản thành công! Vui lòng đăng nhập.',

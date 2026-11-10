@@ -167,7 +167,13 @@ exports.getArticleDetail = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Thiếu url bài viết' });
     }
 
-    const detail = await newsService.fetchFullArticleDetail(url);
+    // [SECURITY FIX] Chặn SSRF - chỉ cho phép cào chi tiết bài viết từ domain ttn.edu.vn
+    const { valid, url: targetUrl, error } = sanitizeProxyUrl(url);
+    if (!valid) {
+      return res.status(403).json({ success: false, message: error || 'URL không hợp lệ hoặc không thuộc domain trường TTN.' });
+    }
+
+    const detail = await newsService.fetchFullArticleDetail(targetUrl);
     if (!detail) {
       return res.status(404).json({ success: false, message: 'Không thể cào nội dung bài viết' });
     }

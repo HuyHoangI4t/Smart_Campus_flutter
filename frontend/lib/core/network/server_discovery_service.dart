@@ -95,9 +95,12 @@ class ServerDiscoveryService {
     if (!subnets.contains('192.168.1')) subnets.add('192.168.1');
     if (!subnets.contains('192.168.0')) subnets.add('192.168.0');
 
-    final candidateIps = <String>[];
-    // Các IP phổ biến trong mạng router/Wi-Fi gia đình và trường học (bao gồm máy chủ host 34)
-    final commonHostEndings = [34, 5, 8, 9, 1, 2, 3, 4, 10, 15, 20, 50, 54, 100, 101, 102, 105, 110, 254];
+    final candidateIps = <String>[
+      '192.168.1.39', // Host machine Wi-Fi IP
+      '192.168.1.17', // LTDDDNT fallback LAN IP
+    ];
+    // Các IP phổ biến trong mạng router/Wi-Fi gia đình và trường học
+    final commonHostEndings = [39, 17, 34, 5, 8, 9, 1, 2, 3, 4, 10, 15, 20, 50, 54, 100, 101, 102, 105, 110, 254];
     for (final subnet in subnets) {
       for (final ending in commonHostEndings) {
         final ip = '$subnet.$ending';

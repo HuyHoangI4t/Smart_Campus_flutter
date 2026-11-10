@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/home_widget_service.dart';
+import '../../../core/widgets/avatar_image.dart';
 import '../../../core/widgets/news_card_image.dart';
 import '../../../core/widgets/wireframe_widgets.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -104,7 +105,7 @@ class HomeScreen extends ConsumerWidget {
 
                   // 6. ALERTS & NOTIFICATIONS
                   if (homeState.alerts.isNotEmpty) ...[
-                    _buildAlertsSection(context, homeState.alerts),
+                    _buildAlertsSection(context, ref, homeState.alerts),
                     const SizedBox(height: 24),
                   ],
 
@@ -237,23 +238,11 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                   child: ClipOval(
-                    child: user?.avatarUrl != null
-                        ? Image.network(
-                            user!.avatarUrl!,
-                            width: 44,
-                            height: 44,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.person,
-                            color: Colors.white,
-                            size: 20,
-                          ),
+                    child: AvatarImage(
+                      avatarUrl: user?.avatarUrl,
+                      size: 44,
+                      fallbackText: user?.fullName ?? 'S',
+                    ),
                   ),
                 ),
               ),
@@ -385,7 +374,93 @@ class HomeScreen extends ConsumerWidget {
   }
 
   // ─── 5. ALERTS & NOTIFICATIONS ───
-  Widget _buildAlertsSection(BuildContext context, List<HomeAlertItem> alerts) {
+  void _handleDeleteAlert(BuildContext context, WidgetRef ref, HomeAlertItem alert, int index, {bool showSnackBar = true}) {
+    ref.read(homeProvider.notifier).dismissAlert(alert.uniqueId);
+
+    if (showSnackBar && context.mounted) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã xóa: "${alert.title}"',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          backgroundColor: const Color(0xFF1E293B),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'Hoàn tác',
+            textColor: const Color(0xFF6EE7B7),
+            onPressed: () {
+              ref.read(homeProvider.notifier).undoDismissAlert(alert, atIndex: index);
+            },
+          ),
+        ),
+      );
+    }
+  }
+
+  void _confirmClearAllAlerts(BuildContext context, WidgetRef ref, List<HomeAlertItem> alerts) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_sweep_rounded, color: Color(0xFFDC2626), size: 24),
+            SizedBox(width: 8),
+            Text(
+              'Xóa tất cả thông báo?',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+            ),
+          ],
+        ),
+        content: Text(
+          'Bạn có chắc muốn xóa tất cả ${alerts.length} thông báo và cảnh báo đang hiển thị?',
+          style: const TextStyle(fontSize: 13.5, color: Color(0xFF475569), height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              final count = alerts.length;
+              ref.read(homeProvider.notifier).dismissAllAlerts();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).clearSnackBars();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Đã xóa sạch $count thông báo & cảnh báo.',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: const Color(0xFF1E293B),
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+              }
+            },
+            child: const Text('Xóa tất cả', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlertsSection(BuildContext context, WidgetRef ref, List<HomeAlertItem> alerts) {
     if (alerts.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -396,20 +471,62 @@ class HomeScreen extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Thông báo & Cảnh báo',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-                color: AppColors.text,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Thông báo & Cảnh báo',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFC7D2FE), width: 0.8),
+                  ),
+                  child: Text(
+                    '${alerts.length}',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            Text(
-              '${alerts.length} tin mới',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.accentLight,
+            // Nút "Xóa tất cả" nhanh
+            InkWell(
+              onTap: () => _confirmClearAllAlerts(context, ref, alerts),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFECACA), width: 0.8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.delete_sweep_rounded, size: 14, color: Color(0xFFDC2626)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Xóa tất cả',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -417,14 +534,14 @@ class HomeScreen extends ConsumerWidget {
         const SizedBox(height: 12),
 
         for (int i = 0; i < alerts.length; i++) ...[
-          _buildAlertCard(context, alerts[i]),
+          _buildAlertCard(context, ref, alerts[i], i),
           if (i < alerts.length - 1) const SizedBox(height: 10),
         ],
       ],
     );
   }
 
-  void _showHomeNoticeModal(BuildContext context, HomeAlertItem alert) {
+  void _showHomeNoticeModal(BuildContext context, WidgetRef ref, HomeAlertItem alert, int index) {
     final isSuccess = alert.variant == 'success';
     final isWarning = alert.variant == 'warning' || alert.type == 'sos';
 
@@ -574,22 +691,49 @@ class HomeScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                   ],
+                  // Nút Xóa nhanh thông báo này trong Dialog
                   Expanded(
                     child: SizedBox(
                       height: 44,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          backgroundColor: const Color(0xFFF1F5F9),
-                          side: BorderSide.none,
+                          backgroundColor: const Color(0xFFFEF2F2),
+                          side: const BorderSide(color: Color(0xFFFECACA)),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text(
-                          'Đóng',
-                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _handleDeleteAlert(context, ref, alert, index);
+                        },
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.delete_outline, size: 16, color: Color(0xFFDC2626)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Xóa tin',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFDC2626)),
+                            ),
+                          ],
                         ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 44,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text(
+                        'Đóng',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
                       ),
                     ),
                   ),
@@ -602,7 +746,7 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAlertCard(BuildContext context, HomeAlertItem alert) {
+  Widget _buildAlertCard(BuildContext context, WidgetRef ref, HomeAlertItem alert, int index) {
     final isSuccess = alert.variant == 'success';
     final isWarning = alert.variant == 'warning' || alert.type == 'sos';
 
@@ -628,65 +772,107 @@ class HomeScreen extends ConsumerWidget {
         ? Icons.check_circle_outline
         : (isWarning ? Icons.warning_amber_rounded : Icons.info_outline);
 
-    return GestureDetector(
-      onTap: () => _showHomeNoticeModal(context, alert),
-      child: Container(
+    return Dismissible(
+      key: Key('alert_${alert.uniqueId}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
         decoration: BoxDecoration(
-          color: bgColor,
+          color: const Color(0xFFEF4444),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor, width: 1),
         ),
-        padding: const EdgeInsets.all(14),
-        child: Row(
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                  size: 20,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    alert.title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: titleColor,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    alert.date.isNotEmpty ? alert.date : (alert.subtitle.isNotEmpty ? alert.subtitle : 'Hôm nay'),
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: dateColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              color: iconColor,
-              size: 18,
+            Icon(Icons.delete_outline, color: Colors.white, size: 22),
+            SizedBox(width: 6),
+            Text(
+              'Xóa',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
             ),
           ],
+        ),
+      ),
+      onDismissed: (_) {
+        _handleDeleteAlert(context, ref, alert, index);
+      },
+      child: GestureDetector(
+        onTap: () => _showHomeNoticeModal(context, ref, alert, index),
+        child: Container(
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: 1),
+          ),
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Icon(
+                    icon,
+                    color: iconColor,
+                    size: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      alert.title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: titleColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      alert.date.isNotEmpty ? alert.date : (alert.subtitle.isNotEmpty ? alert.subtitle : 'Hôm nay'),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: dateColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Nút xóa nhanh trực tiếp trên card
+              Tooltip(
+                message: 'Xóa thông báo này',
+                child: InkWell(
+                  onTap: () => _handleDeleteAlert(context, ref, alert, index),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.close_rounded,
+                      color: iconColor,
+                      size: 15,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -726,16 +912,48 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const WireframeEmptyState(
-            title: 'Chưa có thông báo',
-            subtitle: 'Thông báo từ nhà trường sẽ cập nhật tại đây',
-            icon: Icons.notifications_none_rounded,
+          // Empty State chỉn chu (tham khảo LTDDDNT)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.inbox_rounded, size: 24, color: AppColors.textSubtle),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Chưa có thông báo mới',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Các thông báo học vụ, lịch thi và học bổng mới nhất sẽ hiển thị tại đây khi có tin tức mới.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+                ),
+              ],
+            ),
           ),
         ],
       );
     }
 
-    final displayItems = announcements.take(6).toList();
+    // Hiển thị 3 thông báo mới nhất như LTDDDNT
+    final displayItems = announcements.take(3).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -752,7 +970,7 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             GestureDetector(
-              onTap: () => context.push('/home/news'),
+              onTap: () => context.push('/home/news?category=announcement'),
               child: Row(
                 children: [
                   Text(
@@ -776,8 +994,13 @@ class HomeScreen extends ConsumerWidget {
           children: displayItems.map((item) {
             final dateStr = item.publishedAt ?? '';
 
+            final isFallback = item.id.startsWith('ann-ttn-') ||
+                item.id.startsWith('sample-') ||
+                item.title.contains('[Dữ liệu mẫu]');
+            final hasAttachments = item.attachments.isNotEmpty;
+
             return GestureDetector(
-              onTap: () => context.push('/home/news/${item.id}'),
+              onTap: () => context.push('/home/news/${item.id}', extra: item),
               child: Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
@@ -799,27 +1022,64 @@ class HomeScreen extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFECFDF5),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.notifications_none, size: 12, color: AppColors.success),
-                              const SizedBox(width: 4),
-                              Text(
-                                item.category.isNotEmpty ? item.category : 'Thông báo SV',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.success,
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isFallback
+                                    ? const Color(0xFFFEF3C7)
+                                    : const Color(0xFFECFDF5),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isFallback ? Icons.warning_amber_rounded : Icons.notifications_none,
+                                    size: 12,
+                                    color: isFallback ? const Color(0xFFD97706) : AppColors.success,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isFallback
+                                        ? 'Dữ liệu mẫu'
+                                        : (item.category.isNotEmpty ? item.category : 'Thông báo SV'),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: isFallback ? const Color(0xFFD97706) : AppColors.success,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (hasAttachments) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.attach_file, size: 10, color: AppColors.textSecondary),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '${item.attachments.length} file',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          ),
+                          ],
                         ),
                         Text(
                           dateStr,
@@ -920,10 +1180,41 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const WireframeEmptyState(
-            title: 'Chưa có tin tức',
-            subtitle: 'Tin tức và hoạt động mới nhất sẽ cập nhật tại đây',
-            icon: Icons.article_outlined,
+          // Empty State chỉn chu (tham khảo LTDDDNT)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.inbox_rounded, size: 24, color: AppColors.textSubtle),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Chưa có tin tức mới',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.text),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Các bài viết mới nhất từ cổng thông tin trường sẽ hiển thị tại đây khi có cập nhật.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+                ),
+              ],
+            ),
           ),
         ],
       );
@@ -946,7 +1237,7 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             GestureDetector(
-              onTap: () => context.push('/home/news'),
+              onTap: () => context.push('/home/news?category=news'),
               child: Row(
                 children: [
                   Text(
@@ -969,9 +1260,11 @@ class HomeScreen extends ConsumerWidget {
         Column(
           children: displayNews.map((item) {
             final dateStr = item.publishedAt ?? '';
+            final isFallback = item.id.startsWith('sample-') ||
+                item.title.contains('[Dữ liệu mẫu]');
 
             return GestureDetector(
-              onTap: () => context.push('/home/news/${item.id}'),
+              onTap: () => context.push('/home/news/${item.id}', extra: item),
               child: Container(
                 margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
@@ -1010,20 +1303,28 @@ class HomeScreen extends ConsumerWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFEFF6FF),
+                                  color: isFallback
+                                      ? const Color(0xFFFEF3C7)
+                                      : const Color(0xFFEFF6FF),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.menu_book_outlined, size: 12, color: AppColors.info),
+                                    Icon(
+                                      isFallback ? Icons.warning_amber_rounded : Icons.menu_book_outlined,
+                                      size: 12,
+                                      color: isFallback ? const Color(0xFFD97706) : AppColors.info,
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      item.category.isNotEmpty ? item.category : 'Tin hoạt động',
-                                      style: const TextStyle(
+                                      isFallback
+                                          ? 'Dữ liệu mẫu'
+                                          : (item.category.isNotEmpty ? item.category : 'Tin hoạt động'),
+                                      style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w800,
-                                        color: AppColors.info,
+                                        color: isFallback ? const Color(0xFFD97706) : AppColors.info,
                                       ),
                                     ),
                                   ],

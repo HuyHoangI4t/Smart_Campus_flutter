@@ -54,6 +54,8 @@ class HomeAlertItem {
     this.actionScreen,
   });
 
+  String get uniqueId => id.isNotEmpty ? id : '${title}_${date}_$content';
+
   factory HomeAlertItem.fromJson(Map<String, dynamic> json) {
     return HomeAlertItem(
       id: json['id']?.toString() ?? '',
@@ -156,6 +158,27 @@ class HomeNotifier extends Notifier<HomeState> {
     state = state.copyWith(isLoading: false);
   }
 
+  static const String _dismissedAlertsKey = 'dismissed_alerts_cache';
+
+  Future<Set<String>> _getDismissedAlertIds() async {
+    try {
+      final storage = ref.read(storageServiceProvider);
+      final raw = await storage.getCache(_dismissedAlertsKey);
+      if (raw != null && raw.isNotEmpty) {
+        final List list = jsonDecode(raw) as List;
+        return list.map((e) => e.toString()).toSet();
+      }
+    } catch (_) {}
+    return <String>{};
+  }
+
+  Future<void> _saveDismissedAlertIds(Set<String> ids) async {
+    try {
+      final storage = ref.read(storageServiceProvider);
+      await storage.saveCache(_dismissedAlertsKey, jsonEncode(ids.toList()));
+    } catch (_) {}
+  }
+
   Future<void> fetchAlerts() async {
     try {
       final response = await _dio.get(ApiEndpoints.campusDashboard);
@@ -164,9 +187,11 @@ class HomeNotifier extends Notifier<HomeState> {
         if (raw is Map) {
           final List rawAlerts = raw['alerts'] ?? raw['notificationAlerts'] ?? [];
           if (rawAlerts.isNotEmpty) {
+            final dismissedIds = await _getDismissedAlertIds();
             final alerts = rawAlerts
                 .whereType<Map<String, dynamic>>()
                 .map((item) => HomeAlertItem.fromJson(item))
+                .where((item) => !dismissedIds.contains(item.uniqueId))
                 .toList();
             state = state.copyWith(alerts: alerts);
             return;
@@ -176,6 +201,61 @@ class HomeNotifier extends Notifier<HomeState> {
     } catch (_) {}
 
     state = state.copyWith(alerts: const []);
+  }
+
+  /// Xóa nhanh 1 thông báo/cảnh báo
+  Future<void> dismissAlert(String alertId) async {
+    final dismissedIds = await _getDismissedAlertIds();
+    dismissedIds.add(alertId);
+    await _saveDismissedAlertIds(dismissedIds);
+
+    final updated = state.alerts.where((item) => item.uniqueId != alertId).toList();
+    state = state.copyWith(alerts: updated);
+  }
+
+  /// Xóa nhanh toàn bộ thông báo và cảnh báo
+  Future<void> dismissAllAlerts() async {
+    final dismissedIds = await _getDismissedAlertIds();
+    for (final alert in state.alerts) {
+      dismissedIds.add(alert.uniqueId);
+    }
+    await _saveDismissedAlertIds(dismissedIds);
+    state = state.copyWith(alerts: const []);
+  }
+
+  /// Hoàn tác xóa thông báo
+  Future<void> undoDismissAlert(HomeAlertItem alert, {int? atIndex}) async {
+    final dismissedIds = await _getDismissedAlertIds();
+    dismissedIds.remove(alert.uniqueId);
+    await _saveDismissedAlertIds(dismissedIds);
+
+    final updated = List<HomeAlertItem>.from(state.alerts);
+    if (atIndex != null && atIndex >= 0 && atIndex <= updated.length) {
+      updated.insert(atIndex, alert);
+    } else {
+      updated.add(alert);
+    }
+    state = state.copyWith(alerts: updated);
+  }
+
+  /// Khôi phục toàn bộ danh sách thông báo và cảnh báo đã bị ẩn
+  Future<void> restoreAllDismissedAlerts() async {
+    final storage = ref.read(storageServiceProvider);
+    await storage.removeCache(_dismissedAlertsKey);
+    await fetchAlerts();
+  }
+
+  /// Lọc bỏ bài viết mẫu dự phòng (isFallback / badge "Dữ liệu mẫu" / tiêu đề chứa "[Dữ liệu mẫu]")
+  /// Tham khảo logic tương ứng bên LTDDDNT: cleanAnn / cleanNews
+  bool _isFallbackItem(Map<String, dynamic> item) {
+    if (item['isFallback'] == true) return true;
+    final badge = item['badge']?.toString().toLowerCase() ?? '';
+    if (badge.contains('mẫu')) return true;
+    final title = item['title']?.toString() ?? '';
+    if (title.contains('[Dữ liệu mẫu]')) return true;
+    final id = item['id']?.toString() ?? '';
+    if (id.startsWith('sample-')) return true;
+    return false;
   }
 
   Future<void> fetchNews({bool forceRefresh = false}) async {
@@ -195,13 +275,16 @@ class HomeNotifier extends Notifier<HomeState> {
             [];
         final List rawData = data['data'] ?? [];
 
+        // Lọc bỏ bài viết mẫu/fallback trước khi parse (tham khảo LTDDDNT cleanAnn/cleanNews)
         List<NewsModel> announcements = rawAnnouncements
             .whereType<Map>()
+            .where((item) => !_isFallbackItem(Map<String, dynamic>.from(item)))
             .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
             .toList();
 
         List<NewsModel> news = rawNews
             .whereType<Map>()
+            .where((item) => !_isFallbackItem(Map<String, dynamic>.from(item)))
             .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
             .toList();
 
@@ -209,6 +292,7 @@ class HomeNotifier extends Notifier<HomeState> {
         if (announcements.isEmpty || news.isEmpty) {
           final all = rawData
               .whereType<Map>()
+              .where((item) => !_isFallbackItem(Map<String, dynamic>.from(item)))
               .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
               .toList();
 
@@ -232,7 +316,7 @@ class HomeNotifier extends Notifier<HomeState> {
           }
         }
 
-        // Bảo đảm nếu danh sách trả về rỗng thì giữ dữ liệu mặc định
+        // Chỉ sử dụng dữ liệu mẫu dự phòng khi API thực sự không trả về bất kỳ dữ liệu thực nào
         if (announcements.isEmpty) {
           announcements = defaultFallbackAnnouncements;
         }

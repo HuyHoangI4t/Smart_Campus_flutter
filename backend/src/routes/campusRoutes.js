@@ -51,6 +51,7 @@ router.post('/sos', campusController.submitSos);
  *         description: Danh sách địa điểm gồm ID, tên tòa nhà, phân loại, kinh độ, vĩ độ và mô tả
  */
 router.get('/map', campusController.getMapLocations);
+router.get('/map/style', campusController.getMapStyle);
 
 /**
  * @swagger

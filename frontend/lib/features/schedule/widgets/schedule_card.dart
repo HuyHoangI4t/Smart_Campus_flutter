@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../models/schedule_model.dart';
@@ -71,8 +72,18 @@ class ScheduleCard extends StatelessWidget {
     final Color accentColor = typeConfig['accent'] as Color;
     final RoomDirectionInfo direction = item.roomDirection;
 
+    final bool isOnline = item.isOnline;
     String locationDisplay = item.room;
-    if (direction.buildingCode.isNotEmpty && !item.room.contains(direction.buildingCode)) {
+    if (isOnline) {
+      if (item.onlineMeetingCode != null && item.onlineMeetingCode!.isNotEmpty) {
+        locationDisplay = 'Online • Google Meet (${item.onlineMeetingCode})';
+      } else if (item.room.isNotEmpty && item.room.toLowerCase() != 'online') {
+        final cleanRoom = item.room.replaceFirst(RegExp(r'^online\s*[•\-–—:]?\s*', caseSensitive: false), '').trim();
+        locationDisplay = cleanRoom.isNotEmpty ? 'Online • $cleanRoom' : 'Học trực tuyến (Online)';
+      } else {
+        locationDisplay = 'Học trực tuyến (Online)';
+      }
+    } else if (direction.buildingCode.isNotEmpty && !item.room.contains(direction.buildingCode)) {
       locationDisplay = '${item.room} • ${direction.buildingCode}';
     }
 
@@ -130,128 +141,135 @@ class ScheduleCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ─── ROW 1: TIME BADGE + TYPE TAG ───
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Time Capsule
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isOngoing ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isOngoing ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                SizedBox(
+                  width: double.infinity,
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      // Time Capsule
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: isOngoing ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isOngoing ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.access_time_filled,
+                              size: 12.5,
+                              color: isOngoing ? const Color(0xFF059669) : const Color(0xFF475569),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${item.startTime} – ${item.endTime}',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: isOngoing ? const Color(0xFF065F46) : const Color(0xFF334155),
+                              ),
+                            ),
+                            if (item.periodDisplay.trim().isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '• ${item.periodDisplay}',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isOngoing ? const Color(0xFF047857) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+
+                      // Type & Status Badges
+                      Wrap(
+                        spacing: 5,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Icon(
-                            Icons.access_time_filled,
-                            size: 13,
-                            color: isOngoing ? const Color(0xFF059669) : const Color(0xFF475569),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            '${item.startTime} – ${item.endTime}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: isOngoing ? const Color(0xFF065F46) : const Color(0xFF334155),
+                          if (isOngoing)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD1FAE5),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFF6EE7B7)),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.circle, size: 6, color: Color(0xFF059669)),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'Đang học',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF065F46),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (isCompleted)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Đã qua',
+                                style: TextStyle(fontSize: 9.5, color: Color(0xFF64748B), fontWeight: FontWeight.w700),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            '• ${item.periodDisplay}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: isOngoing ? const Color(0xFF047857) : const Color(0xFF64748B),
+                          if (item.isCustom)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: const Text(
+                                'Tự thêm',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF92400E),
+                                ),
+                              ),
+                            ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: typeConfig['bg'] as Color,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: typeConfig['border'] as Color),
+                            ),
+                            child: Text(
+                              typeConfig['label'] as String,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: typeConfig['color'] as Color,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-
-                    // Type & Status Badges
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isOngoing)
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFD1FAE5),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFF6EE7B7)),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.circle, size: 6, color: Color(0xFF059669)),
-                                SizedBox(width: 3),
-                                Text(
-                                  'Đang học',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF065F46),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else if (isCompleted)
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Đã qua',
-                              style: TextStyle(fontSize: 9.5, color: Color(0xFF64748B), fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        if (item.isCustom)
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFFDE68A)),
-                            ),
-                            child: const Text(
-                              'Tự thêm',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF92400E),
-                              ),
-                            ),
-                          ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: typeConfig['bg'] as Color,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: typeConfig['border'] as Color),
-                          ),
-                          child: Text(
-                            typeConfig['label'] as String,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: typeConfig['color'] as Color,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 10),
@@ -276,27 +294,44 @@ class ScheduleCard extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     // Room chip
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => onSelectDirection(item),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFBFDBFE)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.location_on, size: 13, color: AppColors.primary),
-                          const SizedBox(width: 4),
-                          Text(
-                            locationDisplay,
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isOnline ? const Color(0xFFEFF6FF) : const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isOnline ? const Color(0xFF93C5FD) : const Color(0xFFBFDBFE),
                             ),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isOnline ? Icons.videocam : Icons.location_on,
+                                size: 13,
+                                color: isOnline ? const Color(0xFF2563EB) : AppColors.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                locationDisplay,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isOnline ? const Color(0xFF1D4ED8) : AppColors.primary,
+                                ),
+                              ),
+                              if (isOnline) ...[
+                                const SizedBox(width: 4),
+                                const Icon(Icons.info_outline, size: 12, color: Color(0xFF2563EB)),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
 
@@ -335,21 +370,28 @@ class ScheduleCard extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: isOnline ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(
+                        color: isOnline ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0),
+                      ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.sticky_note_2_outlined, size: 14, color: Color(0xFF64748B)),
+                        Icon(
+                          isOnline ? Icons.videocam_outlined : Icons.sticky_note_2_outlined,
+                          size: 14,
+                          color: isOnline ? const Color(0xFF2563EB) : const Color(0xFF64748B),
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             item.note!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11.5,
-                              color: Color(0xFF475569),
+                              color: isOnline ? const Color(0xFF1E40AF) : const Color(0xFF475569),
+                              fontWeight: isOnline ? FontWeight.w600 : FontWeight.normal,
                               height: 1.35,
                             ),
                           ),
@@ -364,31 +406,57 @@ class ScheduleCard extends StatelessWidget {
                 // ─── ROW 5: ACTION BUTTONS ───
                 Row(
                   children: [
-                    // Nút "Chỉ đường"
+                    // Nút "Mở link học Online" (cho Online) hoặc "Chỉ đường" (cho Offline)
                     Expanded(
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: () => onSelectDirection(item),
+                          onTap: () async {
+                            if (isOnline) {
+                              final url = item.onlineMeetingUrl;
+                              if (url != null && url.isNotEmpty) {
+                                final uri = Uri.tryParse(url);
+                                if (uri != null && await canLaunchUrl(uri)) {
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                  return;
+                                }
+                              }
+                            }
+                            onSelectDirection(item);
+                          },
                           borderRadius: BorderRadius.circular(10),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 9),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEEF2FF),
+                              color: isOnline ? const Color(0xFFEFF6FF) : const Color(0xFFEEF2FF),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFFC7D2FE)),
+                              border: Border.all(
+                                color: isOnline ? const Color(0xFF93C5FD) : const Color(0xFFC7D2FE),
+                              ),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.near_me, size: 14, color: AppColors.primary),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Chỉ đường tới phòng',
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary,
+                                Icon(
+                                  isOnline ? Icons.open_in_new : Icons.near_me,
+                                  size: 14,
+                                  color: isOnline ? const Color(0xFF2563EB) : AppColors.primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    isOnline
+                                        ? (item.onlineMeetingCode != null
+                                            ? 'Mở Google Meet (${item.onlineMeetingCode})'
+                                            : 'Mở link phòng học online')
+                                        : 'Chỉ đường tới phòng',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: isOnline ? const Color(0xFF1D4ED8) : AppColors.primary,
+                                    ),
                                   ),
                                 ),
                               ],

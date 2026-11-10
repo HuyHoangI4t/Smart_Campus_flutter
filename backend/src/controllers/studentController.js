@@ -173,13 +173,15 @@ exports.getGrades = async (req, res) => {
   // Giới hạn chờ crawler tối đa 2500ms nếu đã có sẵn dữ liệu trong DB
   let syncSuccess = false;
   if (mssv && !isGuestOrEmail(mssv)) {
+    let timerId = null;
     try {
       const syncPromise = studentSyncService.syncGradesForStudent(mssv, studentDk);
+      const timeoutPromise = new Promise((_, reject) => {
+        timerId = setTimeout(() => reject(new Error('TTN Crawler timeout 2500ms')), 2500);
+      });
+
       const syncRes = dbGrades.length > 0
-        ? await Promise.race([
-            syncPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('TTN Crawler timeout 2500ms')), 2500))
-          ])
+        ? await Promise.race([syncPromise, timeoutPromise])
         : await syncPromise;
 
       if (syncRes && syncRes.success) {
@@ -188,6 +190,8 @@ exports.getGrades = async (req, res) => {
       }
     } catch (crawlErr) {
       console.warn('Lỗi đồng bộ bảng điểm qua crawler (timeout/lỗi):', crawlErr.message);
+    } finally {
+      if (timerId) clearTimeout(timerId);
     }
   }
 
@@ -453,13 +457,15 @@ exports.getSchedule = async (req, res) => {
   // Giới hạn thời gian chờ crawler web trường tối đa 2500ms nếu đã có sẵn dữ liệu trong DB
   let scheduleSyncSuccess = false;
   if (mssv && !isGuestOrEmail(mssv)) {
+    let timerId = null;
     try {
       const syncPromise = studentSyncService.syncScheduleForStudent(mssv, studentDk);
+      const timeoutPromise = new Promise((_, reject) => {
+        timerId = setTimeout(() => reject(new Error('TTN Crawler timeout 15000ms')), 15000);
+      });
+
       const syncRes = (dbSchedules.length > 0 && !forceRefresh)
-        ? await Promise.race([
-            syncPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('TTN Crawler timeout 15000ms')), 15000))
-          ])
+        ? await Promise.race([syncPromise, timeoutPromise])
         : await syncPromise;
 
       if (syncRes && syncRes.success) {
@@ -467,6 +473,8 @@ exports.getSchedule = async (req, res) => {
       }
     } catch (crawlErr) {
       console.warn('Crawler lịch học web trường chậm hoặc timeout, fallback dữ liệu DB:', crawlErr.message);
+    } finally {
+      if (timerId) clearTimeout(timerId);
     }
   }
 
@@ -531,12 +539,19 @@ function pushRow(headers, colIdx, buoi, currentLesson, parsedRows) {
     dayName = parts.join(' ');
   }
 
+  let noteCombined = currentLesson.ghi_chu || '';
+  if (currentLesson.phan_mem) {
+    noteCombined = noteCombined ? `${noteCombined} | PM: ${currentLesson.phan_mem}` : `PM: ${currentLesson.phan_mem}`;
+  }
+
   parsedRows.push([
     dayName.trim(),                          // Cột 0: Ngày
     currentLesson.ten_hp,                    // Cột 1: Tên môn học
     currentLesson.tiet || (buoi === 'Sáng' ? '1-4' : '7-10'), // Cột 2: Tiết
     currentLesson.phong || 'Chưa xếp',       // Cột 3: Phòng
-    currentLesson.giang_vien || 'Giảng viên' // Cột 4: Giảng viên
+    currentLesson.giang_vien || 'Giảng viên', // Cột 4: Giảng viên
+    null,                                    // Cột 5: Ngày học
+    noteCombined                             // Cột 6: Ghi chú
   ]);
 }
 
@@ -568,7 +583,8 @@ function formatDbSchedulesResponse(dbSchedules, customItems, req, res, mssv, isD
           row.tiet || "1-4",
           row.phong || "Khu giảng đường",
           row.giang_vien || "Giảng viên bộ môn",
-          row.ngay_hoc || null
+          row.ngay_hoc || null,
+          row.ghi_chu || ""
         ]);
       }
     }
@@ -786,7 +802,7 @@ function parseWeekTable($, table) {
         if (!cellHtml.includes('HP:')) continue;
 
         const lines = cellHtml.split(/<br\s*\/?>/i);
-        let currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '' };
+        let currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '', phan_mem: '', ghi_chu: '' };
 
         lines.forEach(rawLine => {
           const line = cheerio.load(rawLine).text().trim();
@@ -795,7 +811,7 @@ function parseWeekTable($, table) {
           if (line.startsWith('HP:')) {
             if (currentLesson.ten_hp) {
               pushRow(headers, colIdx, buoi, currentLesson, parsedRows);
-              currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '' };
+              currentLesson = { ten_hp: '', tiet: '', phong: '', giang_vien: '', phan_mem: '', ghi_chu: '' };
             }
             const match = line.match(/HP:\s*(.*?)\s*\(([\d\s-]+)\)/);
             if (match) {
@@ -808,6 +824,10 @@ function parseWeekTable($, table) {
             currentLesson.giang_vien = line.replace('GV:', '').trim();
           } else if (line.startsWith('Phòng:')) {
             currentLesson.phong = line.replace('Phòng:', '').trim();
+          } else if (/^(PM|Phần mềm):/i.test(line)) {
+            currentLesson.phan_mem = line.replace(/^(PM|Phần mềm):\s*/i, '').trim();
+          } else if (/^(Ghi chú|Note):/i.test(line)) {
+            currentLesson.ghi_chu = line.replace(/^(Ghi chú|Note):\s*/i, '').trim();
           }
         });
 

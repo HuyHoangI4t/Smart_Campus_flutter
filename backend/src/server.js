@@ -201,7 +201,7 @@ app.get(['/api/health', '/health'], async (req, res) => {
       status: 'ok',
       app: 'smart_campus_backend',
       port: PORT,
-      message: `Smart Campus TTN Backend API & MySQL database (${process.env.DB_NAME || 'smartcampus'}) đang hoạt động bình thường.`,
+      message: `Smart Campus TTN Backend API & MySQL database (${process.env.DB_NAME || 'flutter_campus'}) đang hoạt động bình thường.`,
       cron: (cronService && typeof cronService.getSyncStatus === 'function') ? cronService.getSyncStatus() : null
     });
   } catch (error) {
@@ -327,7 +327,7 @@ async function startServer() {
 
   server.listen(PORT, '0.0.0.0', () => {
     const localIP = getLocalIPv4();
-    const dbName = process.env.DB_NAME || 'smartcampus';
+    const dbName = process.env.DB_NAME || 'flutter_campus';
     console.log('\n' + '='.repeat(64));
     console.log(' 🎓 SMART CAMPUS TTN - BACKEND SERVER (ĐH TÂY NGUYÊN)');
     console.log('='.repeat(64));
@@ -366,6 +366,13 @@ async function startServer() {
 
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+  process.on('uncaughtException', (err) => {
+    console.error('⚠️ [Uncaught Exception]:', err.message || err);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('⚠️ [Unhandled Rejection]:', reason?.message || reason);
+  });
 }
 
 startServer();

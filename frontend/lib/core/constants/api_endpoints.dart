@@ -60,6 +60,7 @@ class ApiEndpoints {
   static const String campusPaths = '/campus/paths';
   static const String campusGates = '/campus/gates';
   static const String campusRoadRoute = '/campus/road-route';
+  static const String mapStyle = '/campus/map/style';
 
   static const String campusDashboard = '/campus/dashboard';
   static const String feedback = '/campus/feedback';

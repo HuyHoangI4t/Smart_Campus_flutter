@@ -1,55 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 
-const List<Map<String, String>> _presetAvatars = [
-  // 1. Sinh viên phong cách 3D hiện đại
-  {
-    'id': '3d_male',
-    'label': 'Nam sinh 3D',
-    'uri': 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-  },
-  {
-    'id': '3d_female',
-    'label': 'Nữ sinh 3D',
-    'uri': 'https://cdn-icons-png.flaticon.com/512/3135/3135789.png',
-  },
-  {
-    'id': '3d_grad',
-    'label': 'Tốt nghiệp',
-    'uri': 'https://cdn-icons-png.flaticon.com/512/3135/3135810.png',
-  },
-  {
-    'id': '3d_tech',
-    'label': 'Công nghệ TT',
-    'uri': 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png',
-  },
-  // 2. Avatar sinh viên thực tế (Unsplash CDN)
-  {
-    'id': 'real_male_1',
-    'label': 'Nam sinh 1',
-    'uri': 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=250&q=80',
-  },
-  {
-    'id': 'real_female_1',
-    'label': 'Nữ sinh 1',
-    'uri': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=250&q=80',
-  },
-  {
-    'id': 'real_male_2',
-    'label': 'Nam sinh 2',
-    'uri': 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=250&q=80',
-  },
-  {
-    'id': 'real_female_2',
-    'label': 'Nữ sinh 2',
-    'uri': 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=250&q=80',
-  },
-];
-
-/// Modal chọn ảnh đại diện từ preset hoặc URL tùy chỉnh
+/// Modal chọn ảnh đại diện tinh gọn với 2 lựa chọn: Camera & Thư viện ảnh
 class AvatarPickerModal extends ConsumerStatefulWidget {
   final UserModel? currentUser;
   final VoidCallback? onReturnToEdit;
@@ -81,19 +38,46 @@ class AvatarPickerModal extends ConsumerStatefulWidget {
 }
 
 class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
-  final _urlController = TextEditingController();
-  bool _isSaving = false;
+  final ImagePicker _picker = ImagePicker();
+  bool _isProcessing = false;
 
-  @override
-  void dispose() {
-    _urlController.dispose();
-    super.dispose();
+  Future<void> _pickImage(ImageSource source) async {
+    if (_isProcessing) return;
+
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return; // Người dùng hủy chọn
+
+      setState(() => _isProcessing = true);
+
+      final bytes = await pickedFile.readAsBytes();
+      final base64String = base64Encode(bytes);
+      final dataUri = 'data:image/jpeg;base64,$base64String';
+
+      await _updateAvatar(dataUri);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Không thể lấy ảnh: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
   }
 
   Future<void> _updateAvatar(String url) async {
-    if (_isSaving) return;
-    setState(() => _isSaving = true);
-
     final targetUser = ref.read(authProvider).user ?? widget.currentUser ?? UserModel.guest();
     final updated = targetUser.copyWith(avatarUrl: url);
 
@@ -140,8 +124,6 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
           ),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -153,11 +135,24 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 38,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFCBD5E1),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
           // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -179,134 +174,120 @@ class _AvatarPickerModalState extends ConsumerState<AvatarPickerModal> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // Danh sách preset
-          const Text(
-            'Hình đại diện có sẵn',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          SizedBox(
-            height: 76,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _presetAvatars.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 14),
-              itemBuilder: (context, i) {
-                final item = _presetAvatars[i];
-                return GestureDetector(
-                  onTap: _isSaving ? null : () => _updateAvatar(item['uri']!),
-                  child: Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.primary, width: 2),
-                    ),
-                    child: ClipOval(
-                      child: Image.network(
-                        item['uri']!,
-                        width: 70,
-                        height: 70,
-                        fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => Container(
-                          width: 70,
-                          height: 70,
-                          color: const Color(0xFFEFF6FF),
-                          child: const Icon(Icons.person, color: AppColors.primary),
-                        ),
-                      ),
+          if (_isProcessing) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Column(
+                children: [
+                  CircularProgressIndicator(color: AppColors.primary),
+                  SizedBox(height: 16),
+                  Text(
+                    'Đang xử lý và lưu ảnh đại diện...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Nhập URL tùy chỉnh
-          const Text(
-            'Hoặc nhập liên kết ảnh (URL)',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _urlController,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                    hintText: 'https://...',
-                    hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                    ),
-                  ),
-                ),
+                ],
               ),
-              const SizedBox(width: 10),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-                onPressed: _isSaving
-                    ? null
-                    : () {
-                        final url = _urlController.text.trim();
-                        if (url.isNotEmpty && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image'))) {
-                          _updateAvatar(url);
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Vui lòng nhập đường dẫn ảnh hợp lệ (http:// hoặc https://)'),
-                              backgroundColor: AppColors.warning,
-                            ),
-                          );
-                        }
-                      },
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text(
-                        'Áp dụng',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                      ),
-              ),
-            ],
-          ),
+            ),
+          ] else ...[
+            // ─── 1. TÙY CHỌN: CHỤP ẢNH TỪ CAMERA ───
+            _buildOptionCard(
+              icon: Icons.camera_alt_rounded,
+              iconColor: const Color(0xFF2563EB),
+              iconBg: const Color(0xFFEFF6FF),
+              title: 'Chụp ảnh mới',
+              subtitle: 'Sử dụng máy ảnh để chụp chân dung ngay',
+              onTap: () => _pickImage(ImageSource.camera),
+            ),
+            const SizedBox(height: 12),
+
+            // ─── 2. TÙY CHỌN: CHỌN TỪ THƯ VIỆN ───
+            _buildOptionCard(
+              icon: Icons.photo_library_rounded,
+              iconColor: const Color(0xFF059669),
+              iconBg: const Color(0xFFECFDF5),
+              title: 'Chọn từ thư viện',
+              subtitle: 'Tải ảnh có sẵn từ bộ sưu tập của bạn',
+              onTap: () => _pickImage(ImageSource.gallery),
+            ),
+          ],
         ],
       ),
     );
   }
-}
 
+  Widget _buildOptionCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Icon(icon, color: iconColor, size: 24),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textForeground,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF94A3B8),
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

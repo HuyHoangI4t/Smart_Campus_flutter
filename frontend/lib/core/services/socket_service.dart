@@ -42,6 +42,18 @@ class SocketService {
     return raw.replaceAll(RegExp(r'/api/?$'), '');
   }
 
+  void updateServerUrl(String newBaseUrl) {
+    final targetUrl = getSocketUrl(newBaseUrl);
+    if (_socket != null) {
+      try {
+        _socket!.disconnect();
+        _socket!.dispose();
+      } catch (_) {}
+      _socket = null;
+    }
+    initSocket(serverUrl: targetUrl);
+  }
+
   void initSocket({String? serverUrl}) {
     if (_socket != null && _socket!.connected) return;
 
@@ -69,7 +81,13 @@ class SocketService {
       });
 
       _socket!.onConnectError((err) {
-        debugPrint('❌ [Socket.IO] Lỗi kết nối: $err');
+        // Chỉ ghi nhận vắn tắt để tránh tràn log khi chưa hoàn tất nhận diện máy chủ
+        final msg = err.toString();
+        if (msg.contains('Connection refused')) {
+          debugPrint('⏳ [Socket.IO] Đang chờ kết nối tới máy chủ ($targetUrl)...');
+        } else {
+          debugPrint('❌ [Socket.IO] Lỗi kết nối: $err');
+        }
       });
 
       // Lắng nghe sự kiện new_sos toàn cục

@@ -1,23 +1,75 @@
 import '../models/room_direction_model.dart';
 
 /// Phân tích và tạo lộ trình hướng dẫn từng bước đến phòng học
+/// (hoặc thông tin tham gia lớp trực tuyến)
 /// Hỗ trợ các định dạng:
+/// - Online: Google Meet, Zoom, MS Teams, Online, Trực tuyến
 /// - Dạng 3 phần: 7.3.18 -> Nhà 7, Tầng 3, Phòng 18
 /// - Dạng 2 phần: 6.12 -> Nhà 6, Phòng 12; 2.21 (CLC) -> Nhà 2, Phòng 21 (CLC)
 /// - Các hội trường & khoa chuyên biệt: GĐ 400, GĐ 200, Thư viện, TT GDQP, Khoa Y Dược, v.v.
-RoomDirectionInfo parseRoomDirections(String roomRaw) {
+RoomDirectionInfo parseRoomDirections(String roomRaw, {String extraNote = ''}) {
   final room = roomRaw.trim();
   final upper = room.toUpperCase();
+  final noteUpper = extraNote.toUpperCase();
 
-  // Loại bỏ các tiền tố thường gặp để chuẩn hóa regex
+  // 1. Kiểm tra lớp học trực tuyến / Online
+  final isOnline = upper.contains('ONLINE') ||
+      upper.contains('TRỰC TUYẾN') ||
+      upper.contains('TRUC TUYEN') ||
+      upper.contains('GOOGLE MEET') ||
+      upper.contains('ZOOM') ||
+      upper.contains('TEAMS') ||
+      upper.startsWith('MEET') ||
+      noteUpper.contains('ONLINE') ||
+      noteUpper.contains('GOOGLE MEET') ||
+      noteUpper.contains('ZOOM') ||
+      noteUpper.contains('TEAMS') ||
+      noteUpper.contains('PM:');
+
+  if (isOnline) {
+    final combined = '$room $extraNote'.trim();
+    final meetMatch = RegExp(r'([a-z]{3}-[a-z]{4}-[a-z]{3})', caseSensitive: false).firstMatch(combined);
+    String meetingCode = meetMatch != null ? meetMatch.group(1)!.toLowerCase() : '';
+    if (meetingCode.isEmpty) {
+      final codeMatch = RegExp(r'(?:mã|code|id)[:\s]+([^\s,;]+)', caseSensitive: false).firstMatch(combined);
+      if (codeMatch != null) {
+        meetingCode = codeMatch.group(1)!.trim();
+      }
+    }
+
+    final urlMatch = RegExp(r'https?://[^\s]+', caseSensitive: false).firstMatch(combined);
+    final meetingUrl = meetingCode.isNotEmpty && RegExp(r'^[a-z]{3}-[a-z]{4}-[a-z]{3}$', caseSensitive: false).hasMatch(meetingCode)
+        ? 'https://meet.google.com/$meetingCode'
+        : urlMatch?.group(0);
+
+    return RoomDirectionInfo(
+      room: room.isNotEmpty ? room : 'Online',
+      building: 'Lớp học trực tuyến (Online)',
+      buildingCode: 'Online',
+      floor: 'Học từ xa',
+      mapQuery: '',
+      isOnline: true,
+      meetingInfo: extraNote.isNotEmpty ? extraNote : (room != 'Online' ? room : null),
+      meetingUrl: meetingUrl,
+      meetingCode: meetingCode.isNotEmpty ? meetingCode : null,
+      steps: const [], // Không cần chỉ đường đi bộ đối với lớp online
+      tips: const [
+        'Sử dụng tai nghe có mic để nghe giảng rõ ràng và hạn chế tiếng vọng từ không gian xung quanh.',
+        'Đăng nhập đúng tài khoản email sinh viên (@dhtn.edu.vn) và đặt tên đầy đủ kèm MSSV để giảng viên dễ duyệt và điểm danh.',
+        'Nên vào phòng sớm 5 phút để kiểm tra âm thanh, hình ảnh sẵn sàng trước khi bài học bắt đầu.',
+      ],
+    );
+  }
+
+  // Loại bỏ các tiền tố thường gặp để chuẩn hóa regex cho phòng trực tiếp
   final clean = upper
       .replaceFirst(RegExp(r'^(NHÀ\s*HỌC\s*SỐ|NHÀ\s*HỌC|NHÀ|PHÒNG|P\.)\s*', caseSensitive: false), '')
       .trim();
 
-  String building = 'Nhà học số 2';
-  String buildingCode = 'Nhà 2';
+  String building = 'Khu giảng đường';
+  String buildingCode = 'Giảng đường';
   String floor = '';
-  String mapQuery = 'Nhà 2';
+  String mapQuery = '';
   String roomDisplay = room.isNotEmpty ? room : 'Khu giảng đường';
 
   // 1. Dạng 3 phần: X.Y.Z (vd: 7.3.18 -> Nhà 7, Tầng 3, Phòng 18; 9.2.04 -> Nhà 9, Tầng 2, Phòng 04)

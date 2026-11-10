@@ -297,7 +297,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
   // Card Thông báo SV
   Widget _buildAnnouncementCard(NewsModel item) {
     return GestureDetector(
-      onTap: () => context.push('/home/news/${item.id}'),
+      onTap: () => context.push('/home/news/${item.id}', extra: item),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -418,7 +418,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> with SingleTickerProvid
   // Card Tin tức & Hoạt động
   Widget _buildNewsCard(NewsModel item) {
     return GestureDetector(
-      onTap: () => context.push('/home/news/${item.id}'),
+      onTap: () => context.push('/home/news/${item.id}', extra: item),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(

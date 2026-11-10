@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../app/router.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/network/api_client.dart';
@@ -24,15 +25,22 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     super.dispose();
   }
 
+  void _showSnackBar(String message, {bool isError = true}) {
+    final messenger = rootScaffoldMessengerKey.currentState ??
+        (mounted ? ScaffoldMessenger.maybeOf(context) : null);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppColors.danger : AppColors.success,
+      ),
+    );
+  }
+
   Future<void> _handleSubmit() async {
     final input = _emailController.text.trim();
     if (input.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng nhập MSSV hoặc Email sinh viên'),
-          backgroundColor: AppColors.danger,
-        ),
-      );
+      _showSnackBar('Vui lòng nhập MSSV hoặc Email sinh viên');
       return;
     }
 
@@ -54,16 +62,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         setState(() => _submitted = true);
       } else {
         final msg = response.data['message'] ?? 'Không tìm thấy tài khoản sinh viên';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppColors.danger),
-        );
+        _showSnackBar(msg);
       }
     } on DioException catch (e) {
       if (!mounted) return;
       final msg = e.response?.data?['message'] ?? 'Lỗi kết nối máy chủ';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppColors.danger),
-      );
+      _showSnackBar(msg);
     } finally {
       if (mounted) setState(() => _loading = false);
     }

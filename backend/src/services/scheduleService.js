@@ -5,14 +5,76 @@
  */
 
 // Hàm phân tích phòng học và sinh hướng dẫn chỉ đường chi tiết
-function parseRoomDirections(roomRaw) {
+function parseRoomDirections(roomRaw, extraNote = '') {
   const room = (roomRaw || '').trim();
   const upper = room.toUpperCase();
+  const noteUpper = (extraNote || '').toUpperCase();
 
-  let building = 'Nhà học số 2';
-  let buildingCode = 'Nhà 2';
+  // Kiểm tra lớp học trực tuyến / Online
+  const isOnline =
+    upper.includes('ONLINE') ||
+    upper.includes('TRỰC TUYẾN') ||
+    upper.includes('TRUC TUYEN') ||
+    upper.includes('GOOGLE MEET') ||
+    upper.includes('ZOOM') ||
+    upper.includes('TEAMS') ||
+    upper.startsWith('MEET') ||
+    noteUpper.includes('ONLINE') ||
+    noteUpper.includes('GOOGLE MEET') ||
+    noteUpper.includes('ZOOM') ||
+    noteUpper.includes('TEAMS') ||
+    noteUpper.includes('PM:');
+
+  if (isOnline) {
+    const combined = `${room} ${extraNote}`.trim();
+    const meetMatch = combined.match(/([a-z]{3}-[a-z]{4}-[a-z]{3})/i);
+    const meetingCode = meetMatch ? meetMatch[1].toLowerCase() : '';
+    const meetingUrl = meetingCode
+      ? `https://meet.google.com/${meetingCode}`
+      : (combined.match(/https?:\/\/[^\s]+/i) ? combined.match(/https?:\/\/[^\s]+/i)[0] : '');
+
+    return {
+      room: room || 'Online',
+      building: 'Lớp học trực tuyến (Online)',
+      buildingCode: 'Online',
+      floor: 'Học từ xa',
+      mapQuery: '',
+      isOnline: true,
+      meetingInfo: extraNote || (room !== 'Online' ? room : ''),
+      meetingUrl: meetingUrl || undefined,
+      meetingCode: meetingCode || undefined,
+      steps: [
+        {
+          step: 1,
+          title: 'Chuẩn bị thiết bị & Internet',
+          desc: 'Kiểm tra kết nối Wifi/4G, sạc pin thiết bị, chuẩn bị tai nghe và micro trước giờ học 5 - 10 phút.',
+          icon: 'wifi',
+        },
+        {
+          step: 2,
+          title: 'Khởi động ứng dụng học trực tuyến',
+          desc: 'Mở Google Meet, Zoom hoặc MS Teams trên điện thoại hoặc máy tính theo thông báo của giảng viên.',
+          icon: 'video',
+        },
+        {
+          step: 3,
+          title: 'Đăng nhập & Tham gia phòng',
+          desc: 'Đăng nhập bằng tài khoản email sinh viên (@dhtn.edu.vn) và nhập đúng mã phòng học để điểm danh.',
+          icon: 'log-in',
+        },
+      ],
+      tips: [
+        'Sử dụng tai nghe có mic để nghe giảng rõ ràng và hạn chế tiếng vọng từ không gian xung quanh.',
+        'Đăng nhập đúng tài khoản email sinh viên và đặt tên đầy đủ kèm MSSV để giảng viên dễ duyệt và điểm danh.',
+        'Nên vào phòng sớm 5 phút để kiểm tra âm thanh, hình ảnh sẵn sàng trước khi bài học bắt đầu.',
+      ],
+    };
+  }
+
+  let building = 'Khu giảng đường';
+  let buildingCode = 'Giảng đường';
   let floor = '';
-  let mapQuery = 'Nhà 2';
+  let mapQuery = '';
   let roomDisplay = room || 'Khu giảng đường';
 
   // 1. Dạng 3 phần: X.Y.Z (vd: 7.3.18 -> Nhà 7, Tầng 3, Phòng 18)
@@ -323,7 +385,8 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
           const room = r[3] || 'Khu giảng đường';
           const lecturer = r[4] || 'Giảng viên bộ môn';
 
-          const direction = parseRoomDirections(room);
+          const rawNote = (r.length >= 6 && r[5] && !r[5].match(/^\d{1,2}\/\d{1,2}/) && !r[5].match(/^\d{4}-\d{1,2}/)) ? r[5] : (r[6] || '');
+          const direction = parseRoomDirections(room, rawNote);
 
           const dayMeta = daysWithDates.find((d) => d.num === dayNum);
           const rawRowDate = r[5] ? normalizeDateVN(r[5]) : null;
@@ -340,6 +403,8 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
             time,
             timeSlot: time,
             room,
+            note: rawNote,
+            ghi_chu: rawNote,
             day: dayFormatted,
             dayNum,
             date: itemDate,
@@ -347,6 +412,10 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
             ngay_hoc: itemDate,
             lecturer,
             direction,
+            isOnline: direction.isOnline || false,
+            onlineMeetingCode: direction.meetingCode || null,
+            onlineMeetingUrl: direction.meetingUrl || null,
+            onlineMeetingInfo: direction.meetingInfo || null,
             isCustom: false,
           };
 
@@ -375,7 +444,8 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
       const time = rawTime.startsWith('Tiết') || rawTime.includes(':') ? rawTime : `Tiết ${rawTime}`;
       const room = c.phong || c.room || 'Phòng thực hành';
       const lecturer = c.giang_vien || c.lecturer || 'Giảng viên hướng dẫn';
-      const direction = c.direction || parseRoomDirections(room);
+      const rawNote = c.ghi_chu || c.note || '';
+      const direction = c.direction || parseRoomDirections(room, rawNote);
 
       const dayMeta = daysWithDates.find((d) => d.num === dayNum);
       const itemDate = c.ngay_hoc ? normalizeDateVN(c.ngay_hoc) : (dayMeta?.date || null);
@@ -398,8 +468,13 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
         ngay_hoc: itemDate,
         lecturer,
         direction,
+        isOnline: direction.isOnline || false,
+        onlineMeetingCode: direction.meetingCode || null,
+        onlineMeetingUrl: direction.meetingUrl || null,
+        onlineMeetingInfo: direction.meetingInfo || null,
         isCustom: true,
-        note: c.ghi_chu || c.note || '',
+        note: rawNote,
+        ghi_chu: rawNote,
         type: c.loai_lich || c.type || 'dot_xuat',
         week_range: c.week_range || weekRangeText || null,
       };

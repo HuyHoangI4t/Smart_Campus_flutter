@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../app/router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/auth_header.dart';
@@ -56,6 +57,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  void _showSnackBar(
+    String message, {
+    bool isError = false,
+    bool isConnectionError = false,
+    Duration duration = const Duration(seconds: 4),
+  }) {
+    final snackBar = SnackBar(
+      content: Text(message),
+      backgroundColor: isError ? AppColors.danger : AppColors.success,
+      behavior: SnackBarBehavior.floating,
+      duration: duration,
+      action: isConnectionError
+          ? SnackBarAction(
+              label: 'Đổi IP',
+              textColor: Colors.yellowAccent,
+              onPressed: () {
+                final ctx = rootNavigatorKey.currentContext ?? (mounted ? context : null);
+                if (ctx != null) {
+                  ServerConfigDialog.show(ctx);
+                }
+              },
+            )
+          : null,
+    );
+
+    final messenger = rootScaffoldMessengerKey.currentState ??
+        (mounted ? ScaffoldMessenger.maybeOf(context) : null);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(snackBar);
+  }
+
   // Xử lý đăng nhập
   Future<void> _handleLogin() async {
     if (!_loginFormKey.currentState!.validate()) return;
@@ -75,20 +107,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           error.toLowerCase().contains('máy chủ') ||
           error.toLowerCase().contains('network');
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-          action: isConnectionError
-              ? SnackBarAction(
-                  label: 'Đổi IP',
-                  textColor: Colors.yellowAccent,
-                  onPressed: () => ServerConfigDialog.show(context),
-                )
-              : null,
-        ),
-      );
+      _showSnackBar(error, isError: true, isConnectionError: isConnectionError);
     }
   }
 
@@ -118,13 +137,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       });
     } else {
       final error = ref.read(authProvider).error ?? 'Đăng ký không thành công';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showSnackBar(error, isError: true);
     }
   }
 
@@ -149,22 +162,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _activeTab = 0;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Đăng ký tài khoản thành công! Vui lòng đăng nhập.'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 2),
-        ),
+      _showSnackBar(
+        'Đăng ký tài khoản thành công! Vui lòng đăng nhập.',
+        duration: const Duration(seconds: 2),
       );
       return true;
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMsg.isNotEmpty ? errorMsg : 'Mã OTP không chính xác'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
+      _showSnackBar(
+        errorMsg.isNotEmpty ? errorMsg : 'Mã OTP không chính xác',
+        isError: true,
       );
       return false;
     }

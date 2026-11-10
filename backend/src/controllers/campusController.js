@@ -1,4 +1,4 @@
-﻿// Campus & Utility Controller - Handled Feedback, SOS and Map locations
+// Campus & Utility Controller - Handled Feedback, SOS and Map locations
 const db = require('../config/db');
 
 const { getMssvFromRequest } = require('../utils/requestHelpers');
@@ -218,6 +218,20 @@ exports.getSosConfig = (req, res) => {
   });
 };
 
+function formatDateStr(dateObj) {
+  if (!dateObj) return '';
+  if (typeof dateObj === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateObj.trim())) {
+    return dateObj.trim();
+  }
+  try {
+    const d = new Date(dateObj);
+    if (isNaN(d.getTime())) return String(dateObj);
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+  } catch {
+    return String(dateObj);
+  }
+}
+
 // Unified Home Dashboard API
 exports.getDashboard = async (req, res) => {
   const mssv = getMssvFromReq(req);
@@ -247,20 +261,6 @@ exports.getDashboard = async (req, res) => {
         khoa: uRows[0].khoa
       };
     }
-
-    const formatDateStr = (dateObj) => {
-      if (!dateObj) return '';
-      if (typeof dateObj === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateObj.trim())) {
-        return dateObj.trim();
-      }
-      try {
-        const d = new Date(dateObj);
-        if (isNaN(d.getTime())) return String(dateObj);
-        return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
-      } catch (e) {
-        return String(dateObj);
-      }
-    };
 
     const validNotifs = (notifRows || []).filter(n => n && n.title && n.title.trim().length > 0);
 
@@ -350,6 +350,20 @@ function _haversineMeters(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Helper làm phẳng mảng tọa độ đệ quy
+function _flattenCoords(arr, flatSegments = []) {
+  if (!Array.isArray(arr) || arr.length === 0) return flatSegments;
+  if (typeof arr[0] === 'number' && arr.length >= 2) return flatSegments;
+  if (Array.isArray(arr[0]) && typeof arr[0][0] === 'number') {
+    flatSegments.push(arr);
+    return flatSegments;
+  }
+  for (const sub of arr) {
+    _flattenCoords(sub, flatSegments);
+  }
+  return flatSegments;
+}
+
 // Lấy danh sách mạng lưới đường đi nội bộ khuôn viên trường (có metadata)
 exports.getCampusPaths = async (req, res) => {
   if (cachedCampusPaths && Date.now() - campusPathsCacheTime < CAMPUS_PATHS_TTL) {
@@ -373,29 +387,7 @@ exports.getCampusPaths = async (req, res) => {
         }
       }
       const rawCoords = Array.isArray(coords) ? coords : [];
-
-      // Detect nested paths: if first element is array of arrays → flatten
-      // Nested: [[subpath1], [subpath2]] where subpath = [[lat,lng], [lat,lng]]
-      // Flat:   [[lat,lng], [lat,lng], ...]
-      const flatSegments = [];
-      function _flattenCoords(arr) {
-        if (!Array.isArray(arr) || arr.length === 0) return;
-        // Check if arr[0] is a coordinate pair [number, number]
-        if (typeof arr[0] === 'number' && arr.length >= 2) {
-          // This is a single coordinate [lat, lng] — should not happen at top level
-          return;
-        }
-        // Check if arr[0][0] is a number → arr is a flat list of [lat,lng] pairs
-        if (Array.isArray(arr[0]) && typeof arr[0][0] === 'number') {
-          flatSegments.push(arr); // one polyline segment
-          return;
-        }
-        // Otherwise arr[0][0] is also an array → arr is nested, recurse each subpath
-        for (const sub of arr) {
-          _flattenCoords(sub);
-        }
-      }
-      _flattenCoords(rawCoords);
+      const flatSegments = _flattenCoords(rawCoords, []);
 
       // Build flat coordinate list for each segment & compute distance
       let distanceMeters = 0;
@@ -548,5 +540,71 @@ exports.getRoadRoute = async (req, res) => {
       success: false,
       message: `Loi goi dich vu chi duong OSRM: ${err.message}`,
     });
+  }
+};
+
+let cachedSanitizedStyle = null;
+let cachedStyleTime = 0;
+
+function _sanitizeMapLayers(layers) {
+  if (!Array.isArray(layers)) return layers;
+  const numberProps = ['line-gap-width', 'line-offset', 'line-blur'];
+
+  return layers.map((layer) => {
+    if (layer.paint) {
+      for (const prop of numberProps) {
+        if (layer.paint[prop] === null || layer.paint[prop] === undefined) {
+          delete layer.paint[prop];
+        }
+      }
+    }
+    if (layer.layout) {
+      if (layer.layout['line-join'] === null || layer.layout['line-join'] === undefined) {
+        layer.layout['line-join'] = 'miter';
+      }
+      for (const offsetProp of ['icon-offset', 'text-offset']) {
+        const val = layer.layout[offsetProp];
+        if (typeof val === 'string') {
+          const parts = val.split(',').map((v) => parseFloat(v.trim()) || 0);
+          layer.layout[offsetProp] = parts.length >= 2 ? [parts[0], parts[1]] : [0, 0];
+        }
+      }
+    }
+    return layer;
+  });
+}
+
+/**
+ * GET /api/campus/map/style
+ * Trả về Map Style đã làm sạch và chuẩn hóa kiểu dữ liệu, sửa font Tiếng Việt PBF
+ */
+exports.getMapStyle = async (req, res) => {
+  if (cachedSanitizedStyle && Date.now() - cachedStyleTime < 24 * 60 * 60 * 1000) {
+    return res.json(cachedSanitizedStyle);
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const response = await fetch('https://tiles.openfreemap.org/styles/liberty', {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'SmartCampus/1.0' }
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const style = await response.json();
+
+    // 1. Khắc phục lỗi 404 font tiếng Việt (thay bằng font MapLibre chính thức hỗ trợ full Unicode)
+    style.glyphs = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+
+    // 2. Chuẩn hóa và làm sạch toàn bộ layers để loại bỏ cảnh báo sai kiểu dữ liệu
+    style.layers = _sanitizeMapLayers(style.layers);
+
+    cachedSanitizedStyle = style;
+    cachedStyleTime = Date.now();
+    return res.json(style);
+  } catch (err) {
+    return res.redirect(302, 'https://tiles.openfreemap.org/styles/liberty');
   }
 };

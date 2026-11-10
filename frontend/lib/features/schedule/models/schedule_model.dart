@@ -31,7 +31,62 @@ class ScheduleItem {
 
   String get subject => courseName;
   String get courseCode => code ?? 'HP${id.toString().padLeft(3, '0')}';
-  RoomDirectionInfo get roomDirection => direction ?? parseRoomDirections(room);
+  RoomDirectionInfo get roomDirection => direction ?? parseRoomDirections(room, extraNote: note ?? '');
+
+  bool get isOnline {
+    try {
+      if (direction != null && direction!.isOnline == true) return true;
+    } catch (_) {}
+    final r = room.toUpperCase();
+    final n = (note ?? '').toUpperCase();
+    return r.contains('ONLINE') ||
+        r.contains('TRỰC TUYẾN') ||
+        r.contains('TRUC TUYEN') ||
+        r.contains('GOOGLE MEET') ||
+        r.contains('ZOOM') ||
+        r.contains('TEAMS') ||
+        r.startsWith('MEET') ||
+        n.contains('ONLINE') ||
+        n.contains('GOOGLE MEET') ||
+        n.contains('ZOOM') ||
+        n.contains('TEAMS');
+  }
+
+  String? get onlineMeetingUrl {
+    try {
+      if (direction?.meetingUrl != null && direction!.meetingUrl!.isNotEmpty) {
+        return direction!.meetingUrl;
+      }
+    } catch (_) {}
+    final combined = '$room ${note ?? ''}'.trim();
+    final meetMatch = RegExp(r'([a-z]{3}-[a-z]{4}-[a-z]{3})', caseSensitive: false).firstMatch(combined);
+    if (meetMatch != null) {
+      return 'https://meet.google.com/${meetMatch.group(1)!.toLowerCase()}';
+    }
+    final urlMatch = RegExp(r'https?://[^\s]+', caseSensitive: false).firstMatch(combined);
+    if (urlMatch != null) {
+      return urlMatch.group(0);
+    }
+    return null;
+  }
+
+  String? get onlineMeetingCode {
+    try {
+      if (direction?.meetingCode != null && direction!.meetingCode!.isNotEmpty) {
+        return direction!.meetingCode;
+      }
+    } catch (_) {}
+    final combined = '$room ${note ?? ''}'.trim();
+    final meetMatch = RegExp(r'([a-z]{3}-[a-z]{4}-[a-z]{3})', caseSensitive: false).firstMatch(combined);
+    if (meetMatch != null) {
+      return meetMatch.group(1)!.toLowerCase();
+    }
+    final codeMatch = RegExp(r'(?:mã|code|id)[:\s]+([^\s,;]+)', caseSensitive: false).firstMatch(combined);
+    if (codeMatch != null) {
+      return codeMatch.group(1);
+    }
+    return null;
+  }
 
   static int dayStrToNum(String dayStr) {
     final lower = dayStr.toLowerCase().trim();
@@ -161,7 +216,10 @@ class ScheduleItem {
       type: json['type']?.toString() ?? json['loai_lich']?.toString(),
       direction: json['direction'] != null && json['direction'] is Map<String, dynamic>
           ? RoomDirectionInfo.fromJson(json['direction'])
-          : parseRoomDirections(json['room'] ?? json['phong'] ?? ''),
+          : parseRoomDirections(
+              json['room'] ?? json['phong'] ?? '',
+              extraNote: json['note']?.toString() ?? json['ghi_chu']?.toString() ?? '',
+            ),
       date: json['date']?.toString(),
       dateShort: json['dateShort']?.toString() ?? json['date_short']?.toString(),
       status: json['status']?.toString(),

@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -152,8 +153,18 @@ class HomeNextClassCard extends ConsumerWidget {
       indicatorColor = const Color(0xFF38BDF8); // Sky blue
     }
 
+    final bool isOnline = item.isOnline;
     String roomDisplay = 'Khu giảng đường';
-    if (direction != null) {
+    if (isOnline) {
+      if (item.onlineMeetingCode != null && item.onlineMeetingCode!.isNotEmpty) {
+        roomDisplay = 'Online • Google Meet (${item.onlineMeetingCode})';
+      } else if (item.room.isNotEmpty && item.room.toLowerCase() != 'online') {
+        final cleanRoom = item.room.replaceFirst(RegExp(r'^online\s*[•\-–—:]?\s*', caseSensitive: false), '').trim();
+        roomDisplay = cleanRoom.isNotEmpty ? 'Online • $cleanRoom' : 'Học trực tuyến';
+      } else {
+        roomDisplay = 'Học trực tuyến';
+      }
+    } else if (direction != null) {
       roomDisplay = '${direction.buildingCode} • ${direction.room}';
     } else if (nextClass.room.isNotEmpty) {
       roomDisplay = nextClass.room;
@@ -332,7 +343,21 @@ class HomeNextClassCard extends ConsumerWidget {
                         ],
                       ),
                       GestureDetector(
-                        onTap: () => ScheduleRoomDirectionModal.show(context, item: item),
+                        onTap: () async {
+                          if (isOnline) {
+                            final url = item.onlineMeetingUrl;
+                            if (url != null && url.isNotEmpty) {
+                              final uri = Uri.tryParse(url);
+                              if (uri != null && await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                return;
+                              }
+                            }
+                          }
+                          if (context.mounted) {
+                            ScheduleRoomDirectionModal.show(context, item: item);
+                          }
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                           decoration: BoxDecoration(
@@ -343,14 +368,18 @@ class HomeNextClassCard extends ConsumerWidget {
                               width: 0.8,
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.near_me, color: AppColors.textLight, size: 12),
-                              SizedBox(width: 6),
+                              Icon(
+                                isOnline ? Icons.open_in_new : Icons.near_me,
+                                color: AppColors.textLight,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 6),
                               Text(
-                                'Chỉ đường →',
-                                style: TextStyle(
+                                isOnline ? 'Mở link →' : 'Chỉ đường →',
+                                style: const TextStyle(
                                   color: AppColors.textLight,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w900,

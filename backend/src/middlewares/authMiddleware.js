@@ -13,16 +13,16 @@ async function _parseAndVerifyToken(token) {
     return { user: null, error: 'Định dạng token không được hỗ trợ.' };
   }
 
-  const parts = token.split('-');
   // Token format: jwt-token-{identifier}-{timestamp}-{signature}
-  const identifier = parts[2];
-  const timestamp = parts[3];
-  const signature = parts[4];
-
-  // [SECURITY FIX] Bắt buộc phải có signature — chặn token giả mạo thiếu chữ ký
-  if (!signature) {
-    return { user: null, error: 'Token thiếu chữ ký xác thực (signature).' };
+  // Dùng regex để hỗ trợ an toàn cả khi identifier chứa dấu gạch nối (vd: UUID, email, mssv có dấu gạch)
+  const tokenMatch = token.match(/^jwt-token-(.+)-(\d+)-([a-f0-9]{16,64})$/);
+  if (!tokenMatch) {
+    return { user: null, error: 'Token thiếu chữ ký xác thực (signature) hoặc định dạng không hợp lệ.' };
   }
+
+  const identifier = tokenMatch[1];
+  const timestamp = tokenMatch[2];
+  const signature = tokenMatch[3];
 
   // Kiểm tra thời hạn hiệu lực (Tối đa 30 ngày)
   const tokenTime = parseInt(timestamp, 10);

@@ -2,6 +2,7 @@ const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const { getMssvFromRequest, isGuestAccount } = require('../utils/requestHelpers');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'smartcampus_secret_key_2026_secure';
 
@@ -302,10 +303,13 @@ exports.logout = async (req, res) => {
 
 // Get Current User Profile (Me)
 exports.getMe = async (req, res) => {
-  const mssv = req.query.mssv || req.params.mssv || '23103023';
+  const mssv = getMssvFromRequest(req, req.query.mssv || req.params.mssv || null);
+  if (!mssv || isGuestAccount(mssv)) {
+    return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập để xem thông tin người dùng.' });
+  }
 
   try {
-    const [rows] = await db.query('SELECT mssv, ho_ten, email, avatar, role, created_at FROM users WHERE mssv = ?', [mssv]);
+    const [rows] = await db.query('SELECT mssv, ho_ten, email, avatar, role, so_dien_thoai, lop, khoa, created_at FROM users WHERE mssv = ?', [mssv]);
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin người dùng.' });
     }
@@ -319,6 +323,10 @@ exports.getMe = async (req, res) => {
         ho_ten: name,
         email: user.email,
         role: user.role || 'sinh_vien',
+        phone: user.so_dien_thoai || '',
+        so_dien_thoai: user.so_dien_thoai || '',
+        lop: user.lop || '',
+        khoa: user.khoa || '',
         avatar: user.avatar || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
         createdAt: user.created_at
       }
@@ -328,35 +336,13 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// Helper to get mssv from request
-const getMssvFromReq = async (req) => {
-  if (req.body && req.body.mssv) return req.body.mssv;
-  if (req.body && req.body.masv) return req.body.masv;
-  if (req.query && req.query.mssv) return req.query.mssv;
-  if (req.query && req.query.masv) return req.query.masv;
-  if (req.headers['x-mssv']) return req.headers['x-mssv'];
-  if (req.headers['x-masv']) return req.headers['x-masv'];
-
-  const authHeader = req.headers['authorization'];
-  if (authHeader) {
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (token.startsWith('jwt-token-')) {
-      const parts = token.split('-');
-      if (parts.length >= 3 && parts[2]) {
-        return parts[2];
-      }
-    }
-    if (token && !token.includes(' ') && token.length <= 15) {
-      return token;
-    }
-  }
-
-  return 'guest';
-};
-
 // Change Password
 exports.changePassword = async (req, res) => {
-  const mssv = await getMssvFromReq(req);
+  const mssv = getMssvFromRequest(req, null);
+  if (!mssv || isGuestAccount(mssv)) {
+    return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập để đổi mật khẩu.' });
+  }
+
   const currentPassword = req.body.currentPassword || req.body.old_password || req.body.oldPassword;
   const newPassword = req.body.newPassword || req.body.new_password;
 
@@ -531,22 +517,39 @@ exports.resetPassword = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Vui lòng điền đầy đủ thông tin.' });
   }
 
+  const cleanMssv = String(mssv).trim();
+
+  // [SECURITY FIX] Nếu xác thực trực tiếp bằng mã OTP, bắt buộc áp dụng rate-limiting chống brute-force
+  if (otpCode && !token) {
+    const rateCheck = checkOtpAttemptLimit(`pw_${cleanMssv}`);
+    if (!rateCheck.allowed) {
+      return res.status(429).json({ success: false, message: rateCheck.message });
+    }
+  }
+
   try {
     let queryStr = '';
     let queryParams = [];
 
     if (token) {
       queryStr = 'SELECT * FROM password_resets WHERE mssv = ? AND token = ? AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1';
-      queryParams = [mssv, token];
+      queryParams = [cleanMssv, token];
     } else {
       queryStr = 'SELECT * FROM password_resets WHERE mssv = ? AND otp_code = ? AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1';
-      queryParams = [mssv, otpCode];
+      queryParams = [cleanMssv, String(otpCode).trim()];
     }
 
     const [rows] = await db.query(queryStr, queryParams);
 
     if (rows.length === 0) {
-      return res.status(400).json({ success: false, message: 'Phiên yêu cầu đã hết hạn hoặc không hợp lệ.' });
+      if (otpCode && !token) {
+        recordOtpFailure(`pw_${cleanMssv}`);
+      }
+      return res.status(400).json({ success: false, message: 'Phiên yêu cầu đã hết hạn hoặc mã OTP không hợp lệ.' });
+    }
+
+    if (otpCode && !token) {
+      clearOtpAttempts(`pw_${cleanMssv}`);
     }
 
     const record = rows[0];

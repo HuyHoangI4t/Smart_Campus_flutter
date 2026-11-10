@@ -88,7 +88,12 @@ class _SosScreenState extends ConsumerState<SosScreen> {
           children: [
             Icon(Icons.check_circle, color: AppColors.success, size: 28),
             SizedBox(width: 8),
-            Text('Đã phát tín hiệu SOS!', style: TextStyle(fontWeight: FontWeight.w800)),
+            Expanded(
+              child: Text(
+                'Đã phát tín hiệu SOS!',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+            ),
           ],
         ),
         content: Column(
@@ -289,9 +294,13 @@ class _SosScreenState extends ConsumerState<SosScreen> {
                                 children: [
                                   Icon(Icons.warning, color: Colors.white, size: 20),
                                   SizedBox(width: 8),
-                                  Text(
-                                    'GỬI TÍN HIỆU CỨU HỘ KHẨN CẤP',
-                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                                  Flexible(
+                                    child: Text(
+                                      'GỬI TÍN HIỆU CỨU HỘ KHẨN CẤP',
+                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ],
                               ),

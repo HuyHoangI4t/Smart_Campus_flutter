@@ -11,6 +11,7 @@ class SmartCampusApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       title: 'Smart Campus - Đại học Tây Nguyên',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

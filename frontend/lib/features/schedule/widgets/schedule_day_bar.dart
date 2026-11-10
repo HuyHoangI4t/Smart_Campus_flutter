@@ -46,16 +46,9 @@ class ScheduleDayBar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (days.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List.generate(days.length, (idx) {
           final d = days[idx];
           final rawDay = d['day'] ?? 'Thứ ${idx + 2}';
@@ -67,8 +60,8 @@ class ScheduleDayBar extends StatelessWidget {
           final count = classCountPerDay[dayNum] ?? 0;
 
           return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2.5),
+            child: Container(
+              margin: EdgeInsets.only(right: idx < days.length - 1 ? 4 : 0),
               child: GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
@@ -76,14 +69,14 @@ class ScheduleDayBar extends StatelessWidget {
                 },
                 behavior: HitTestBehavior.opaque,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 180),
                   curve: Curves.easeInOut,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  height: 56,
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppColors.primary
                         : (isToday ? const Color(0xFFEEF2FF) : const Color(0xFFF8FAFC)),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected
                           ? AppColors.primary
@@ -94,73 +87,78 @@ class ScheduleDayBar extends StatelessWidget {
                         ? [
                             BoxShadow(
                               color: AppColors.primary.withValues(alpha: 0.28),
-                              offset: const Offset(0, 4),
-                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                              blurRadius: 6,
                             ),
                           ]
                         : null,
                   ),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Thứ (T2, T3, CN...)
+                      // Thứ (T2, T3, CN...) - Cố định baseline thẳng hàng
                       Text(
                         shortDay,
                         style: TextStyle(
-                          fontSize: 11.5,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: isSelected
                               ? Colors.white.withValues(alpha: 0.85)
-                              : (isToday ? AppColors.primary : AppColors.textSecondary),
+                              : (isToday ? AppColors.primary : const Color(0xFF64748B)),
+                          height: 1.0,
                         ),
                       ),
                       const SizedBox(height: 3),
 
-                      // Ngày trong tháng (e.g. 19, 20, 21...)
+                      // Ngày trong tháng (02, 03...) - Cố định baseline thẳng hàng tuyệt đối
                       Text(
                         dateNum.isNotEmpty ? dateNum : '—',
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: 14,
                           fontWeight: FontWeight.w800,
                           color: isSelected
                               ? Colors.white
-                              : (isToday ? AppColors.primary : AppColors.textForeground),
-                          height: 1.1,
+                              : (isToday ? AppColors.primary : const Color(0xFF0F172A)),
+                          height: 1.0,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
 
-                      // Badge số môn học hoặc Dot chỉ báo hôm nay
-                      if (count > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(0xFFF59E0B)
-                                : (isToday ? AppColors.primary : const Color(0xFF0284C7)),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '$count',
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              height: 1.0,
-                            ),
-                          ),
-                        )
-                      else if (isToday)
-                        Container(
-                          width: 4.5,
-                          height: 4.5,
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                        )
-                      else
-                        const SizedBox(height: 12),
+                      // Slot indicator - Luôn cố định chiều cao 12px để số ngày không bị giật baseline
+                      SizedBox(
+                        height: 12,
+                        child: Center(
+                          child: count > 0
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 0.5),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? const Color(0xFFF59E0B)
+                                        : (isToday ? AppColors.primary : const Color(0xFF0284C7)),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: const TextStyle(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      height: 1.1,
+                                    ),
+                                  ),
+                                )
+                              : (isToday
+                                  ? Container(
+                                      width: 4,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: isSelected ? Colors.white : AppColors.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    )
+                                  : const SizedBox(height: 12)),
+                        ),
+                      ),
                     ],
                   ),
                 ),

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/api_endpoints.dart';
+import '../services/socket_service.dart';
 import '../storage/secure_storage_service.dart';
 import 'server_discovery_service.dart';
 
@@ -83,6 +84,7 @@ class ServerUrlNotifier extends Notifier<String> {
     try {
       ref.read(storageServiceProvider).saveServerUrl(url);
     } catch (_) {}
+    SocketService.instance.updateServerUrl(url);
   }
 }
 
@@ -114,7 +116,7 @@ final dioProvider = Provider<Dio>((ref) {
         final userData = await storage.getUserData();
         if (userData != null && userData.isNotEmpty) {
           try {
-            final mssv = RegExp(r'"(?:student_id|mssv)"\s*:\s*"([^"]+)"').firstMatch(userData)?.group(1);
+            final mssv = RegExp(r'"(?:student_id|mssv)"\s*:\s*"?([^",\s}]+)"?').firstMatch(userData)?.group(1);
             if (mssv != null && mssv.isNotEmpty) {
               options.headers['x-mssv'] = mssv;
             }

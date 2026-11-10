@@ -39,6 +39,23 @@ class MockAuthenticatedAuthNotifier extends AuthNotifier {
   }
 }
 
+class MockFailedLoginAuthNotifier extends AuthNotifier {
+  @override
+  AuthState build() {
+    return const AuthState(user: null, isLoading: false, isInitialized: true);
+  }
+
+  @override
+  Future<bool> login(String studentId, String password) async {
+    state = state.copyWith(
+      isLoading: false,
+      isInitialized: true,
+      error: 'Tài khoản hoặc mật khẩu không đúng.',
+    );
+    return false;
+  }
+}
+
 void main() {
   testWidgets('App displays SplashScreen while initializing (isInitialized = false)',
       (WidgetTester tester) async {
@@ -123,5 +140,43 @@ void main() {
     // Verify LoginScreen is NEVER shown
     expect(find.byType(LoginScreen), findsNothing);
     expect(find.byType(SplashScreen), findsNothing);
+  });
+
+  testWidgets('When login returns 401 error, error SnackBar is displayed safely without crash',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith(() => MockFailedLoginAuthNotifier()),
+        ],
+        child: Consumer(
+          builder: (context, ref, _) {
+            final router = ref.watch(routerProvider);
+            return MaterialApp.router(
+              scaffoldMessengerKey: rootScaffoldMessengerKey,
+              routerConfig: router,
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(LoginScreen), findsOneWidget);
+
+    // Enter username & password
+    await tester.enterText(find.byType(TextFormField).first, '23103023');
+    await tester.enterText(find.byType(TextFormField).last, 'wrong_pass');
+    await tester.pump();
+
+    // Tap Login button
+    await tester.tap(find.text('Đăng Nhập Vào Campus'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify error SnackBar is displayed without any exception
+    expect(find.text('Tài khoản hoặc mật khẩu không đúng.'), findsOneWidget);
   });
 }

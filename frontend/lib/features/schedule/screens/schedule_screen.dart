@@ -31,47 +31,33 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     _selectedDay = now.weekday == 7 ? 1 : now.weekday + 1;
   }
 
-  String _dayNumToName(int dayNum) {
-    switch (dayNum) {
-      case 1:
-        return 'Chủ nhật';
-      case 2:
-        return 'Thứ 2';
-      case 3:
-        return 'Thứ 3';
-      case 4:
-        return 'Thứ 4';
-      case 5:
-        return 'Thứ 5';
-      case 6:
-        return 'Thứ 6';
-      case 7:
-        return 'Thứ 7';
-      default:
-        return 'Thứ 2';
-    }
-  }
+  static const _dayNames = [
+    '',
+    'Chủ nhật',
+    'Thứ 2',
+    'Thứ 3',
+    'Thứ 4',
+    'Thứ 5',
+    'Thứ 6',
+    'Thứ 7'
+  ];
 
-  String _dayNumToLongName(int dayNum) {
-    switch (dayNum) {
-      case 1:
-        return 'Chủ nhật';
-      case 2:
-        return 'Thứ Hai';
-      case 3:
-        return 'Thứ Ba';
-      case 4:
-        return 'Thứ Tư';
-      case 5:
-        return 'Thứ Năm';
-      case 6:
-        return 'Thứ Sáu';
-      case 7:
-        return 'Thứ Bảy';
-      default:
-        return 'Thứ Hai';
-    }
-  }
+  static const _dayLongNames = [
+    '',
+    'Chủ nhật',
+    'Thứ Hai',
+    'Thứ Ba',
+    'Thứ Tư',
+    'Thứ Năm',
+    'Thứ Sáu',
+    'Thứ Bảy'
+  ];
+
+  String _dayNumToName(int dayNum) =>
+      (dayNum >= 1 && dayNum <= 7) ? _dayNames[dayNum] : 'Thứ 2';
+
+  String _dayNumToLongName(int dayNum) =>
+      (dayNum >= 1 && dayNum <= 7) ? _dayLongNames[dayNum] : 'Thứ Hai';
   List<Map<String, dynamic>> get _dynamicWeeks => ScheduleDateUtils.generateDefaultAvailableWeeks();
   List<Map<String, String>> get _dynamicDays => ScheduleDateUtils.generateWeekDays(ScheduleDateUtils.getMondayOfWeek(DateTime.now()));
 
@@ -174,26 +160,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
             ),
           ),
 
-          // ─── 2. THANH ĐIỀU HƯỚNG TUẦN (WEEK NAVIGATOR HIỆN ĐẠI) ───
-          _buildWeekNavigator(scheduleState),
-
-          // ─── 3. SUNDAY / NEXT WEEK ALERT ───
-          if (scheduleState.isSunday) _buildSundayAlert(scheduleState),
-
-          // ─── 4. THANH CHỌN THỨ TRONG TUẦN (7 THỨ NGANG - CHẾ ĐỘ XEM THEO NGÀY) ───
-          if (!_isTableView)
-            ScheduleDayBar(
-              selectedDay: _selectedDay,
-              todayDayNum: todayDayNum,
-              isViewingCurrentWeek: isViewingCurrentWeek,
-              days: days,
-              classCountPerDay: countMap,
-              onSelectDay: (dayNum) {
-                setState(() {
-                  _selectedDay = dayNum;
-                });
-              },
-            ),
+          // ─── 2. KHỐI ĐIỀU HƯỚNG LỊCH THỐNG NHẤT (UNIFIED CALENDAR CONTROLLER) ───
+          _buildCalendarHeader(
+            scheduleState: scheduleState,
+            days: days,
+            countMap: countMap,
+            todayDayNum: todayDayNum,
+            isViewingCurrentWeek: isViewingCurrentWeek,
+          ),
 
           // ─── 5. DANH SÁCH LỊCH HỌC THEO NGÀY HOẶC BẢNG CẢ TUẦN ───
           Expanded(
@@ -344,12 +318,56 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     );
   }
 
-  // ─── THANH ĐIỀU HƯỚNG TUẦN HIỆN ĐẠI (WEEK NAVIGATOR) ───
+  // ─── KHỐI ĐIỀU HƯỚNG LỊCH THỐNG NHẤT (UNIFIED CALENDAR CONTROLLER) ───
+  Widget _buildCalendarHeader({
+    required ScheduleState scheduleState,
+    required List<Map<String, String>> days,
+    required Map<int, int> countMap,
+    required int todayDayNum,
+    required bool isViewingCurrentWeek,
+  }) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 1. Hàng điều hướng tuần
+          _buildWeekNavigator(scheduleState),
+
+          // 2. Cảnh báo chủ nhật / chuyển tuần kế tiếp (nếu có)
+          if (scheduleState.isSunday) _buildSundayAlert(scheduleState),
+
+          // 3. Hàng chọn 7 thứ trong tuần (chế độ xem theo ngày)
+          if (!_isTableView)
+            ScheduleDayBar(
+              selectedDay: _selectedDay,
+              todayDayNum: todayDayNum,
+              isViewingCurrentWeek: isViewingCurrentWeek,
+              days: days,
+              classCountPerDay: countMap,
+              onSelectDay: (dayNum) {
+                setState(() {
+                  _selectedDay = dayNum;
+                });
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ─── THANH ĐIỀU HƯỚNG TUẦN TINH GỌN (WEEK NAVIGATOR) ───
   Widget _buildWeekNavigator(ScheduleState scheduleState) {
     final weeks = scheduleState.availableWeeks.isNotEmpty ? scheduleState.availableWeeks : _dynamicWeeks;
     final currentIdx = scheduleState.selectedWeekIndex;
     final canPrev = currentIdx > 0;
     final canNext = currentIdx < weeks.length - 1;
+    final curIdx = scheduleState.currentWeekIndex;
 
     // Dữ liệu tuần đang chọn
     final currentWeekData = weeks.firstWhere(
@@ -372,268 +390,144 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
 
     final displayTitle = dateRangeStr.isNotEmpty ? '$rawLabel ($dateRangeStr)' : rawLabel;
 
-    // Tìm index của 4 tuần cốt lõi: Tuần trước (-1), Tuần này (0), Tuần sau (+1), 2 tuần sau (+2)
-    final curIdx = scheduleState.currentWeekIndex;
-    int? prevIdx;
-    int? thisIdx;
-    int? nextIdx;
-    int? twoAfterIdx;
-
-    for (int i = 0; i < weeks.length; i++) {
-      final w = weeks[i];
-      final wIdx = (w['index'] as num?)?.toInt() ?? i;
-      final lbl = (w['label']?.toString() ?? '').toLowerCase();
-      final diff = wIdx - curIdx;
-
-      if (diff == -1 || lbl.contains('tuần trước')) {
-        prevIdx ??= wIdx;
-      }
-      if (diff == 0 || w['isCurrent'] == true || lbl.contains('tuần này')) {
-        thisIdx ??= wIdx;
-      }
-      if (diff == 1 || (lbl.contains('tuần sau') && !lbl.contains('2 tuần'))) {
-        nextIdx ??= wIdx;
-      }
-      if (diff == 2 || lbl.contains('2 tuần sau')) {
-        twoAfterIdx ??= wIdx;
-      }
-    }
-
-    thisIdx ??= curIdx;
-    prevIdx ??= (curIdx > 0 ? curIdx - 1 : null);
-    nextIdx ??= (curIdx + 1 < weeks.length ? curIdx + 1 : null);
-    twoAfterIdx ??= (curIdx + 2 < weeks.length ? curIdx + 2 : null);
-
-    final quickTabs = [
-      {'label': 'Tuần trước', 'index': prevIdx},
-      {'label': 'Tuần này', 'index': thisIdx},
-      {'label': 'Tuần sau', 'index': nextIdx},
-      {'label': '2 tuần sau', 'index': twoAfterIdx},
-    ];
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(14, 8, 14, 4),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.cardBorder, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 1.5),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+      child: Row(
         children: [
-          // Dòng 1: Điều hướng tuần kèm nút mở chọn tất cả các tuần
-          Row(
-            children: [
-              // Nút Tuần trước ◀
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: canPrev
-                      ? () => ref.read(scheduleProvider.notifier).selectWeek(currentIdx - 1)
-                      : null,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: canPrev ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.chevron_left_rounded,
-                        color: canPrev ? AppColors.textForeground : const Color(0xFFCBD5E1),
-                        size: 22,
-                      ),
-                    ),
+          // Nút Tuần trước ◀
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: canPrev
+                  ? () => ref.read(scheduleProvider.notifier).selectWeek(currentIdx - 1)
+                  : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: canPrev ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.chevron_left_rounded,
+                    color: canPrev ? AppColors.textForeground : const Color(0xFFCBD5E1),
+                    size: 20,
                   ),
                 ),
               ),
-
-              const SizedBox(width: 8),
-
-              // Nút trung tâm chọn tuần (Bấm vào mở danh sách toàn bộ các tuần)
-              Expanded(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => _showWeekPickerSheet(context, scheduleState, weeks),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.calendar_month_outlined, size: 16, color: AppColors.primary),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              displayTitle,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.primary,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.primary),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // Nút Tuần sau ▶
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: canNext
-                      ? () => ref.read(scheduleProvider.notifier).selectWeek(currentIdx + 1)
-                      : null,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: canNext ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.chevron_right_rounded,
-                        color: canNext ? AppColors.textForeground : const Color(0xFFCBD5E1),
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              if (currentIdx != curIdx) ...[
-                const SizedBox(width: 6),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => ref.read(scheduleProvider.notifier).selectWeek(curIdx),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.today, size: 14, color: Colors.white),
-                          SizedBox(width: 4),
-                          Text(
-                            'Hiện tại',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(width: 6),
 
-          // Dòng 2: 4 Nút chọn tuần nhanh: [ Tuần trước ] [ Tuần này ] [ Tuần sau ] [ 2 tuần sau ]
-          Row(
-            children: quickTabs.map((tab) {
-              final tabIdx = tab['index'] as int?;
-              final isTabSelected = tabIdx != null && tabIdx == currentIdx;
-              final isTabEnabled = tabIdx != null;
+          // Nút trung tâm chọn tuần (Bấm vào mở danh sách toàn bộ các tuần)
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _showWeekPickerSheet(context, scheduleState, weeks),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.calendar_month_outlined, size: 14, color: AppColors.primary),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          displayTitle,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Color(0xFF64748B)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
 
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2.5),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: isTabEnabled
-                          ? () => ref.read(scheduleProvider.notifier).selectWeek(tabIdx)
-                          : null,
-                      borderRadius: BorderRadius.circular(8),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.symmetric(vertical: 7),
-                        decoration: BoxDecoration(
-                          color: isTabSelected
-                              ? AppColors.primary
-                              : (isTabEnabled ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC)),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isTabSelected
-                                ? AppColors.primary
-                                : (isTabEnabled ? const Color(0xFFE2E8F0) : const Color(0xFFF1F5F9)),
-                            width: 1,
-                          ),
-                          boxShadow: isTabSelected
-                              ? [
-                                  BoxShadow(
-                                    color: AppColors.primary.withValues(alpha: 0.28),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            tab['label'] as String,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: isTabSelected ? FontWeight.w800 : FontWeight.w600,
-                              color: isTabSelected
-                                  ? Colors.white
-                                  : (isTabEnabled ? const Color(0xFF334155) : const Color(0xFF94A3B8)),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
+          const SizedBox(width: 6),
+
+          // Nút Tuần sau ▶
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: canNext
+                  ? () => ref.read(scheduleProvider.notifier).selectWeek(currentIdx + 1)
+                  : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: canNext ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    color: canNext ? AppColors.textForeground : const Color(0xFFCBD5E1),
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Nút quay về Tuần hiện tại nếu đang xem tuần khác
+          if (currentIdx != curIdx) ...[
+            const SizedBox(width: 6),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => ref.read(scheduleProvider.notifier).selectWeek(curIdx),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Hiện tại',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
                       ),
                     ),
                   ),
                 ),
-              );
-            }).toList(),
-          ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  // Bottom Sheet chọn tuần
+    // Bottom Sheet chọn tuần
   void _showWeekPickerSheet(
     BuildContext context,
     ScheduleState scheduleState,

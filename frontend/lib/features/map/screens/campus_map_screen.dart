@@ -1,9 +1,11 @@
-import 'dart:typed_data';
+import 'dart:async';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
+import '../../../core/constants/api_endpoints.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
 import '../../../core/utils/dijkstra.dart';
@@ -116,7 +118,21 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   ml.Circle? _userRing;
   ml.Circle? _userDot;
 
-  static const String _streetStyle = ml.MapLibreStyles.openfreemapLiberty;
+  Timer? _styleWatchdogTimer;
+  String? _fallbackStyle;
+
+  static String get _streetStyle {
+    final baseUrl = ApiEndpoints.activeBaseUrl;
+    // Trên thiết bị di động (Android / iOS):
+    // Nếu baseUrl trỏ về localhost / 127.0.0.1 (chưa chạy adb reverse hoặc máy chủ backend tắt):
+    // Dùng trực tiếp public style OpenFreeMap Liberty để đảm bảo không bị đen màn hình trên máy thật.
+    if (!kIsWeb && (baseUrl.contains('127.0.0.1') || baseUrl.contains('localhost'))) {
+      return ml.MapLibreStyles.openfreemapLiberty;
+    }
+    return '$baseUrl${ApiEndpoints.mapStyle}';
+  }
+
+  String get _effectiveStreetStyle => _fallbackStyle ?? _streetStyle;
 
   static const String _satelliteStyle = '''{
   "version": 8,
@@ -157,9 +173,26 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   @override
   void initState() {
     super.initState();
+    // Kích hoạt Hybrid Composition để MapLibre GL render ổn định qua TextureView
+    ml.MapLibreMap.useHybridComposition = true;
     _selectedRoomName = widget.initialRoomName;
+    _startStyleWatchdog();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialBuildingFocus();
+    });
+  }
+
+  void _startStyleWatchdog() {
+    _styleWatchdogTimer?.cancel();
+    _styleWatchdogTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted || _isStyleLoaded) return;
+      // Nếu sau 4 giây style vẫn chưa nạp xong (do local server bị treo hoặc lỗi mạng kết nối),
+      // tự động chuyển sang CDN công khai MapLibreStyles.openfreemapLiberty để cứu nguy tức thì
+      if (_fallbackStyle == null && !_isSatellite) {
+        setState(() {
+          _fallbackStyle = ml.MapLibreStyles.openfreemapLiberty;
+        });
+      }
     });
   }
 
@@ -170,16 +203,20 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     final targetRoom = widget.initialRoomName;
     if (targetBuilding != null && targetBuilding.isNotEmpty) {
       if (targetBuilding != oldWidget.initialBuildingCode || targetRoom != oldWidget.initialRoomName) {
-        setState(() {
-          _selectedRoomName = targetRoom;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() {
+            _selectedRoomName = targetRoom;
+          });
+          _focusOnBuilding(targetBuilding, roomName: targetRoom);
         });
-        _focusOnBuilding(targetBuilding, roomName: targetRoom);
       }
     }
   }
 
   @override
   void dispose() {
+    _styleWatchdogTimer?.cancel();
     final mapState = ref.read(mapProvider);
     if (!mapState.isNavigating) {
       ref.read(mapProvider.notifier).resetExploreState();
@@ -364,6 +401,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   }
 
   Future<void> _onStyleLoaded() async {
+    _styleWatchdogTimer?.cancel();
     _isStyleLoaded = true;
     _registeredImages.clear();
 
@@ -829,7 +867,9 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     setState(() {
       _isSatellite = nextSatellite;
       _isStyleLoaded = false;
+      _fallbackStyle = null;
     });
+    _startStyleWatchdog();
 
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1056,7 +1096,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                         bearing: 0.0,
                       ),
                   minMaxZoomPreference: const ml.MinMaxZoomPreference(14.0, 20.5),
-                  styleString: _isSatellite ? _satelliteStyle : _streetStyle,
+                  styleString: _isSatellite ? _satelliteStyle : _effectiveStreetStyle,
                   onMapCreated: _onMapCreated,
                   onStyleLoadedCallback: _onStyleLoaded,
                   onMapClick: (point, coordinates) {
@@ -1120,7 +1160,43 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                   ],
                 ),
 
-                // 2.2 Top Floating Overlay
+                // 2.2 Loading Indicator trong lúc khởi động GPU & nạp Map Style (tránh hiện màn hình đen)
+                if (!_isStyleLoaded)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        color: _isSatellite ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    _isSatellite ? Colors.white : AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Đang tải bản đồ khuôn viên...',
+                                style: TextStyle(
+                                  color: _isSatellite ? Colors.white70 : AppColors.textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // 2.3 Top Floating Overlay
                 Positioned(
                   top: 10,
                   left: 14,
