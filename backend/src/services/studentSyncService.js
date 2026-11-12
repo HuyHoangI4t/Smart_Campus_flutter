@@ -57,7 +57,7 @@ const inFlightScheduleSyncs = new Map();
 
 // Cấu hình thời gian sống của Cache (Time-To-Live - TTL)
 const TTL_GRADES_MS = 12 * 60 * 60 * 1000;   // 12 giờ cho Điểm thi
-const TTL_SCHEDULE_MS = 24 * 60 * 60 * 1000; // 24 giờ cho Thời khóa biểu
+const TTL_SCHEDULE_MS = 2 * 60 * 60 * 1000;  // 2 giờ cho Thời khóa biểu (đồng bộ kịp thời khi giảng viên đổi lịch)
 
 const cleanName = (name) => {
   if (!name) return name;
@@ -439,14 +439,13 @@ async function syncScheduleForStudent(mssv, dk = '10') {
 
       let totalSaved = 0;
       if (parsedWeeks.length > 0) {
-        const newWeekRanges = [...new Set(parsedWeeks.map(w => w.weekRangeText).filter(Boolean))];
-        // Xóa các tuần trùng khớp vừa cào mới để cập nhật dữ liệu mới nhất
-        if (newWeekRanges.length > 0) {
-          await db.query(
-            'DELETE FROM student_schedules WHERE mssv = ? AND (is_custom = 0 OR is_custom IS NULL) AND week_range IN (?)',
-            [mssv, newWeekRanges]
-          );
-        }
+        // Xóa TOÀN BỘ lịch chính khóa cũ của sinh viên này để đồng bộ chuẩn xác nhất từ cổng trường
+        // (đảm bảo khi giảng viên sửa giờ, đổi phòng, hủy tiết hoặc chuyển tuần không bị sót dữ liệu cũ)
+        // Giữ nguyên 100% lịch cá nhân do sinh viên tự tạo (is_custom = 1)
+        await db.query(
+          'DELETE FROM student_schedules WHERE mssv = ? AND (is_custom = 0 OR is_custom IS NULL)',
+          [mssv]
+        );
 
         const bulkScheduleValues = [];
         for (const w of parsedWeeks) {

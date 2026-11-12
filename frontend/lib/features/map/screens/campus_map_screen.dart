@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart' as ml;
-import '../../../core/constants/api_endpoints.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/campus_constants.dart';
 import '../../../core/utils/dijkstra.dart';
@@ -28,6 +27,12 @@ extension _LatLngListToMl on List<ll.LatLng> {
 
 /// M�n h�nh B?n d? khu�n vi�n tru?ng �?i h?c T�y Nguy�n
 /// Vector Map GPU (MapLibre GL), 3D Buildings & Perspective Tilt, Satellite & Vector tile layers.
+enum MapZoomTier {
+  zoomedOut, // zoom < 15.8: icons thu nhỏ (0.48), ẩn tên công trình phụ để bản đồ gọn gàng
+  medium,    // 15.8 <= zoom < 17.0: icons vừa vặn (0.78), chữ gọn gàng (9.5)
+  detailed,  // zoom >= 17.0: icons chuẩn (1.05), chữ đầy đủ (11.0)
+}
+
 class CampusMapScreen extends ConsumerStatefulWidget {
   final String? initialBuildingCode;
   final String? initialRoomName;
@@ -46,14 +51,23 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   ml.MapLibreMapController? _mapController;
   final TextEditingController _searchController = TextEditingController();
 
-  bool _isSatellite = false;
-  bool _is3D = true;
+  bool _isSatellite = true;
+  bool _is3D = false;
   bool _isStyleLoaded = false;
   String? _selectedRoomName;
   String? _pendingFocusBuilding;
   String? _pendingFocusRoom;
   int _lastAnnotationTappedTime = 0;
   ml.CameraPosition? _currentCameraPosition;
+  MapZoomTier _currentZoomTier = MapZoomTier.medium;
+  int _locationsSyncToken = 0;
+  int _gatesSyncToken = 0;
+
+  static MapZoomTier _getZoomTier(double zoom) {
+    if (zoom < 15.8) return MapZoomTier.zoomedOut;
+    if (zoom < 17.0) return MapZoomTier.medium;
+    return MapZoomTier.detailed;
+  }
 
   /// Tạo SymbolOptions an toàn, truyền đầy đủ tất cả thuộc tính để tránh lỗi null từ MapLibre engine
   static ml.SymbolOptions _createSafeSymbolOptions({
@@ -121,32 +135,58 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   Timer? _styleWatchdogTimer;
   String? _fallbackStyle;
 
-  static String get _streetStyle {
-    final baseUrl = ApiEndpoints.activeBaseUrl;
-    // Trên thiết bị di động (Android / iOS):
-    // Nếu baseUrl trỏ về localhost / 127.0.0.1 (chưa chạy adb reverse hoặc máy chủ backend tắt):
-    // Dùng trực tiếp public style OpenFreeMap Liberty để đảm bảo không bị đen màn hình trên máy thật.
-    if (!kIsWeb && (baseUrl.contains('127.0.0.1') || baseUrl.contains('localhost'))) {
-      return ml.MapLibreStyles.openfreemapLiberty;
+  /// Lớp bản đồ 2D đường phố Google Maps đã ẩn toàn bộ tên công trình, địa danh, POI có sẵn
+  /// (Tương tự chuẩn LTDDDNT: apistyle=s.t:3|p.v:off|s.t:4|p.v:off)
+  static const String _streetStyle = '''{
+  "version": 8,
+  "name": "Google Maps Clean Road",
+  "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  "sources": {
+    "google-road": {
+      "type": "raster",
+      "tiles": [
+        "https://mt0.google.com/vt/lyrs=m&apistyle=s.t:3|p.v:off|s.t:4|p.v:off&hl=vi&x={x}&y={y}&z={z}",
+        "https://mt1.google.com/vt/lyrs=m&apistyle=s.t:3|p.v:off|s.t:4|p.v:off&hl=vi&x={x}&y={y}&z={z}",
+        "https://mt2.google.com/vt/lyrs=m&apistyle=s.t:3|p.v:off|s.t:4|p.v:off&hl=vi&x={x}&y={y}&z={z}",
+        "https://mt3.google.com/vt/lyrs=m&apistyle=s.t:3|p.v:off|s.t:4|p.v:off&hl=vi&x={x}&y={y}&z={z}"
+      ],
+      "tileSize": 256,
+      "maxzoom": 20
     }
-    return '$baseUrl${ApiEndpoints.mapStyle}';
-  }
+  },
+  "layers": [
+    {
+      "id": "road-background",
+      "type": "background",
+      "paint": {
+        "background-color": "#F8FAFC"
+      }
+    },
+    {
+      "id": "google-road-layer",
+      "type": "raster",
+      "source": "google-road",
+      "minzoom": 0,
+      "maxzoom": 22
+    }
+  ]
+}''';
 
-  String get _effectiveStreetStyle => _fallbackStyle ?? _streetStyle;
+  String get _effectiveStreetStyle => _streetStyle;
 
+  /// Lớp bản đồ Vệ tinh Google Maps nguyên bản (lyrs=s: ảnh chụp vệ tinh sắc nét, hoàn toàn không có tên công trình / nhãn)
   static const String _satelliteStyle = '''{
   "version": 8,
-  "name": "Campus Satellite Hybrid",
+  "name": "Campus Satellite Clean",
   "glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  "sprite": "https://demotiles.maplibre.org/styles/osm-bright-gl-style/sprite",
   "sources": {
     "google-satellite": {
       "type": "raster",
       "tiles": [
-        "https://mt0.google.com/vt/lyrs=y&hl=vi&x={x}&y={y}&z={z}",
-        "https://mt1.google.com/vt/lyrs=y&hl=vi&x={x}&y={y}&z={z}",
-        "https://mt2.google.com/vt/lyrs=y&hl=vi&x={x}&y={y}&z={z}",
-        "https://mt3.google.com/vt/lyrs=y&hl=vi&x={x}&y={y}&z={z}"
+        "https://mt0.google.com/vt/lyrs=s&hl=vi&x={x}&y={y}&z={z}",
+        "https://mt1.google.com/vt/lyrs=s&hl=vi&x={x}&y={y}&z={z}",
+        "https://mt2.google.com/vt/lyrs=s&hl=vi&x={x}&y={y}&z={z}",
+        "https://mt3.google.com/vt/lyrs=s&hl=vi&x={x}&y={y}&z={z}"
       ],
       "tileSize": 256,
       "maxzoom": 20
@@ -184,15 +224,16 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
 
   void _startStyleWatchdog() {
     _styleWatchdogTimer?.cancel();
-    _styleWatchdogTimer = Timer(const Duration(seconds: 4), () {
+    _styleWatchdogTimer = Timer(const Duration(milliseconds: 1500), () {
       if (!mounted || _isStyleLoaded) return;
-      // Nếu sau 4 giây style vẫn chưa nạp xong (do local server bị treo hoặc lỗi mạng kết nối),
-      // tự động chuyển sang CDN công khai MapLibreStyles.openfreemapLiberty để cứu nguy tức thì
-      if (_fallbackStyle == null && !_isSatellite) {
-        setState(() {
+      // Sau 1.5 giây nếu style chưa xong, tự động giải phóng loading overlay để người dùng không bao giờ bị kẹt
+      setState(() {
+        _isStyleLoaded = true;
+        if (_fallbackStyle == null && !_isSatellite) {
           _fallbackStyle = ml.MapLibreStyles.openfreemapLiberty;
-        });
-      }
+        }
+      });
+      _mapController?.moveCamera(ml.CameraUpdate.tiltTo(_is3D ? 45.0 : 0.0));
     });
   }
 
@@ -229,6 +270,11 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
   void _onMapCreated(ml.MapLibreMapController controller) {
     _mapController = controller;
 
+    // Kích hoạt render GPU ngay lập tức trên Android (tránh tình trạng phải xoay hoặc bấm 3D/2D mới render)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapController?.moveCamera(ml.CameraUpdate.tiltTo(_is3D ? 45.0 : 0.0));
+    });
+
     controller.onCircleTapped.add((circle) {
       _handleAnnotationTapped(circle.data);
     });
@@ -236,6 +282,17 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     controller.onSymbolTapped.add((symbol) {
       _handleAnnotationTapped(symbol.data);
     });
+  }
+
+  void _onCameraIdle() {
+    if (!mounted || _mapController == null || !_isStyleLoaded) return;
+    final currentZoom = _mapController?.cameraPosition?.zoom ?? _currentCameraPosition?.zoom ?? 16.5;
+    final newTier = _getZoomTier(currentZoom);
+    if (newTier != _currentZoomTier) {
+      _currentZoomTier = newTier;
+      _syncLocations();
+      _syncGates();
+    }
   }
 
   void _handleAnnotationTapped(Map<String, dynamic>? data) {
@@ -402,7 +459,11 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
 
   Future<void> _onStyleLoaded() async {
     _styleWatchdogTimer?.cancel();
-    _isStyleLoaded = true;
+    if (mounted) {
+      setState(() {
+        _isStyleLoaded = true;
+      });
+    }
     _registeredImages.clear();
 
     // 1. Reset tham chiếu annotations Style cũ mà không gọi remove...
@@ -421,8 +482,16 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
 
     try {
       await _mapController?.setSymbolIconAllowOverlap(true);
-      await _mapController?.setSymbolTextAllowOverlap(false);
+      await _mapController?.setSymbolIconIgnorePlacement(true);
+      await _mapController?.setSymbolTextAllowOverlap(true);
+      await _mapController?.setSymbolTextIgnorePlacement(true);
     } catch (_) {}
+
+    final initialZoom = _mapController?.cameraPosition?.zoom ?? _currentCameraPosition?.zoom ?? 16.5;
+    _currentZoomTier = _getZoomTier(initialZoom);
+
+    // Nạp lại góc nghiêng 3D để OpenGL / Vulkan render ngay frame hoàn chỉnh
+    _mapController?.moveCamera(ml.CameraUpdate.tiltTo(_is3D ? 45.0 : 0.0));
 
     try {
       await _drawCampusBoundary();
@@ -605,24 +674,16 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
 
   Future<void> _syncGates() async {
     if (_mapController == null || !_isStyleLoaded) return;
-
-    if (_gateCircles.isNotEmpty) {
-      try { await _mapController?.removeCircles(_gateCircles); } catch (_) {}
-      _gateCircles.clear();
-    }
-    if (_gateSymbols.isNotEmpty) {
-      try { await _mapController?.removeSymbols(_gateSymbols); } catch (_) {}
-      _gateSymbols.clear();
-    }
+    final currentToken = ++_gatesSyncToken;
 
     final mapState = ref.read(mapProvider);
     final selectedGate = mapState.selectedGate;
-    // Khi đang dẫn đường: nếu GPS ở bên trong trường thì ẩn cổng, nếu xuất phát từ cổng hoặc hybrid thì hiện cổng
+    // Khi đang chỉ đường: nếu GPS ở bên trong trường thì ẩn cổng, nếu xuất phát từ cổng hoặc hybrid thì chỉ hiện cổng được chọn
     final isUsingGpsInside = mapState.userPosition != null &&
         CampusDijkstraRouter.isInsideCampus(mapState.userPosition!);
     final gates = mapState.isNavigating
         ? (isUsingGpsInside ? <CampusGate>[] : [selectedGate])
-        : mapState.gates;
+        : (mapState.gates.isNotEmpty ? mapState.gates : CampusConstants.gates);
 
     final symbolOptionsList = <ml.SymbolOptions>[];
     final symbolDataList = <Map<String, dynamic>>[];
@@ -643,13 +704,35 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
       final isSelected = gate.id == selectedGate.id;
       final gateKey = 'gate_${gate.id}_${isSelected ? "sel" : "norm"}';
 
+      // Tính kích thước biểu tượng cổng dựa trên zoom tier
+      final double iconSize;
+      final double textSize;
+      switch (_currentZoomTier) {
+        case MapZoomTier.zoomedOut:
+          iconSize = isSelected ? 0.90 : 0.65;
+          textSize = 9.0;
+          break;
+        case MapZoomTier.medium:
+          iconSize = isSelected ? 1.10 : 0.85;
+          textSize = 10.0;
+          break;
+        case MapZoomTier.detailed:
+          iconSize = isSelected ? 1.25 : 1.05;
+          textSize = 11.5;
+          break;
+      }
+
+      final String gateText = isSelected
+          ? gate.name
+          : (gate.shortName.isNotEmpty ? gate.shortName : gate.name);
+
       symbolOptionsList.add(
         _createSafeSymbolOptions(
           geometry: gate.coordinate.toMl(),
           iconImage: gateKey,
-          iconSize: isSelected ? 1.25 : 1.05,
-          textField: gate.name,
-          textSize: 11.5,
+          iconSize: iconSize,
+          textField: gateText,
+          textSize: textSize,
           textColor: '#0F172A',
           textHaloColor: '#FFFFFF',
           textHaloWidth: 2.2,
@@ -661,36 +744,53 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     }
 
     final createdSymbols = await _mapController?.addSymbols(symbolOptionsList, symbolDataList);
-    if (createdSymbols != null) _gateSymbols.addAll(createdSymbols);
+    if (currentToken != _gatesSyncToken) {
+      if (createdSymbols != null) {
+        try { await _mapController?.removeSymbols(createdSymbols); } catch (_) {}
+      }
+      return;
+    }
+
+    final oldGateSymbols = List<ml.Symbol>.from(_gateSymbols);
+    if (createdSymbols != null) {
+      _gateSymbols.clear();
+      _gateSymbols.addAll(createdSymbols);
+    }
+    if (oldGateSymbols.isNotEmpty) {
+      try { await _mapController?.removeSymbols(oldGateSymbols); } catch (_) {}
+    }
+    if (_gateCircles.isNotEmpty) {
+      try { await _mapController?.removeCircles(_gateCircles); } catch (_) {}
+      _gateCircles.clear();
+    }
   }
 
   Future<void> _syncLocations() async {
     if (_mapController == null || !_isStyleLoaded) return;
-
-    if (_locationCircles.isNotEmpty) {
-      try { await _mapController?.removeCircles(_locationCircles); } catch (_) {}
-      _locationCircles.clear();
-    }
-    if (_locationSymbols.isNotEmpty) {
-      try { await _mapController?.removeSymbols(_locationSymbols); } catch (_) {}
-      _locationSymbols.clear();
-    }
+    final currentToken = ++_locationsSyncToken;
 
     final mapState = ref.read(mapProvider);
-    // Khi đang dẫn đường (isNavigating), ẩn toàn bộ các địa điểm khác (như Google Maps),
-    // chỉ giữ lại duy nhất 1 điểm đích đến để tập trung quan sát tuyến đường
+    // Khi đang chỉ đường (isNavigating), ẩn toàn bộ các icon địa điểm khác (như Google Maps),
+    // chỉ giữ lại duy nhất điểm đích đến để tập trung quan sát tuyến đường.
+    // Khi không chỉ đường, giữ nguyên toàn bộ địa điểm và thu nhỏ icon theo mức zoom.
     final locations = mapState.isNavigating
         ? (mapState.selectedLocation != null ? [mapState.selectedLocation!] : <CampusLocationItem>[])
         : mapState.filteredLocations;
 
-    if (locations.isEmpty) return;
+    if (locations.isEmpty) {
+      if (_locationSymbols.isNotEmpty) {
+        try { await _mapController?.removeSymbols(_locationSymbols); } catch (_) {}
+        _locationSymbols.clear();
+      }
+      return;
+    }
 
     final symbolOptionsList = <ml.SymbolOptions>[];
     final symbolDataList = <Map<String, dynamic>>[];
 
     await Future.wait(locations.map((loc) {
       final isSelected = loc.id == mapState.selectedLocation?.id;
-      final isNav = mapState.isNavigating;
+      final isNav = mapState.isNavigating && isSelected;
       final locKey = 'loc_${loc.id}_${isNav ? "nav" : (isSelected ? "sel" : "norm")}';
       return _ensureMarkerImage(
         key: locKey,
@@ -704,51 +804,128 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
 
     for (final loc in locations) {
       final isSelected = loc.id == mapState.selectedLocation?.id;
-      final isNav = mapState.isNavigating;
+      final isNav = mapState.isNavigating && isSelected;
       final locKey = 'loc_${loc.id}_${isNav ? "nav" : (isSelected ? "sel" : "norm")}';
+
+      final double iconSize;
+      final String textField;
+      final double textSize;
+      final int zIndex;
+
+      if (isNav) {
+        switch (_currentZoomTier) {
+          case MapZoomTier.zoomedOut:
+            iconSize = 1.15;
+            textSize = 10.5;
+            break;
+          case MapZoomTier.medium:
+            iconSize = 1.35;
+            textSize = 12.0;
+            break;
+          case MapZoomTier.detailed:
+            iconSize = 1.45;
+            textSize = 12.5;
+            break;
+        }
+        textField = loc.name;
+        zIndex = 25;
+      } else if (isSelected) {
+        switch (_currentZoomTier) {
+          case MapZoomTier.zoomedOut:
+            iconSize = 1.00;
+            textSize = 10.0;
+            break;
+          case MapZoomTier.medium:
+            iconSize = 1.18;
+            textSize = 11.0;
+            break;
+          case MapZoomTier.detailed:
+            iconSize = 1.30;
+            textSize = 11.5;
+            break;
+        }
+        textField = loc.name;
+        zIndex = 20;
+      } else {
+        switch (_currentZoomTier) {
+          case MapZoomTier.zoomedOut:
+            // Khi zoom xa (< 15.8): icon nhỏ gọn (0.48 ~ 14px như LTDDDNT), ẩn tên
+            iconSize = 0.48;
+            textField = '';
+            textSize = 0.0;
+            zIndex = 3;
+            break;
+          case MapZoomTier.medium:
+            // Khi zoom trung bình (15.8 - 17.0): icon vừa vặn (0.78), ẩn tên để bản đồ thông thoáng, không bị rối
+            iconSize = 0.78;
+            textField = '';
+            textSize = 0.0;
+            zIndex = 5;
+            break;
+          case MapZoomTier.detailed:
+            // Khi zoom gần vào (>= 17.0): icon chuẩn (1.05), hiện tên công trình rõ ràng
+            iconSize = 1.05;
+            textField = loc.name;
+            textSize = 10.5;
+            zIndex = 5;
+            break;
+        }
+      }
 
       symbolOptionsList.add(
         _createSafeSymbolOptions(
           geometry: loc.coordinate.toMl(),
           iconImage: locKey,
-          iconSize: isNav ? 1.45 : (isSelected ? 1.30 : 1.08),
-          textField: loc.name,
-          textSize: isNav ? 12.5 : 11.0,
+          iconSize: iconSize,
+          textField: textField,
+          textSize: textSize,
           textColor: '#0F172A',
           textHaloColor: '#FFFFFF',
           textHaloWidth: 2.2,
           textMaxWidth: 12.0,
-          zIndex: isNav ? 20 : (isSelected ? 15 : 5),
+          zIndex: zIndex,
         ),
       );
       symbolDataList.add({'type': 'location', 'id': loc.id});
     }
 
     final createdSymbols = await _mapController?.addSymbols(symbolOptionsList, symbolDataList);
-    if (createdSymbols != null) _locationSymbols.addAll(createdSymbols);
+    if (currentToken != _locationsSyncToken) {
+      if (createdSymbols != null) {
+        try { await _mapController?.removeSymbols(createdSymbols); } catch (_) {}
+      }
+      return;
+    }
+
+    final oldSymbols = List<ml.Symbol>.from(_locationSymbols);
+    if (createdSymbols != null) {
+      _locationSymbols.clear();
+      _locationSymbols.addAll(createdSymbols);
+    }
+    if (oldSymbols.isNotEmpty) {
+      try { await _mapController?.removeSymbols(oldSymbols); } catch (_) {}
+    }
+    if (_locationCircles.isNotEmpty) {
+      try { await _mapController?.removeCircles(_locationCircles); } catch (_) {}
+      _locationCircles.clear();
+    }
   }
 
   /// Xóa triệt để toàn bộ đường dẫn trên map mà không để lại đường rác (ghost polyline)
   Future<void> _clearRouteLines() async {
     if (_mapController == null) return;
 
-    if (_routeLines.isNotEmpty) {
-      final linesToRemove = List<ml.Line>.from(_routeLines);
-      _routeLines.clear();
-      for (final line in linesToRemove) {
-        try {
-          await _mapController?.removeLine(line);
-        } catch (_) {}
-      }
-    }
+    final toRemove = <ml.Line>{
+      ..._routeLines,
+      ?_routeGlowLine,
+      ?_routeCoreLine,
+    }.toList();
+    _routeLines.clear();
+    _routeGlowLine = null;
+    _routeCoreLine = null;
 
-    if (_routeGlowLine != null) {
-      try { await _mapController?.removeLine(_routeGlowLine!); } catch (_) {}
-      _routeGlowLine = null;
-    }
-    if (_routeCoreLine != null) {
-      try { await _mapController?.removeLine(_routeCoreLine!); } catch (_) {}
-      _routeCoreLine = null;
+    if (toRemove.isNotEmpty) {
+      await Future.wait(toRemove.map((l) => _mapController?.removeLine(l) ?? Future.value()));
     }
 
     // Bảo hiểm: quét toàn bộ lines hiện có trên MapController
@@ -757,10 +934,8 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
       final currentLines = _mapController?.lines;
       if (currentLines != null && currentLines.isNotEmpty) {
         final orphaned = currentLines.where((l) => l != _boundaryLine).toList();
-        for (final l in orphaned) {
-          try {
-            await _mapController?.removeLine(l);
-          } catch (_) {}
+        if (orphaned.isNotEmpty) {
+          await Future.wait(orphaned.map((l) => _mapController?.removeLine(l) ?? Future.value()));
         }
       }
     } catch (_) {}
@@ -779,24 +954,29 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     final route = mapState.activeRoute;
     if (route != null && route.coordinates.isNotEmpty) {
       final coords = route.coordinates.toMl();
-      final glowLine = await _mapController?.addLine(
-        ml.LineOptions(
-          geometry: coords,
-          lineColor: '#3B82F6',
-          lineWidth: 8.5,
-          lineOpacity: 0.35,
-          lineJoin: 'round',
-        ),
-      );
-      final coreLine = await _mapController?.addLine(
-        ml.LineOptions(
-          geometry: coords,
-          lineColor: '#2563EB',
-          lineWidth: 4.5,
-          lineOpacity: 1.0,
-          lineJoin: 'round',
-        ),
-      );
+      final addedLines = await Future.wait([
+        _mapController?.addLine(
+          ml.LineOptions(
+            geometry: coords,
+            lineColor: '#3B82F6',
+            lineWidth: 8.5,
+            lineOpacity: 0.35,
+            lineJoin: 'round',
+          ),
+        ) ?? Future.value(null),
+        _mapController?.addLine(
+          ml.LineOptions(
+            geometry: coords,
+            lineColor: '#2563EB',
+            lineWidth: 4.5,
+            lineOpacity: 1.0,
+            lineJoin: 'round',
+          ),
+        ) ?? Future.value(null),
+      ]);
+
+      final glowLine = addedLines[0];
+      final coreLine = addedLines[1];
 
       // Nếu trong lúc chờ addLine đã có lệnh dừng hoặc token mới -> lập tức xóa ngay
       if (_routeSyncToken != currentToken || !ref.read(mapProvider).isNavigating) {
@@ -956,7 +1136,12 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mapState = ref.watch(mapProvider);
+    // [PERF - React Native / Flutter Pattern] Fine-grained selectors:
+    // Tuyệt đối không watch toàn bộ MapState ở cấp Screen để tránh re-render toàn màn hình
+    // khi cảm biến GPS/La bàn/Từ khóa tìm kiếm thay đổi
+    final isNavigating = ref.watch(mapProvider.select((s) => s.isNavigating));
+    final hasSelectedLocation = ref.watch(mapProvider.select((s) => s.selectedLocation != null));
+    final isLoadingPaths = ref.watch(mapProvider.select((s) => s.isLoadingPaths));
 
     ref.listen<MapState>(mapProvider, (prev, next) {
       if (!next.isMapActive) {
@@ -1085,79 +1270,85 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
           Expanded(
             child: Stack(
               children: [
-                // 2.1 Core MapLibre Vector & Satellite Map Engine
-                ml.MapLibreMap(
-                  key: ValueKey<bool>(_isSatellite),
-                  initialCameraPosition: _currentCameraPosition ??
-                      ml.CameraPosition(
-                        target: CampusConstants.campusCenter.toMl(),
-                        zoom: 16.5,
-                        tilt: _is3D ? 45.0 : 0.0,
-                        bearing: 0.0,
-                      ),
-                  minMaxZoomPreference: const ml.MinMaxZoomPreference(14.0, 20.5),
-                  styleString: _isSatellite ? _satelliteStyle : _effectiveStreetStyle,
-                  onMapCreated: _onMapCreated,
-                  onStyleLoadedCallback: _onStyleLoaded,
-                  onMapClick: (point, coordinates) {
-                    FocusScope.of(context).unfocus();
-                    if (ref.read(mapProvider).isNavigating) return;
-
-                    // 1. Chống xung đột sự kiện onSymbolTapped và onMapClick cùng kích hoạt
-                    final now = DateTime.now().millisecondsSinceEpoch;
-                    if (now - _lastAnnotationTappedTime < 500) return;
-
-                    // 2. Phát hiện click gần địa điểm (Bán kính thông minh 35 mét)
-                    // Giúp người dùng click chuột trên Web hoặc chạm ngón tay trên điện thoại không bao giờ bị hụt
-                    final clickLat = coordinates.latitude;
-                    final clickLng = coordinates.longitude;
-                    final locations = ref.read(mapProvider).filteredLocations;
-
-                    CampusLocationItem? nearestLoc;
-                    double minDistance = double.infinity;
-
-                    for (final loc in locations) {
-                      final dist = calculateHaversineDistance(clickLat, clickLng, loc.lat, loc.lng);
-                      if (dist < minDistance) {
-                        minDistance = dist;
-                        nearestLoc = loc;
-                      }
-                    }
-
-                    // Nếu click trong bán kính 35 mét tính từ tâm địa điểm -> Chọn địa điểm đó!
-                    if (nearestLoc != null && minDistance <= 35.0) {
-                      setState(() => _selectedRoomName = null);
-                      ref.read(mapProvider.notifier).selectLocation(nearestLoc);
-                      _mapController?.animateCamera(
-                        ml.CameraUpdate.newCameraPosition(
-                          ml.CameraPosition(
-                            target: nearestLoc.coordinate.toMl(),
-                            zoom: 17.8,
-                            tilt: _is3D ? 50.0 : 0.0,
-                          ),
+                // 2.1 Core MapLibre Vector & Satellite Map Engine (GPU Texture Isolated)
+                RepaintBoundary(
+                  child: ml.MapLibreMap(
+                    key: ValueKey<bool>(_isSatellite),
+                    initialCameraPosition: _currentCameraPosition ??
+                        ml.CameraPosition(
+                          target: CampusConstants.campusCenter.toMl(),
+                          zoom: 16.5,
+                          tilt: _is3D ? 45.0 : 0.0,
+                          bearing: 0.0,
                         ),
-                      );
-                      return;
-                    }
+                    minMaxZoomPreference: const ml.MinMaxZoomPreference(14.0, 20.5),
+                    styleString: _isSatellite ? _satelliteStyle : _effectiveStreetStyle,
+                    onMapCreated: _onMapCreated,
+                    onStyleLoadedCallback: _onStyleLoaded,
+                    onMapClick: (point, coordinates) {
+                      FocusScope.of(context).unfocus();
+                      if (ref.read(mapProvider).isNavigating) return;
 
-                    // Nếu click vào vùng đất trống cách xa các tòa nhà -> Hủy chọn
-                    ref.read(mapProvider.notifier).selectLocation(null);
-                  },
-                  rotateGesturesEnabled: true,
-                  scrollGesturesEnabled: true,
-                  zoomGesturesEnabled: true,
-                  tiltGesturesEnabled: true,
-                  doubleClickZoomEnabled: true,
-                  trackCameraPosition: false,
-                  compassEnabled: false,
-                  logoEnabled: false,
-                  attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
-                  annotationOrder: const [
-                    ml.AnnotationType.fill,
-                    ml.AnnotationType.line,
-                    ml.AnnotationType.circle,
-                    ml.AnnotationType.symbol,
-                  ],
+                      // 1. Chống xung đột sự kiện onSymbolTapped và onMapClick cùng kích hoạt
+                      final now = DateTime.now().millisecondsSinceEpoch;
+                      if (now - _lastAnnotationTappedTime < 500) return;
+
+                      // 2. Phát hiện click gần địa điểm (Bán kính thông minh 35 mét)
+                      // Giúp người dùng click chuột trên Web hoặc chạm ngón tay trên điện thoại không bao giờ bị hụt
+                      final clickLat = coordinates.latitude;
+                      final clickLng = coordinates.longitude;
+                      final locations = ref.read(mapProvider).filteredLocations;
+
+                      CampusLocationItem? nearestLoc;
+                      double minDistance = double.infinity;
+
+                      for (final loc in locations) {
+                        final dist = calculateHaversineDistance(clickLat, clickLng, loc.lat, loc.lng);
+                        if (dist < minDistance) {
+                          minDistance = dist;
+                          nearestLoc = loc;
+                        }
+                      }
+
+                      // Nếu click trong bán kính 35 mét tính từ tâm địa điểm -> Chọn địa điểm đó!
+                      if (nearestLoc != null && minDistance <= 35.0) {
+                        setState(() => _selectedRoomName = null);
+                        ref.read(mapProvider.notifier).selectLocation(nearestLoc);
+                        _mapController?.animateCamera(
+                          ml.CameraUpdate.newCameraPosition(
+                            ml.CameraPosition(
+                              target: nearestLoc.coordinate.toMl(),
+                              zoom: 17.8,
+                              tilt: _is3D ? 50.0 : 0.0,
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      // Nếu click vào vùng đất trống cách xa các tòa nhà -> Hủy chọn
+                      ref.read(mapProvider.notifier).selectLocation(null);
+                    },
+                    rotateGesturesEnabled: true,
+                    scrollGesturesEnabled: true,
+                    zoomGesturesEnabled: true,
+                    tiltGesturesEnabled: true,
+                    doubleClickZoomEnabled: true,
+                    trackCameraPosition: true,
+                    onCameraMove: (ml.CameraPosition position) {
+                      _currentCameraPosition = position;
+                    },
+                    onCameraIdle: _onCameraIdle,
+                    compassEnabled: false,
+                    logoEnabled: false,
+                    attributionButtonPosition: ml.AttributionButtonPosition.bottomLeft,
+                    annotationOrder: const [
+                      ml.AnnotationType.fill,
+                      ml.AnnotationType.line,
+                      ml.AnnotationType.circle,
+                      ml.AnnotationType.symbol,
+                    ],
+                  ),
                 ),
 
                 // 2.2 Loading Indicator trong lúc khởi động GPU & nạp Map Style (tránh hiện màn hình đen)
@@ -1196,50 +1387,60 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                     ),
                   ),
 
-                // 2.3 Top Floating Overlay
+                // 2.3 Top Floating Overlay (Được cô lập bằng Consumer riêng, không làm re-render Native Map)
                 Positioned(
                   top: 10,
                   left: 14,
                   right: 14,
-                  child: mapState.isNavigating
-                      ? MapGateSelectorCard(
-                          selectedGate: mapState.selectedGate,
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final isNav = ref.watch(mapProvider.select((s) => s.isNavigating));
+                      if (isNav) {
+                        final selectedGate = ref.watch(mapProvider.select((s) => s.selectedGate));
+                        return MapGateSelectorCard(
+                          selectedGate: selectedGate,
                           onSelectGate: (gate) {
                             ref.read(mapProvider.notifier).selectGate(gate);
                           },
-                        )
-                      : MapTopSearchBar(
-                          searchController: _searchController,
-                          selectedCategory: mapState.selectedCategory,
-                          totalCount: mapState.locations.length,
-                          filteredLocations: mapState.filteredLocations,
-                          onSearchChanged: (val) {
-                            ref.read(mapProvider.notifier).updateSearch(val);
-                          },
-                          onCategorySelected: (cat) {
-                            ref.read(mapProvider.notifier).selectCategory(cat);
-                          },
-                          onLocationSelected: (loc) {
-                            setState(() => _selectedRoomName = null);
-                            ref.read(mapProvider.notifier).selectLocation(loc);
-                            _mapController?.animateCamera(
-                              ml.CameraUpdate.newCameraPosition(
-                                ml.CameraPosition(
-                                  target: loc.coordinate.toMl(),
-                                  zoom: 17.8,
-                                  tilt: _is3D ? 50.0 : 0.0,
-                                ),
+                        );
+                      }
+                      final selectedCategory = ref.watch(mapProvider.select((s) => s.selectedCategory));
+                      final totalCount = ref.watch(mapProvider.select((s) => s.locations.length));
+                      final filteredLocations = ref.watch(mapProvider.select((s) => s.filteredLocations));
+                      return MapTopSearchBar(
+                        searchController: _searchController,
+                        selectedCategory: selectedCategory,
+                        totalCount: totalCount,
+                        filteredLocations: filteredLocations,
+                        onSearchChanged: (val) {
+                          ref.read(mapProvider.notifier).updateSearch(val);
+                        },
+                        onCategorySelected: (cat) {
+                          ref.read(mapProvider.notifier).selectCategory(cat);
+                        },
+                        onLocationSelected: (loc) {
+                          setState(() => _selectedRoomName = null);
+                          ref.read(mapProvider.notifier).selectLocation(loc);
+                          _mapController?.animateCamera(
+                            ml.CameraUpdate.newCameraPosition(
+                              ml.CameraPosition(
+                                target: loc.coordinate.toMl(),
+                                zoom: 17.8,
+                                tilt: _is3D ? 50.0 : 0.0,
                               ),
-                            );
-                          },
-                          onClearSearch: () {
-                            _searchController.clear();
-                            ref.read(mapProvider.notifier).updateSearch('');
-                          },
-                        ),
+                            ),
+                          );
+                        },
+                        onClearSearch: () {
+                          _searchController.clear();
+                          ref.read(mapProvider.notifier).updateSearch('');
+                        },
+                      );
+                    },
+                  ),
                 ),
 
-                if (mapState.isLoadingPaths)
+                if (isLoadingPaths)
                   Positioned(
                     top: 70,
                     left: 0,
@@ -1280,9 +1481,9 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                 // 2.3 Right Floating Controls (5 nút điều khiển)
                 Positioned(
                   right: 14,
-                  bottom: mapState.isNavigating
-                      ? 115
-                      : (mapState.selectedLocation != null ? 245 : 16),
+                  bottom: isNavigating
+                      ? 110
+                      : (hasSelectedLocation ? 212 : 16),
                   child: Column(
                     children: [
                       // Nút chuyển chế độ 3D / 2D
@@ -1292,7 +1493,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                         badgeText: _is3D ? '3D' : '2D',
                         onTap: _toggle3D,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
 
                       // Nút đổi lớp Bản đồ (Vệ tinh / Vector)
                       _buildMapCircleBtn(
@@ -1300,7 +1501,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                         iconColor: _isSatellite ? AppColors.accent : AppColors.primary,
                         onTap: _toggleSatellite,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
 
                       // Nút xoay hướng Bắc
                       _buildMapCircleBtn(
@@ -1308,7 +1509,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                         iconColor: AppColors.danger,
                         onTap: () => _mapController?.animateCamera(ml.CameraUpdate.bearingTo(0.0)),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
 
                       // Nút định vị vị trí hiện tại
                       _buildMapCircleBtn(
@@ -1316,7 +1517,7 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                         iconColor: AppColors.info,
                         onTap: _centerCampus,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
 
                       // Nút phóng to toàn khuôn viên
                       _buildMapCircleBtn(
@@ -1328,52 +1529,68 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
                 ),
 
                 // 2.4 Bottom Overlay: Location Detail Card OR Navigation Bar
-                if (mapState.isNavigating && mapState.selectedLocation != null)
+                if (isNavigating && hasSelectedLocation)
                   Positioned(
                     left: 14,
                     right: 14,
                     bottom: 12,
-                    child: MapNavigationBar(
-                      destination: mapState.selectedLocation!,
-                      currentGate: mapState.selectedGate,
-                      distanceMeters: mapState.activeRoute?.distanceMeters ?? 754,
-                      walkingMinutes: mapState.activeRoute?.estimatedWalkingMinutes ?? 10,
-                      isHybrid: mapState.activeRoute?.isHybrid ?? false,
-                      viaGateName: mapState.activeRoute?.viaGateName,
-                      onStopNavigation: () async {
-                        await _clearRouteLines();
-                        ref.read(mapProvider.notifier).stopNavigation();
-                        final loc = mapState.selectedLocation;
-                        if (loc != null) {
-                          _mapController?.animateCamera(
-                            ml.CameraUpdate.newCameraPosition(
-                              ml.CameraPosition(
-                                target: loc.coordinate.toMl(),
-                                zoom: 17.5,
-                                tilt: _is3D ? 45.0 : 0.0,
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final destination = ref.watch(mapProvider.select((s) => s.selectedLocation));
+                        final currentGate = ref.watch(mapProvider.select((s) => s.selectedGate));
+                        final activeRoute = ref.watch(mapProvider.select((s) => s.activeRoute));
+                        if (destination == null) return const SizedBox.shrink();
+
+                        return MapNavigationBar(
+                          destination: destination,
+                          currentGate: currentGate,
+                          distanceMeters: activeRoute?.distanceMeters ?? 754,
+                          walkingMinutes: activeRoute?.estimatedWalkingMinutes ?? 10,
+                          isHybrid: activeRoute?.isHybrid ?? false,
+                          viaGateName: activeRoute?.viaGateName,
+                          onStopNavigation: () async {
+                            await _clearRouteLines();
+                            ref.read(mapProvider.notifier).stopNavigation();
+                            _mapController?.animateCamera(
+                              ml.CameraUpdate.newCameraPosition(
+                                ml.CameraPosition(
+                                  target: destination.coordinate.toMl(),
+                                  zoom: 17.5,
+                                  tilt: _is3D ? 45.0 : 0.0,
+                                ),
                               ),
-                            ),
-                          );
-                        }
+                            );
+                          },
+                        );
                       },
                     ),
                   )
-                else if (mapState.selectedLocation != null)
+                else if (hasSelectedLocation)
                   Positioned(
                     left: 14,
                     right: 14,
                     bottom: 12,
-                    child: MapLocationDetailCard(
-                      location: mapState.selectedLocation!,
-                      currentGate: mapState.selectedGate,
-                      roomName: _selectedRoomName,
-                      onClose: () {
-                        setState(() => _selectedRoomName = null);
-                        ref.read(mapProvider.notifier).selectLocation(null);
-                      },
-                      onStartNavigation: () {
-                        final loc = mapState.selectedLocation!;
-                        ref.read(mapProvider.notifier).startNavigationTo(loc);
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final location = ref.watch(mapProvider.select((s) => s.selectedLocation));
+                        final currentGate = ref.watch(mapProvider.select((s) => s.selectedGate));
+                        final userPos = ref.watch(mapProvider.select((s) => s.userPosition));
+                        final isOutside = userPos != null && !CampusDijkstraRouter.isInsideCampus(userPos);
+                        if (location == null) return const SizedBox.shrink();
+
+                        return MapLocationDetailCard(
+                          location: location,
+                          currentGate: currentGate,
+                          roomName: _selectedRoomName,
+                          isOutsideCampus: isOutside,
+                          onClose: () {
+                            setState(() => _selectedRoomName = null);
+                            ref.read(mapProvider.notifier).selectLocation(null);
+                          },
+                          onStartNavigation: () {
+                            ref.read(mapProvider.notifier).startNavigationTo(location);
+                          },
+                        );
                       },
                     ),
                   ),
@@ -1429,5 +1646,3 @@ class _CampusMapScreenState extends ConsumerState<CampusMapScreen> {
     );
   }
 }
-
-

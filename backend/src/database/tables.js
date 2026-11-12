@@ -127,6 +127,7 @@ const TABLE_DEFINITIONS = {
       badge_color VARCHAR(50),
       source_name VARCHAR(255),
       attachments JSON,
+      detail_json LONGTEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_news_type (type)
@@ -144,7 +145,9 @@ const TABLE_DEFINITIONS = {
       rating INT DEFAULT 5,
       status VARCHAR(50) DEFAULT 'Đã giải quyết',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_feedback_mssv (mssv)
+      INDEX idx_feedback_mssv (mssv),
+      INDEX idx_fb_created (created_at),
+      INDEX idx_fb_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `,
 
@@ -160,7 +163,9 @@ const TABLE_DEFINITIONS = {
       incident_type VARCHAR(100) DEFAULT 'Khẩn cấp',
       status VARCHAR(50) DEFAULT 'Đã tiếp nhận',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_sos_mssv (mssv)
+      INDEX idx_sos_mssv (mssv),
+      INDEX idx_sos_created (created_at),
+      INDEX idx_sos_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `,
 
@@ -173,7 +178,8 @@ const TABLE_DEFINITIONS = {
       type VARCHAR(50) DEFAULT 'info',
       sender VARCHAR(100) DEFAULT 'Phòng Đào Tạo',
       date VARCHAR(50),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_notif_created (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `,
 
@@ -187,7 +193,9 @@ const TABLE_DEFINITIONS = {
       token VARCHAR(255) NOT NULL,
       expires_at DATETIME NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_pwd_mssv (mssv)
+      INDEX idx_pwd_mssv (mssv),
+      INDEX idx_pwd_token (token),
+      INDEX idx_pwd_expires (expires_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `,
 
@@ -202,7 +210,8 @@ const TABLE_DEFINITIONS = {
       otp_code VARCHAR(10) NOT NULL,
       expires_at DATETIME NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_reg_mssv (mssv)
+      INDEX idx_reg_mssv (mssv),
+      INDEX idx_reg_expires (expires_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `,
 
@@ -214,7 +223,8 @@ const TABLE_DEFINITIONS = {
       mssv VARCHAR(50) DEFAULT 'guest',
       ip_address VARCHAR(50) DEFAULT '',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_act_mssv (mssv)
+      INDEX idx_act_mssv (mssv),
+      INDEX idx_act_created_at (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `
 };
@@ -276,13 +286,23 @@ async function createAllTables(connection) {
   await safeAddIndex(connection, 'users', 'email', 'idx_users_email');
   await safeAddIndex(connection, 'student_schedules', 'mssv', 'idx_sched_mssv');
   await safeAddIndex(connection, 'student_schedules', 'mssv, is_custom, id', 'idx_sched_mssv_custom');
+  await safeAddIndex(connection, 'student_schedules', 'created_at', 'idx_sched_created');
   await safeAddIndex(connection, 'student_grades', 'mssv', 'idx_grades_mssv');
+  await safeAddIndex(connection, 'student_grades', 'created_at', 'idx_grades_created');
   await safeAddIndex(connection, 'news_cache', 'type', 'idx_news_type');
   await safeAddIndex(connection, 'news_cache', 'type, id DESC', 'idx_news_type_id');
   await safeAddIndex(connection, 'feedback', 'mssv', 'idx_feedback_mssv');
+  await safeAddIndex(connection, 'feedback', 'created_at', 'idx_fb_created');
+  await safeAddIndex(connection, 'feedback', 'status', 'idx_fb_status');
   await safeAddIndex(connection, 'sos_alerts', 'mssv', 'idx_sos_mssv');
+  await safeAddIndex(connection, 'sos_alerts', 'created_at', 'idx_sos_created');
+  await safeAddIndex(connection, 'sos_alerts', 'status', 'idx_sos_status');
+  await safeAddIndex(connection, 'notifications', 'created_at', 'idx_notif_created');
   await safeAddIndex(connection, 'password_resets', 'mssv', 'idx_pwd_mssv');
+  await safeAddIndex(connection, 'password_resets', 'token', 'idx_pwd_token');
+  await safeAddIndex(connection, 'password_resets', 'expires_at', 'idx_pwd_expires');
   await safeAddIndex(connection, 'registration_otps', 'mssv', 'idx_reg_mssv');
+  await safeAddIndex(connection, 'registration_otps', 'expires_at', 'idx_reg_expires');
   await safeAddIndex(connection, 'activity_logs', 'mssv', 'idx_act_mssv');
   await safeAddIndex(connection, 'activity_logs', 'created_at', 'idx_act_created_at');
 }

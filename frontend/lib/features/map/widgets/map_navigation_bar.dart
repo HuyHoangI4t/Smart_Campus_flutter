@@ -9,6 +9,7 @@ class MapNavigationBar extends StatelessWidget {
   final double distanceMeters;
   final int walkingMinutes;
   final VoidCallback onStopNavigation;
+  final VoidCallback? onOpenGoogleMaps;
   final bool isHybrid;
   final String? viaGateName;
 
@@ -19,6 +20,7 @@ class MapNavigationBar extends StatelessWidget {
     required this.distanceMeters,
     required this.walkingMinutes,
     required this.onStopNavigation,
+    this.onOpenGoogleMaps,
     this.isHybrid = false,
     this.viaGateName,
   });
@@ -67,7 +69,7 @@ class MapNavigationBar extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.arrow_forward, size: 10, color: Color(0xFF059669)),
+                      const Icon(Icons.arrow_forward, size: 11, color: Color(0xFF059669)),
                       const SizedBox(width: 3),
                       Flexible(
                         child: Text(
@@ -75,7 +77,7 @@ class MapNavigationBar extends StatelessWidget {
                               ? 'NGOÀI TRƯỜNG ➔ VÀO ${viaGateName!.toUpperCase()}'
                               : 'CỔNG: ${(currentGate.shortName.isNotEmpty ? currentGate.shortName : currentGate.name).toUpperCase()}',
                           style: const TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFF059669),
                             letterSpacing: 0.3,
@@ -125,7 +127,7 @@ class MapNavigationBar extends StatelessWidget {
                       child: Text(
                         'Định vị trực tiếp • Tự cập nhật khoảng cách',
                         style: TextStyle(
-                          fontSize: 9.5,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textMuted,
                         ),

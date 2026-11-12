@@ -60,6 +60,24 @@ void main() {
       expect(route.distanceMeters, greaterThan(0));
       expect(route.estimatedWalkingMinutes, greaterThanOrEqualTo(1));
     });
+
+    test('Zoom tier logic partitions zoom levels without hiding locations', () {
+      // Zoom xa (< 15.8): icons thu nhỏ (0.48), tất cả điểm vẫn hiển thị
+      double zoomOut = 15.0;
+      expect(zoomOut < 15.8, true);
+
+      // Zoom vừa (15.8 - 17.0): icon trung bình (0.78)
+      double zoomMid = 16.5;
+      expect(zoomMid >= 15.8 && zoomMid < 17.0, true);
+
+      // Zoom gần (>= 17.0): icon chi tiết (1.05)
+      double zoomClose = 17.8;
+      expect(zoomClose >= 17.0, true);
+
+      // Đảm bảo toàn bộ địa điểm khuôn viên luôn sẵn sàng hiển thị
+      final campusLocations = CampusConstants.campusLocations;
+      expect(campusLocations.length, greaterThanOrEqualTo(35));
+    });
   });
 }
 

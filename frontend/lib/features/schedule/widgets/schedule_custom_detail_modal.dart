@@ -231,14 +231,20 @@ class ScheduleCustomDetailModal extends ConsumerWidget {
                 ),
                 GestureDetector(
                   onTap: () => Navigator.of(context).pop(),
+                  behavior: HitTestBehavior.opaque,
                   child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF1F5F9),
-                      shape: BoxShape.circle,
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, size: 18, color: Color(0xFF64748B)),
                     ),
-                    child: const Icon(Icons.close, size: 18, color: Color(0xFF64748B)),
                   ),
                 ),
               ],

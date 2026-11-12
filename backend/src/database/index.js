@@ -22,7 +22,7 @@ const seedData = require('./seedData');
  * Đảm bảo Database tồn tại trong MySQL trước khi kết nối pool
  */
 async function ensureDatabaseExists() {
-  const dbName = process.env.DB_NAME || 'smartcampus';
+  const dbName = process.env.DB_NAME || 'flutter_campus';
   let tempConn;
   try {
     tempConn = await mysql.createConnection({

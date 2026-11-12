@@ -1,4 +1,5 @@
 import '../constants/campus_constants.dart';
+import '../services/external_routing_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'haversine.dart';
 
@@ -20,6 +21,7 @@ class DijkstraResult {
   final int estimatedWalkingMinutes;
   final bool isHybrid;
   final String? viaGateName;
+  final CampusGate? gate;
 
   const DijkstraResult({
     required this.coordinates,
@@ -27,6 +29,7 @@ class DijkstraResult {
     required this.estimatedWalkingMinutes,
     this.isHybrid = false,
     this.viaGateName,
+    this.gate,
   });
 
   static const empty = DijkstraResult(
@@ -35,6 +38,7 @@ class DijkstraResult {
     estimatedWalkingMinutes: 0,
     isHybrid: false,
     viaGateName: null,
+    gate: null,
   );
 }
 
@@ -326,20 +330,14 @@ class CampusDijkstraRouter {
     );
   }
 
-  /// Kiem tra toa do co nam ben trong khuon vien truong hay khong
+  /// Kiểm tra toạ độ có nằm bên trong tường bao khuôn viên trường không
+  /// Chuẩn 100% Ray-Casting từ isPointInCampus (E:\LTDDDNT\frontend\src\features\map\leafletHtml.ts dòng 1141-1153)
   static bool isInsideCampus(LatLng point) {
+    final b = CampusConstants.campusBoundary;
+    if (b.length < 3) return false;
+
     final x = point.latitude;
     final y = point.longitude;
-
-    // Buffer 35m xung quanh cac cong truong -> van coi la trong truong
-    for (final gate in CampusConstants.gates) {
-      final d = calculateHaversineDistance(x, y, gate.lat, gate.lng);
-      if (d <= 35.0) return true;
-    }
-
-    // Ray-casting point-in-polygon kiem tra da giac ranh gioi
-    final b = CampusConstants.campusBoundary;
-    if (b.length < 3) return true;
 
     bool inside = false;
     for (int i = 0, j = b.length - 1; i < b.length; j = i++) {
@@ -352,7 +350,62 @@ class CampusDijkstraRouter {
     return inside;
   }
 
-  /// Tim cong truong gan nhat voi vi tri nguoi dung
+  /// Tìm cổng trường tối ưu dựa trên cả quãng đường tiếp cận ngoại vi và đi bộ nội bộ (theo chuẩn LTDDDNT)
+  static CampusGate getBestGate({
+    required LatLng origin,
+    required LatLng destination,
+    required bool isEntering,
+    String? preferredGateId,
+    bool isMedicalDestination = false,
+    required List<CampusGate> availableGates,
+  }) {
+    if (availableGates.isEmpty) return CampusConstants.defaultGate;
+
+    // 1. Nếu người dùng đã chủ động chỉ định cổng (qua nút chọn cổng): tôn trọng 100%
+    if (preferredGateId != null) {
+      for (final g in availableGates) {
+        if (g.id == preferredGateId) return g;
+      }
+    }
+
+    // 2. Chế độ Tự động: Duyệt toàn bộ các cổng khả dụng
+    // Có 2 cổng trên đường Lê Duẩn (Cổng trước & Cổng BV) và 1 cổng trên đường Y Wang (Cổng sau).
+    // Chọn cổng có tổng quãng đường (dExt + dInt) ngắn nhất, chuẩn 100% LTDDDNT getBestGate.
+    CampusGate bestGate = availableGates.first;
+    double minEstDist = double.infinity;
+
+    for (final g in availableGates) {
+      final double dExt = isEntering
+          ? calculateHaversineDistance(
+              origin.latitude, origin.longitude,
+              g.outsideCoordinate.latitude, g.outsideCoordinate.longitude,
+            )
+          : calculateHaversineDistance(
+              g.outsideCoordinate.latitude, g.outsideCoordinate.longitude,
+              destination.latitude, destination.longitude,
+            );
+
+      final double dInt = isEntering
+          ? calculateHaversineDistance(
+              g.insideCoordinate.latitude, g.insideCoordinate.longitude,
+              destination.latitude, destination.longitude,
+            )
+          : calculateHaversineDistance(
+              origin.latitude, origin.longitude,
+              g.insideCoordinate.latitude, g.insideCoordinate.longitude,
+            );
+
+      final double est = dExt + dInt;
+      if (est < minEstDist) {
+        minEstDist = est;
+        bestGate = g;
+      }
+    }
+
+    return bestGate;
+  }
+
+  /// Tìm cổng trường gần nhất với một toạ độ bất kỳ
   static CampusGate findNearestGate(LatLng point, List<CampusGate> gates) {
     if (gates.isEmpty) return CampusConstants.defaultGate;
     CampusGate bestGate = gates.first;
@@ -369,80 +422,485 @@ class CampusDijkstraRouter {
     return bestGate;
   }
 
-  /// Dan duong hybrid: ngoai truong (duong pho OSRM) -> cong gan nhat -> loi di bo noi bo (Dijkstra)
+  /// Ghép nối các mảng toạ độ liên tiếp và khử các điểm trùng lặp (< 0.5m)
+  static List<LatLng> stitchPathCoordinates(List<List<LatLng>> paths) {
+    final result = <LatLng>[];
+    for (final path in paths) {
+      if (path.isEmpty) continue;
+      for (final pt in path) {
+        if (result.isNotEmpty) {
+          final last = result.last;
+          if ((last.latitude - pt.latitude).abs() < 0.000005 &&
+              (last.longitude - pt.longitude).abs() < 0.000005) {
+            continue;
+          }
+        }
+        result.add(pt);
+      }
+    }
+    return result;
+  }
+
+  /// Dự phòng ngoại vi thông minh (LTDDDNT):
+  /// Nội suy dọc theo trục đường Lê Duẩn hoặc Y Wang thay vì vẽ đường chim bay cắt qua nhà dân
+  static DijkstraResult buildPerimeterRoadFallback(LatLng start, LatLng target) {
+    final road = (start.longitude <= 108.0255 && target.longitude <= 108.0255)
+        ? CampusConstants.perimeterLeDuan
+        : CampusConstants.perimeterYWang;
+
+    int sIdx = 0;
+    double minSDist = double.infinity;
+    int tIdx = 0;
+    double minTDist = double.infinity;
+
+    for (int r = 0; r < road.length; r++) {
+      final ds = calculateHaversineDistance(
+        start.latitude, start.longitude, road[r].latitude, road[r].longitude,
+      );
+      if (ds < minSDist) {
+        minSDist = ds;
+        sIdx = r;
+      }
+      final dt = calculateHaversineDistance(
+        target.latitude, target.longitude, road[r].latitude, road[r].longitude,
+      );
+      if (dt < minTDist) {
+        minTDist = dt;
+        tIdx = r;
+      }
+    }
+
+    final coords = <LatLng>[start];
+    if (sIdx <= tIdx) {
+      for (int i = sIdx; i <= tIdx; i++) {
+        coords.add(road[i]);
+      }
+    } else {
+      for (int i = sIdx; i >= tIdx; i--) {
+        coords.add(road[i]);
+      }
+    }
+    coords.add(target);
+
+    double totalD = 0;
+    for (int c = 0; c < coords.length - 1; c++) {
+      totalD += calculateHaversineDistance(
+        coords[c].latitude, coords[c].longitude,
+        coords[c + 1].latitude, coords[c + 1].longitude,
+      );
+    }
+
+    final durSec = (totalD / 1.25).round();
+    final durMin = (durSec / 60).ceil().clamp(1, 180);
+
+    return DijkstraResult(
+      coordinates: coords,
+      distanceMeters: totalD,
+      estimatedWalkingMinutes: durMin,
+      isHybrid: true,
+    );
+  }
+
+  /// Tuyến đường dự phòng thẳng trực tiếp (LTDDDNT computeFallbackDirectRoute)
+  static DijkstraResult computeFallbackDirectRoute(LatLng orig, LatLng dest) {
+    final dist = calculateHaversineDistance(orig.latitude, orig.longitude, dest.latitude, dest.longitude);
+    final dur = (dist / 80.0).round().clamp(1, 180);
+    return DijkstraResult(
+      coordinates: [orig, dest],
+      distanceMeters: dist,
+      estimatedWalkingMinutes: dur,
+      isHybrid: false,
+    );
+  }
+
+  /// Hàm tính toán tuyến đường đa chế độ (nội bộ / đường phố / qua cổng trường)
+  /// Port 100% nguyên bản từ calculateRoute trong LTDDDNT (leafletHtml.ts dòng 1734-1830)
+  Future<DijkstraResult> calculateRoute({
+    required LatLng origin,
+    required LatLng destination,
+    String? preferredGateId,
+    required List<CampusGate> availableGates,
+    bool isMedicalDestination = false,
+    ExternalRoutingService? externalRoutingService,
+  }) async {
+    final origIn = isInsideCampus(origin);
+    final destIn = isInsideCampus(destination);
+
+    // TRƯỜNG HỢP 1: CẢ 2 ĐỀU Ở TRONG KHUÔN VIÊN TRƯỜNG
+    // Đi 100% bằng đường thiết kế nội bộ (Dijkstra)
+    if (origIn && destIn) {
+      final internalRoute = findShortestRoute(origin, destination);
+      if (internalRoute.coordinates.length >= 2) {
+        return internalRoute;
+      }
+      return computeFallbackDirectRoute(origin, destination);
+    }
+
+    // TRƯỜNG HỢP 2: CẢ 2 ĐỀU Ở NGOÀI KHUÔN VIÊN TRƯỜNG
+    // Đi hoàn toàn trên đường phố công cộng (OSRM)
+    if (!origIn && !destIn) {
+      if (externalRoutingService != null) {
+        try {
+          final ext = await externalRoutingService.getWalkingRoadRoute(
+            start: origin,
+            end: destination,
+          );
+          if (ext.coordinates.length >= 2) {
+            final dur = (ext.durationSeconds / 60).ceil().clamp(1, 180);
+            return DijkstraResult(
+              coordinates: ext.coordinates,
+              distanceMeters: ext.distanceMeters,
+              estimatedWalkingMinutes: dur,
+              isHybrid: false,
+            );
+          }
+        } catch (_) {}
+      }
+      return buildPerimeterRoadFallback(origin, destination);
+    }
+
+    // TRƯỜNG HỢP 3: TỪ NGOÀI KHU VỰC TRƯỜNG VÀO TRONG KHUÔN VIÊN TRƯỜNG
+    if (!origIn && destIn) {
+      final gate = getBestGate(
+        origin: origin,
+        destination: destination,
+        isEntering: true,
+        preferredGateId: preferredGateId,
+        isMedicalDestination: isMedicalDestination,
+        availableGates: availableGates,
+      );
+
+      final internalRoute = findShortestRoute(gate.insideCoordinate, destination);
+      final List<LatLng> intCoords = internalRoute.coordinates.length >= 2
+          ? internalRoute.coordinates
+          : [gate.insideCoordinate, destination];
+      final double intDist = internalRoute.coordinates.length >= 2
+          ? internalRoute.distanceMeters
+          : calculateHaversineDistance(
+              gate.insideCoordinate.latitude, gate.insideCoordinate.longitude,
+              destination.latitude, destination.longitude,
+            );
+
+      List<LatLng> safeExt = [origin, gate.outsideCoordinate];
+      double safeExtDist = calculateHaversineDistance(
+        origin.latitude, origin.longitude,
+        gate.outsideCoordinate.latitude, gate.outsideCoordinate.longitude,
+      );
+      int safeExtMinutes = (safeExtDist / 75.0).ceil();
+
+      if (externalRoutingService != null) {
+        try {
+          final ext = await externalRoutingService.getWalkingRoadRoute(
+            start: origin,
+            end: gate.outsideCoordinate,
+          );
+          if (ext.coordinates.length >= 2) {
+            safeExt = ext.coordinates;
+            safeExtDist = ext.distanceMeters;
+            safeExtMinutes = (ext.durationSeconds / 60).ceil();
+          }
+        } catch (_) {
+          final fb = buildPerimeterRoadFallback(origin, gate.outsideCoordinate);
+          safeExt = fb.coordinates;
+          safeExtDist = fb.distanceMeters;
+          safeExtMinutes = fb.estimatedWalkingMinutes;
+        }
+      } else {
+        final fb = buildPerimeterRoadFallback(origin, gate.outsideCoordinate);
+        safeExt = fb.coordinates;
+        safeExtDist = fb.distanceMeters;
+        safeExtMinutes = fb.estimatedWalkingMinutes;
+      }
+
+      final gateTransition = [
+        gate.outsideCoordinate,
+        gate.coordinate,
+        gate.insideCoordinate,
+      ];
+      final combinedCoords = stitchPathCoordinates([
+        safeExt,
+        gateTransition,
+        intCoords,
+      ]);
+
+      final gateTransDist = calculateHaversineDistance(
+        gate.outsideCoordinate.latitude, gate.outsideCoordinate.longitude,
+        gate.insideCoordinate.latitude, gate.insideCoordinate.longitude,
+      );
+      final totalDist = safeExtDist + gateTransDist + intDist;
+      final totalDur = (safeExtMinutes + internalRoute.estimatedWalkingMinutes).clamp(1, 180);
+
+      return DijkstraResult(
+        coordinates: combinedCoords,
+        distanceMeters: totalDist,
+        estimatedWalkingMinutes: totalDur,
+        isHybrid: true,
+        viaGateName: gate.name,
+        gate: gate,
+      );
+    }
+
+    // TRƯỜNG HỢP 4: TỪ TRONG KHUÔN VIÊN TRƯỜNG ĐI RA NGOÀI ĐƯỜNG
+    final gate = getBestGate(
+      origin: origin,
+      destination: destination,
+      isEntering: false,
+      preferredGateId: preferredGateId,
+      isMedicalDestination: isMedicalDestination,
+      availableGates: availableGates,
+    );
+
+    final internalRoute = findShortestRoute(origin, gate.insideCoordinate);
+    final List<LatLng> intCoords = internalRoute.coordinates.length >= 2
+        ? internalRoute.coordinates
+        : [origin, gate.insideCoordinate];
+    final double intDist = internalRoute.coordinates.length >= 2
+        ? internalRoute.distanceMeters
+        : calculateHaversineDistance(
+            origin.latitude, origin.longitude,
+            gate.insideCoordinate.latitude, gate.insideCoordinate.longitude,
+          );
+
+    List<LatLng> safeExt = [gate.outsideCoordinate, destination];
+    double safeExtDist = calculateHaversineDistance(
+      gate.outsideCoordinate.latitude, gate.outsideCoordinate.longitude,
+      destination.latitude, destination.longitude,
+    );
+    int safeExtMinutes = (safeExtDist / 75.0).ceil();
+
+    if (externalRoutingService != null) {
+      try {
+        final ext = await externalRoutingService.getWalkingRoadRoute(
+          start: gate.outsideCoordinate,
+          end: destination,
+        );
+        if (ext.coordinates.length >= 2) {
+          safeExt = ext.coordinates;
+          safeExtDist = ext.distanceMeters;
+          safeExtMinutes = (ext.durationSeconds / 60).ceil();
+        }
+      } catch (_) {
+        final fb = buildPerimeterRoadFallback(gate.outsideCoordinate, destination);
+        safeExt = fb.coordinates;
+        safeExtDist = fb.distanceMeters;
+        safeExtMinutes = fb.estimatedWalkingMinutes;
+      }
+    } else {
+      final fb = buildPerimeterRoadFallback(gate.outsideCoordinate, destination);
+      safeExt = fb.coordinates;
+      safeExtDist = fb.distanceMeters;
+      safeExtMinutes = fb.estimatedWalkingMinutes;
+    }
+
+    final gateTransition = [
+      gate.insideCoordinate,
+      gate.coordinate,
+      gate.outsideCoordinate,
+    ];
+    final combinedCoords = stitchPathCoordinates([
+      intCoords,
+      gateTransition,
+      safeExt,
+    ]);
+
+    final gateTransDist = calculateHaversineDistance(
+      gate.insideCoordinate.latitude, gate.insideCoordinate.longitude,
+      gate.outsideCoordinate.latitude, gate.outsideCoordinate.longitude,
+    );
+    final totalDist = intDist + gateTransDist + safeExtDist;
+    final totalDur = (internalRoute.estimatedWalkingMinutes + safeExtMinutes).clamp(1, 180);
+
+    return DijkstraResult(
+      coordinates: combinedCoords,
+      distanceMeters: totalDist,
+      estimatedWalkingMinutes: totalDur,
+      isHybrid: true,
+      viaGateName: gate.name,
+      gate: gate,
+    );
+  }
+
+  /// Dẫn đường hybrid đa chế độ (nội bộ / đường phố / chuyển tiếp cổng trường 3 điểm)
   DijkstraResult findHybridRoute({
     required LatLng start,
     required LatLng destination,
     required List<CampusGate> availableGates,
+    String? preferredGateId,
+    bool isMedicalDestination = false,
     List<LatLng>? externalRoadCoordinates,
     double? externalRoadDistanceMeters,
     int? externalDurationSeconds,
   }) {
-    // Neu vi tri xuat phat nam TRONG truong -> Dijkstra noi bo binh thuong
-    if (isInsideCampus(start)) {
+    final origIn = isInsideCampus(start);
+    final destIn = isInsideCampus(destination);
+
+    // TRƯỜNG HỢP 1: CẢ 2 ĐỀU Ở TRONG KHUÔN VIÊN TRƯỜNG
+    // Đi 100% bằng đường thiết kế nội bộ (Dijkstra)
+    if (origIn && destIn) {
       return findShortestRoute(start, destination);
     }
 
-    // Vi tri NGOAI truong -> Tim cong truong gan nhat
-    final nearestGate = findNearestGate(start, availableGates);
-    final gateCoord = nearestGate.coordinate;
-
-    // Kiem tra ban kinh toi da 2km tu vi tri nguoi dung den cong
-    const double maxExternalRadiusMeters = 2000.0;
-    final directDistToGate = calculateHaversineDistance(
-      start.latitude, start.longitude, gateCoord.latitude, gateCoord.longitude,
-    );
-    if (directDistToGate > maxExternalRadiusMeters) {
-      return DijkstraResult.empty;
-    }
-
-    // Tinh doan di bo noi bo tu cong den dich
-    final internalRoute = findShortestRoute(gateCoord, destination);
-    if (internalRoute.coordinates.isEmpty) {
-      return DijkstraResult.empty;
-    }
-
-    // Doan duong ngoai truong:
-    // Uu tien dung toa do thuc te theo duong pho (OSRM/Google Maps style) neu duoc truyen vao
-    final List<LatLng> externalCoords;
-    final double extDistance;
-    final int extMinutes;
-
-    if (externalRoadCoordinates != null && externalRoadCoordinates.isNotEmpty) {
-      externalCoords = List<LatLng>.from(externalRoadCoordinates);
-      extDistance = externalRoadDistanceMeters ?? directDistToGate;
-      final durSec = externalDurationSeconds ?? (extDistance / 1.25).round();
-      extMinutes = (durSec / 60).ceil();
-    } else {
-      externalCoords = [start, gateCoord];
-      extDistance = directDistToGate;
-      extMinutes = (extDistance / 75.0).ceil();
-    }
-
-    // Ghep noi 2 chang: [Duong pho ngoai truong] + [Mang noi bo trong truong]
-    final combinedCoords = <LatLng>[...externalCoords];
-    if (internalRoute.coordinates.isNotEmpty) {
-      final lastExt = combinedCoords.last;
-      final firstInt = internalRoute.coordinates.first;
-      final gap = calculateHaversineDistance(
-        lastExt.latitude, lastExt.longitude, firstInt.latitude, firstInt.longitude,
-      );
-      // Neu diem cuoi ngoai truong va diem dau noi bo gan nhau (< 3m), bo bot de tranh trung
-      final startIdx = gap < 3.0 ? 1 : 0;
-      for (int i = startIdx; i < internalRoute.coordinates.length; i++) {
-        combinedCoords.add(internalRoute.coordinates[i]);
+    // TRƯỜNG HỢP 2: CẢ 2 ĐỀU Ở NGOÀI KHUÔN VIÊN TRƯỜNG
+    // Đi hoàn toàn trên đường phố công cộng
+    if (!origIn && !destIn) {
+      if (externalRoadCoordinates != null && externalRoadCoordinates.length >= 2) {
+        final dist = externalRoadDistanceMeters ??
+            calculateHaversineDistance(
+              start.latitude, start.longitude,
+              destination.latitude, destination.longitude,
+            );
+        final dur = externalDurationSeconds != null
+            ? (externalDurationSeconds / 60).ceil()
+            : (dist / 75.0).ceil();
+        return DijkstraResult(
+          coordinates: externalRoadCoordinates,
+          distanceMeters: dist,
+          estimatedWalkingMinutes: dur.clamp(1, 180),
+          isHybrid: false,
+        );
       }
+      return buildPerimeterRoadFallback(start, destination);
     }
 
-    final totalDistance = extDistance + internalRoute.distanceMeters;
-    final totalMinutes = (extMinutes + internalRoute.estimatedWalkingMinutes).clamp(1, 180);
+    // TRƯỜNG HỢP 3: TỪ NGOÀI KHU VỰC TRƯỜNG VÀO TRONG KHUÔN VIÊN TRƯỜNG
+    if (!origIn && destIn) {
+      final gate = getBestGate(
+        origin: start,
+        destination: destination,
+        isEntering: true,
+        preferredGateId: preferredGateId,
+        isMedicalDestination: isMedicalDestination,
+        availableGates: availableGates,
+      );
+
+      // Đi bộ nội bộ từ bên trong cổng đến đích
+      final internalRoute = findShortestRoute(gate.insideCoordinate, destination);
+      final List<LatLng> intCoords = internalRoute.coordinates.isNotEmpty
+          ? internalRoute.coordinates
+          : [gate.insideCoordinate, destination];
+      final double intDist = internalRoute.coordinates.isNotEmpty
+          ? internalRoute.distanceMeters
+          : calculateHaversineDistance(
+              gate.insideCoordinate.latitude, gate.insideCoordinate.longitude,
+              destination.latitude, destination.longitude,
+            );
+
+      // Tuyến đường ngoại vi tiếp cận cổng:
+      final List<LatLng> safeExt;
+      final double safeExtDist;
+      final int safeExtMinutes;
+
+      if (externalRoadCoordinates != null && externalRoadCoordinates.length >= 2) {
+        safeExt = externalRoadCoordinates;
+        safeExtDist = externalRoadDistanceMeters ??
+            calculateHaversineDistance(
+              start.latitude, start.longitude,
+              gate.outsideCoordinate.latitude, gate.outsideCoordinate.longitude,
+            );
+        final durSec = externalDurationSeconds ?? (safeExtDist / 1.25).round();
+        safeExtMinutes = (durSec / 60).ceil();
+      } else {
+        final perimeterFb = buildPerimeterRoadFallback(start, gate.outsideCoordinate);
+        safeExt = perimeterFb.coordinates;
+        safeExtDist = perimeterFb.distanceMeters;
+        safeExtMinutes = perimeterFb.estimatedWalkingMinutes;
+      }
+
+      // Khớp nối chuyển tiếp 3 điểm qua cổng: [outsidePoint -> gatePoint -> insidePoint]
+      final gateTransition = [
+        gate.outsideCoordinate,
+        gate.coordinate,
+        gate.insideCoordinate,
+      ];
+      final combinedCoords = stitchPathCoordinates([
+        safeExt,
+        gateTransition,
+        intCoords,
+      ]);
+
+      final gateTransDist = calculateHaversineDistance(
+        gate.outsideCoordinate.latitude, gate.outsideCoordinate.longitude,
+        gate.insideCoordinate.latitude, gate.insideCoordinate.longitude,
+      );
+      final totalDist = safeExtDist + gateTransDist + intDist;
+      final totalMinutes = (safeExtMinutes + internalRoute.estimatedWalkingMinutes).clamp(1, 180);
+
+      return DijkstraResult(
+        coordinates: combinedCoords,
+        distanceMeters: totalDist,
+        estimatedWalkingMinutes: totalMinutes,
+        isHybrid: true,
+        viaGateName: gate.name,
+        gate: gate,
+      );
+    }
+
+    // TRƯỜNG HỢP 4: TỪ TRONG KHUÔN VIÊN TRƯỜNG ĐI RA NGOÀI ĐƯỜNG
+    final gate = getBestGate(
+      origin: start,
+      destination: destination,
+      isEntering: false,
+      preferredGateId: preferredGateId,
+      isMedicalDestination: isMedicalDestination,
+      availableGates: availableGates,
+    );
+
+    final internalRoute = findShortestRoute(start, gate.insideCoordinate);
+    final List<LatLng> intCoords = internalRoute.coordinates.isNotEmpty
+        ? internalRoute.coordinates
+        : [start, gate.insideCoordinate];
+    final double intDist = internalRoute.coordinates.isNotEmpty
+        ? internalRoute.distanceMeters
+        : calculateHaversineDistance(
+            start.latitude, start.longitude,
+            gate.insideCoordinate.latitude, gate.insideCoordinate.longitude,
+          );
+
+    final List<LatLng> safeExt;
+    final double safeExtDist;
+    final int safeExtMinutes;
+
+    if (externalRoadCoordinates != null && externalRoadCoordinates.length >= 2) {
+      safeExt = externalRoadCoordinates;
+      safeExtDist = externalRoadDistanceMeters ??
+          calculateHaversineDistance(
+            gate.outsideCoordinate.latitude, gate.outsideCoordinate.longitude,
+            destination.latitude, destination.longitude,
+          );
+      final durSec = externalDurationSeconds ?? (safeExtDist / 1.25).round();
+      safeExtMinutes = (durSec / 60).ceil();
+    } else {
+      final perimeterFb = buildPerimeterRoadFallback(gate.outsideCoordinate, destination);
+      safeExt = perimeterFb.coordinates;
+      safeExtDist = perimeterFb.distanceMeters;
+      safeExtMinutes = perimeterFb.estimatedWalkingMinutes;
+    }
+
+    final gateTransition = [
+      gate.insideCoordinate,
+      gate.coordinate,
+      gate.outsideCoordinate,
+    ];
+    final combinedCoords = stitchPathCoordinates([
+      intCoords,
+      gateTransition,
+      safeExt,
+    ]);
+
+    final gateTransDist = calculateHaversineDistance(
+      gate.insideCoordinate.latitude, gate.insideCoordinate.longitude,
+      gate.outsideCoordinate.latitude, gate.outsideCoordinate.longitude,
+    );
+    final totalDist = intDist + gateTransDist + safeExtDist;
+    final totalMinutes = (internalRoute.estimatedWalkingMinutes + safeExtMinutes).clamp(1, 180);
 
     return DijkstraResult(
       coordinates: combinedCoords,
-      distanceMeters: totalDistance,
+      distanceMeters: totalDist,
       estimatedWalkingMinutes: totalMinutes,
       isHybrid: true,
-      viaGateName: nearestGate.name,
+      viaGateName: gate.name,
+      gate: gate,
     );
   }
 

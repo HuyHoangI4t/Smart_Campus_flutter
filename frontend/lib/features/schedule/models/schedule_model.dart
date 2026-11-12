@@ -49,7 +49,8 @@ class ScheduleItem {
         n.contains('ONLINE') ||
         n.contains('GOOGLE MEET') ||
         n.contains('ZOOM') ||
-        n.contains('TEAMS');
+        n.contains('TEAMS') ||
+        n.contains('PM:');
   }
 
   String? get onlineMeetingUrl {
@@ -341,24 +342,31 @@ class ScheduleItem {
     final timeMatch = RegExp(r'(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})').firstMatch(str);
     if (timeMatch != null) {
       final s = int.parse(timeMatch.group(1)!) * 60 + int.parse(timeMatch.group(2)!);
-      final e = int.parse(timeMatch.group(3)!) * 60 + int.parse(timeMatch.group(4)!);
+      int e = int.parse(timeMatch.group(3)!) * 60 + int.parse(timeMatch.group(4)!);
+      if (e <= s) e = s + 120;
       return (start: s, end: e);
     }
     final rangeMatch = RegExp(r'(\d+)\s*[-–—]\s*(\d+)').firstMatch(str);
     if (rangeMatch != null) {
       final s = int.parse(rangeMatch.group(1)!);
       final e = int.parse(rangeMatch.group(2)!);
+      final startMin = _periodStart(s);
+      int endMin = _periodEnd(e);
+      if (endMin <= startMin) endMin = startMin + 120;
       return (
-        start: _periodStart(s),
-        end: _periodEnd(e),
+        start: startMin,
+        end: endMin,
       );
     }
     final singleMatch = RegExp(r'tiết\s*(\d+)', caseSensitive: false).firstMatch(str);
     if (singleMatch != null) {
       final p = int.parse(singleMatch.group(1)!);
+      final startMin = _periodStart(p);
+      int endMin = _periodEnd(p);
+      if (endMin <= startMin) endMin = startMin + 50;
       return (
-        start: _periodStart(p),
-        end: _periodEnd(p),
+        start: startMin,
+        end: endMin,
       );
     }
     return (start: 6 * 60 + 45, end: 10 * 60 + 30);
@@ -392,8 +400,14 @@ class ScheduleItem {
         return 18 * 60 + 25; // 18:25
       case 13:
         return 19 * 60 + 20; // 19:20
+      case 14:
+        return 20 * 60 + 15; // 20:15
+      case 15:
+        return 21 * 60 + 10; // 21:10
+      case 16:
+        return 22 * 60 + 5;  // 22:05
       default:
-        return p >= 6 ? 13 * 60 + 45 : 6 * 60 + 45;
+        return p >= 11 ? 17 * 60 + 30 : (p >= 6 ? 13 * 60 + 45 : 6 * 60 + 45);
     }
   }
 
@@ -425,8 +439,14 @@ class ScheduleItem {
         return 19 * 60 + 15;
       case 13:
         return 20 * 60 + 10;
+      case 14:
+        return 21 * 60 + 5;
+      case 15:
+        return 22 * 60;
+      case 16:
+        return 22 * 60 + 55;
       default:
-        return p >= 6 ? 16 * 60 + 30 : 10 * 60 + 30;
+        return p >= 11 ? 21 * 60 + 5 : (p >= 6 ? 16 * 60 + 30 : 10 * 60 + 30);
     }
   }
 

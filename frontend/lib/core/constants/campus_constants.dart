@@ -93,6 +93,8 @@ class CampusGate {
   final String shortName;
   final double lat;
   final double lng;
+  final LatLng? insidePoint;
+  final LatLng? outsidePoint;
 
   const CampusGate({
     required this.id,
@@ -100,9 +102,13 @@ class CampusGate {
     required this.shortName,
     required this.lat,
     required this.lng,
+    this.insidePoint,
+    this.outsidePoint,
   });
 
   LatLng get coordinate => LatLng(lat, lng);
+  LatLng get insideCoordinate => insidePoint ?? coordinate;
+  LatLng get outsideCoordinate => outsidePoint ?? coordinate;
 
   factory CampusGate.fromJson(Map<String, dynamic> json) {
     return CampusGate(
@@ -118,7 +124,16 @@ class CampusGate {
       lng: (json['lng'] is num)
           ? (json['lng'] as num).toDouble()
           : double.tryParse(json['lng']?.toString() ?? '0') ?? 0.0,
+      insidePoint: _parsePoint(json['insidePoint']),
+      outsidePoint: _parsePoint(json['outsidePoint']),
     );
+  }
+
+  static LatLng? _parsePoint(dynamic val) {
+    if (val is List && val.length >= 2 && val[0] is num && val[1] is num) {
+      return LatLng((val[0] as num).toDouble(), (val[1] as num).toDouble());
+    }
+    return null;
   }
 }
 
@@ -130,27 +145,51 @@ class CampusConstants {
   static const CampusGate defaultGate = CampusGate(
     id: 'front_gate',
     name: 'Cổng trước (Lê Duẩn)',
-    shortName: '(Lê Duẩn)',
+    shortName: 'Cổng trước',
     lat: 12.651536,
     lng: 108.023856,
+    insidePoint: LatLng(12.65144, 108.02395),
+    outsidePoint: LatLng(12.65154752, 108.02385583),
   );
 
   static const List<CampusGate> gates = [
     defaultGate,
     CampusGate(
-      id: 'back_gate',
-      name: 'Cổng sau (Y Wang)',
-      shortName: '(Y Wang)',
-      lat: 12.648372,
-      lng: 108.028044,
-    ),
-    CampusGate(
       id: 'hospital_gate',
       name: 'Cổng Bệnh viện (Lê Duẩn)',
-      shortName: 'Bệnh viện',
+      shortName: 'Cổng BV (Lê Duẩn)',
       lat: 12.650645,
       lng: 108.022990,
+      insidePoint: LatLng(12.65050, 108.02308),
+      outsidePoint: LatLng(12.650645, 108.02285),
     ),
+    CampusGate(
+      id: 'back_gate',
+      name: 'Cổng sau (Y Wang)',
+      shortName: 'Cổng sau',
+      lat: 12.648372,
+      lng: 108.028044,
+      insidePoint: LatLng(12.64850, 108.02798),
+      outsidePoint: LatLng(12.64837195, 108.02804429),
+    ),
+  ];
+
+  /// Tuyến đường trục giao thông chính bao quanh trường (Đường Lê Duẩn & Đường Y Wang)
+  static const List<LatLng> perimeterLeDuan = [
+    LatLng(12.64800, 108.02210),
+    LatLng(12.64936, 108.02271),
+    LatLng(12.650645, 108.022990), // Cổng Bệnh viện ĐH Tây Nguyên
+    LatLng(12.651536, 108.023856), // Cổng chính (Lê Duẩn)
+    LatLng(12.65267, 108.02494),
+    LatLng(12.65386, 108.02579),
+  ];
+
+  static const List<LatLng> perimeterYWang = [
+    LatLng(12.64650, 108.02650),
+    LatLng(12.64748, 108.02705),
+    LatLng(12.648372, 108.028044), // Cổng sau (Y Wang)
+    LatLng(12.64950, 108.02925),
+    LatLng(12.65013, 108.02963),
   ];
 
   static const List<CampusLocationItem> campusLocations = [

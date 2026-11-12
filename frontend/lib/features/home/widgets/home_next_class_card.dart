@@ -1,8 +1,8 @@
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/url_launcher_helper.dart';
 import '../../../core/widgets/wireframe_widgets.dart';
 import '../../schedule/models/schedule_model.dart';
 import '../../schedule/providers/schedule_provider.dart';
@@ -145,19 +145,19 @@ class HomeNextClassCard extends ConsumerWidget {
 
     // 3. Trạng thái có dữ liệu môn học thực tế
     Color indicatorColor;
-    if (nextClass.isOngoing) {
-      indicatorColor = const Color(0xFF10B981); // Green
-    } else if (nextClass.capsuleLabel.contains('HÔM NAY')) {
-      indicatorColor = const Color(0xFF8B5CF6); // Purple
+    if (nextClass.isOngoing || nextClass.stateType == NextClassState.ongoing || nextClass.capsuleLabel == 'ĐANG HỌC') {
+      indicatorColor = const Color(0xFF10B981); // Emerald Green: Đang học
+    } else if (nextClass.isUpcoming || nextClass.stateType == NextClassState.upcoming || nextClass.capsuleLabel == 'SẮP TỚI' || nextClass.capsuleLabel.contains('HÔM NAY')) {
+      indicatorColor = const Color(0xFFF59E0B); // Amber / Warm Orange: Sắp tới
     } else {
-      indicatorColor = const Color(0xFF38BDF8); // Sky blue
+      indicatorColor = const Color(0xFF38BDF8); // Sky blue: Ngày mai hoặc thứ gần nhất
     }
 
     final bool isOnline = item.isOnline;
     String roomDisplay = 'Khu giảng đường';
     if (isOnline) {
       if (item.onlineMeetingCode != null && item.onlineMeetingCode!.isNotEmpty) {
-        roomDisplay = 'Online • Google Meet (${item.onlineMeetingCode})';
+        roomDisplay = 'Online (${item.onlineMeetingCode})';
       } else if (item.room.isNotEmpty && item.room.toLowerCase() != 'online') {
         final cleanRoom = item.room.replaceFirst(RegExp(r'^online\s*[•\-–—:]?\s*', caseSensitive: false), '').trim();
         roomDisplay = cleanRoom.isNotEmpty ? 'Online • $cleanRoom' : 'Học trực tuyến';
@@ -175,9 +175,12 @@ class HomeNextClassCard extends ConsumerWidget {
     final lecturerDisplay = nextClass.lecturer.isNotEmpty
         ? nextClass.lecturer
         : 'Giảng viên bộ môn';
-    final statusLabel = nextClass.capsuleLabel.isNotEmpty
+    String statusLabel = nextClass.capsuleLabel.isNotEmpty
         ? nextClass.capsuleLabel
         : 'LỊCH HỌC';
+    if (statusLabel == 'HÔM NAY') {
+      statusLabel = nextClass.isOngoing ? 'ĐANG HỌC' : 'SẮP TỚI';
+    }
 
     return GestureDetector(
       onTap: () => ScheduleRoomDirectionModal.show(context, item: item),
@@ -219,9 +222,8 @@ class HomeNextClassCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Row 1: Status Capsule + Room
+                  // Row 1: Status Capsule + Online Badge + Countdown + Room
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -257,13 +259,64 @@ class HomeNextClassCard extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      Text(
-                        roomDisplay,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.88),
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
+                      if (isOnline) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.lightBlueAccent.withValues(alpha: 0.5),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.videocam_rounded, size: 11, color: Colors.lightBlueAccent),
+                              SizedBox(width: 4),
+                              Text(
+                                'ONLINE',
+                                style: TextStyle(
+                                  color: Colors.lightBlueAccent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (nextClass.countdownText.isNotEmpty && nextClass.countdownText != '--:--') ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            '• ${nextClass.countdownText}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.82),
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          roomDisplay,
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.88),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
                         ),
                       ),
                     ],
@@ -314,45 +367,50 @@ class HomeNextClassCard extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.14),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 12,
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.14),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 7),
-                          Text(
-                            lecturerDisplay,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.85),
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                lecturerDisplay,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () async {
                           if (isOnline) {
-                            final url = item.onlineMeetingUrl;
-                            if (url != null && url.isNotEmpty) {
-                              final uri = Uri.tryParse(url);
-                              if (uri != null && await canLaunchUrl(uri)) {
-                                await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                return;
-                              }
-                            }
+                            await AppUrlLauncher.openGoogleMeet(
+                              url: item.onlineMeetingUrl,
+                              code: item.onlineMeetingCode,
+                            );
+                            return;
                           }
                           if (context.mounted) {
                             ScheduleRoomDirectionModal.show(context, item: item);

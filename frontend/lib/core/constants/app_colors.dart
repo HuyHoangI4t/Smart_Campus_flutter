@@ -13,13 +13,14 @@ class AppColors {
   static const Color border = Color(0xFFE2E8F0); // Viền kẻ mảnh
   static const Color cardBorder = Color(0xFFE2E8F0); // Viền thẻ card
 
-  // Text Colors
-  static const Color textForeground = Color(0xFF0F172A); // Chữ đậm chính
-  static const Color text = Color(0xFF0F172A); // Chữ tiêu đề
-  static const Color textSecondary = Color(0xFF64748B); // Chữ phụ
-  static const Color textMuted = Color(0xFF64748B); // Chữ chú thích
-  static const Color textSubtle = Color(0xFF94A3B8); // Chữ mờ nhỏ
-  static const Color textLight = Color(0xFF93C5FD); // Chữ xanh sáng
+  // Text Colors (Chuẩn tương phản WCAG AA >= 4.5:1 trên nền trắng)
+  static const Color textForeground = Color(0xFF0F172A); // Chữ đậm chính (~16:1)
+  static const Color text = Color(0xFF0F172A); // Chữ tiêu đề (~16:1)
+  static const Color textSecondary = Color(0xFF64748B); // Chữ phụ (~4.76:1)
+  static const Color textMuted = Color(0xFF64748B); // Chữ chú thích (~4.76:1)
+  static const Color textSubtle = Color(0xFF64748B); // Chữ mờ nhỏ chuẩn WCAG AA (~4.76:1)
+  static const Color textLight = Color(0xFF93C5FD); // Chữ xanh sáng trên nền Navy (~6.9:1)
+  static const Color borderSubtle = Color(0xFF94A3B8); // Viền/icon mờ (không dùng cho văn bản)
 
   // Status & Semantic Colors
   static const Color success = Color(0xFF10B981); // Thành công / Đang học

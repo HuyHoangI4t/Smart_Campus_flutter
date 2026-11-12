@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_campus/core/utils/url_launcher_helper.dart';
 import 'package:smart_campus/features/schedule/models/schedule_model.dart';
 import 'package:smart_campus/features/schedule/utils/room_directions.dart';
 import 'package:smart_campus/features/schedule/widgets/schedule_card.dart';
@@ -64,6 +65,14 @@ void main() {
       expect(find.text('Chỉ đường tới phòng'), findsNothing);
       // Icon video phải xuất hiện
       expect(find.byIcon(Icons.videocam), findsOneWidget);
+    });
+
+    test('AppUrlLauncher.openGoogleMeet trả về false an toàn và sao chép mã khi không có ứng dụng', () async {
+      final res = await AppUrlLauncher.openGoogleMeet(
+        code: 'fve-nero-roo',
+      );
+      // Trên môi trường test không có app bên thứ ba, hàm không crash và sao chép vào bộ nhớ tạm
+      expect(res, isFalse);
     });
   });
 }

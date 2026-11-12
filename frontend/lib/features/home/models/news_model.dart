@@ -106,6 +106,9 @@ class NewsModel {
     return lower.contains('slideshow') ||
         lower.contains('slideshow2') ||
         lower.contains('unsplash.com') ||
+        lower.contains('images.jpg') ||
+        lower.contains('assets/images') ||
+        lower.contains('placeholder') ||
         lower.contains('sample') ||
         lower.contains('demo') ||
         lower.contains('mod_languages') ||

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/url_launcher_helper.dart';
 import '../models/schedule_model.dart';
 import '../models/room_direction_model.dart';
 
@@ -44,11 +44,11 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
     );
   }
 
-  Future<void> _handleOpenMeet(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null && await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  Future<void> _handleOpenMeet(String url, String? code) async {
+    await AppUrlLauncher.openGoogleMeet(
+      url: url,
+      code: code,
+    );
   }
 
   @override
@@ -106,14 +106,20 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                 ),
                 GestureDetector(
                   onTap: () => Navigator.of(context).pop(),
+                  behavior: HitTestBehavior.opaque,
                   child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF1F5F9),
-                      shape: BoxShape.circle,
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.close, size: 18, color: Color(0xFF64748B)),
                     ),
-                    child: const Icon(Icons.close, size: 18, color: Color(0xFF64748B)),
                   ),
                 ),
               ],
@@ -520,7 +526,7 @@ class ScheduleRoomDirectionModal extends StatelessWidget {
                 if (isOnline) ...[
                   if (meetingUrl != null && meetingUrl.isNotEmpty)
                     ElevatedButton.icon(
-                      onPressed: () => _handleOpenMeet(meetingUrl),
+                      onPressed: () => _handleOpenMeet(meetingUrl, meetingCode),
                       icon: const Icon(Icons.open_in_new, size: 18),
                       label: const Text(
                         'Tham gia Google Meet ngay',

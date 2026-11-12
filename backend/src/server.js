@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const dotenv = require('dotenv');
 const db = require('./config/db');
 const initializeTables = require('./config/initDb');
@@ -84,6 +85,12 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
 
+// [PERF] Nén dữ liệu HTTP Gzip/Deflate giảm tải 70-85% dung lượng truyền tải mạng
+app.use(compression({
+  threshold: 1024,
+  level: 6
+}));
+
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
@@ -130,6 +137,7 @@ setInterval(() => {
 const activityLogBatch = [];
 let activityFlushTimer = null;
 const MAX_ACTIVITY_QUEUE = 250;
+let lastSocketActivityEmit = 0;
 
 function flushActivityLogs() {
   if (activityLogBatch.length === 0) return;
@@ -137,7 +145,13 @@ function flushActivityLogs() {
   const values = batch.map(b => [b.action, b.mssv, b.ip]);
   db.query('INSERT INTO activity_logs (action, mssv, ip_address) VALUES ?', [values])
     .then(() => {
-      if (io) io.emit('activity_update');
+      // Giới hạn tần suất phát socket activity_update (tối đa 1 lần / 10s)
+      // tránh ép Admin Dashboard tải lại liên tục làm nghẽn CPU và DB
+      const now = Date.now();
+      if (io && now - lastSocketActivityEmit > 10000) {
+        lastSocketActivityEmit = now;
+        io.emit('activity_update');
+      }
     })
     .catch(() => {});
 }

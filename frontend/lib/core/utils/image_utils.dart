@@ -1,11 +1,22 @@
+import 'package:flutter/foundation.dart';
 import '../constants/api_endpoints.dart';
 
-/// Danh sách ảnh mẫu dự phòng cũ (đã loại bỏ để không hiển thị ảnh mẫu slideshow)
+/// Danh sách ảnh mẫu dự phòng cũ (đã loại bỏ hoàn toàn để không hiển thị ảnh mẫu slideshow)
 const List<String> campusFallbackImages = [];
 
-/// Chuyển đổi URL hình ảnh sang backend proxy (/api/news/image-proxy)
-/// để tránh lỗi 502 Bad Gateway và lỗi SSL tự ký của máy chủ TTN khi chạy trên thiết bị di động.
-/// Loại bỏ hoàn toàn các ảnh mẫu slideshow và unsplash để chỉ hiển thị ảnh thực tế của bài viết.
+/// Headers chuẩn giả lập trình duyệt để tải ảnh trực tiếp từ máy chủ TTN mà không bị 502 Bad Gateway
+const Map<String, String> ttnImageHeaders = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Referer': 'https://www.ttn.edu.vn/',
+  'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+};
+
+/// Chuẩn hóa URL hình ảnh bài viết:
+/// - Loại bỏ hoàn toàn các ảnh mẫu slideshow, banner, unsplash, demo
+/// - Trên Web: định tuyến qua backend proxy để vượt rào CORS trình duyệt
+/// - Trên Thiết bị di động (Android / iOS): giữ nguyên URL trực tiếp của Trường Đại học Tây Nguyên
+///   kết hợp gửi kèm User-Agent & Referer header trong CachedNetworkImage để tải ảnh thực tế trực tiếp
+///   từ web trường (hoạt động độc lập cả khi kết nối Wi-Fi, 4G mà không phụ thuộc localhost).
 String getNewsImageUrl(String? imageUrl, [int fallbackIndex = 0]) {
   if (imageUrl == null || imageUrl.trim().isEmpty) {
     return '';
@@ -13,46 +24,68 @@ String getNewsImageUrl(String? imageUrl, [int fallbackIndex = 0]) {
 
   final trimmed = imageUrl.trim();
 
-  // Bỏ toàn bộ ảnh mẫu slideshow và ảnh unsplash
+  // Bỏ toàn bộ ảnh mẫu slideshow, unsplash, demo, banner, placeholder, images.jpg
   final lower = trimmed.toLowerCase();
   if (lower.contains('slideshow') ||
       lower.contains('slideshow2') ||
       lower.contains('unsplash.com') ||
+      lower.contains('images.jpg') ||
+      lower.contains('assets/images') ||
       lower.contains('sample') ||
-      lower.contains('demo')) {
+      lower.contains('placeholder') ||
+      lower.contains('demo') ||
+      lower.contains('mod_languages') ||
+      lower.contains('/banner/') ||
+      lower.contains('file_icons')) {
     return '';
   }
 
-  // Nếu đã là link proxy, chuẩn hóa lại host theo ApiEndpoints.activeBaseUrl hiện tại
-  // để đảm bảo khi chuyển đổi giữa USB cắm dây và Wi-Fi ảnh luôn tải được
-  if (trimmed.contains('/image-proxy')) {
-    final idx = trimmed.indexOf('?url=');
+  // Nếu URL đang bọc trong image-proxy thì trích xuất URL gốc
+  String cleanUrl = trimmed;
+  if (cleanUrl.contains('/image-proxy')) {
+    final idx = cleanUrl.indexOf('?url=');
     if (idx != -1) {
-      final rawTarget = trimmed.substring(idx + 5);
-      final decoded = Uri.decodeComponent(rawTarget);
-      final decodedLower = decoded.toLowerCase();
-      if (decodedLower.contains('slideshow') ||
-          decodedLower.contains('slideshow2') ||
-          decodedLower.contains('unsplash.com') ||
-          decodedLower.contains('sample') ||
-          decodedLower.contains('demo')) {
-        return '';
-      }
-      return '${ApiEndpoints.activeBaseUrl}${ApiEndpoints.newsImageProxy}?url=${Uri.encodeComponent(decoded)}';
+      final rawTarget = cleanUrl.substring(idx + 5);
+      cleanUrl = Uri.decodeComponent(rawTarget);
     }
-    return trimmed;
   }
 
-  // Nếu là ảnh từ ttn.edu.vn hoặc đường dẫn tương đối từ ttn, điều hướng qua proxy của backend
-  if (trimmed.contains('ttn.edu.vn') || trimmed.startsWith('/images/') || !trimmed.startsWith('http')) {
-    String rawUrl = trimmed;
-    if (!rawUrl.startsWith('http')) {
-      rawUrl = 'https://www.ttn.edu.vn${rawUrl.startsWith('/') ? '' : '/'}$rawUrl';
-    }
-    return '${ApiEndpoints.activeBaseUrl}${ApiEndpoints.newsImageProxy}?url=${Uri.encodeComponent(rawUrl)}';
+  // Chuẩn hóa đường dẫn tương đối thành URL đầy đủ của ttn.edu.vn
+  if (cleanUrl.startsWith('/images/')) {
+    cleanUrl = 'https://www.ttn.edu.vn$cleanUrl';
+  } else if (!cleanUrl.startsWith('http')) {
+    cleanUrl = 'https://www.ttn.edu.vn/${cleanUrl.replaceFirst(RegExp(r'^/'), '')}';
   }
 
-  return trimmed;
+  // Kiểm tra lại sau khi giải mã để đảm bảo không dính ảnh mẫu
+  final cleanLower = cleanUrl.toLowerCase();
+  if (cleanLower.contains('slideshow') ||
+      cleanLower.contains('slideshow2') ||
+      cleanLower.contains('unsplash.com') ||
+      cleanLower.contains('images.jpg') ||
+      cleanLower.contains('assets/images') ||
+      cleanLower.contains('sample') ||
+      cleanLower.contains('placeholder') ||
+      cleanLower.contains('demo') ||
+      cleanLower.contains('mod_languages') ||
+      cleanLower.contains('/banner/')) {
+    return '';
+  }
+
+  // Trên Web: Cần đi qua proxy backend để tránh lỗi CORS
+  if (kIsWeb) {
+    return '${ApiEndpoints.activeBaseUrl}${ApiEndpoints.newsImageProxy}?url=${Uri.encodeComponent(cleanUrl)}';
+  }
+
+  // Trên Native Mobile (Android/iOS): Trả về link trực tiếp
+  return cleanUrl;
+}
+
+/// Chuyển đổi URL hình ảnh sang backend image proxy để tải dự phòng khi kết nối trực tiếp thất bại
+String getProxyImageUrl(String cleanUrl) {
+  if (cleanUrl.isEmpty) return '';
+  if (cleanUrl.contains(ApiEndpoints.newsImageProxy)) return cleanUrl;
+  return '${ApiEndpoints.activeBaseUrl}${ApiEndpoints.newsImageProxy}?url=${Uri.encodeComponent(cleanUrl)}';
 }
 
 

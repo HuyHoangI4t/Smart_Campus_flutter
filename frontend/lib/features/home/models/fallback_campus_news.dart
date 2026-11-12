@@ -58,6 +58,28 @@ const List<NewsModel> defaultFallbackAnnouncements = [
 /// Danh sách Tin tức & Hoạt động Trường Đại học Tây Nguyên với ảnh thực tế đầu tiên của bài viết
 const List<NewsModel> defaultFallbackNews = [
   NewsModel(
+    id: 'news-9301',
+    title: '23 đơn vị hưởng ứng Cuộc thi “Phòng làm việc năng động, sáng tạo” năm 2026 tại Trường Đại học Tây Nguyên',
+    summary: 'Nhằm tạo khí thế thi đua sôi nổi, xây dựng môi trường làm việc văn minh, hiện đại, Trường Đại học Tây Nguyên phát động Cuộc thi “Phòng làm việc năng động, sáng tạo”.',
+    content: 'Nhằm tạo khí thế thi đua sôi nổi, xây dựng môi trường làm việc văn minh, hiện đại, Trường Đại học Tây Nguyên phát động Cuộc thi “Phòng làm việc năng động, sáng tạo” năm 2026 với sự tham gia nhiệt tình của 23 đơn vị trực thuộc Nhà trường.',
+    category: 'Tin hoạt động',
+    author: 'Ban Biên tập TTN',
+    publishedAt: '11/11/2026',
+    imageUrl: 'https://www.ttn.edu.vn/images/2026tintuc/1011112601.jpg',
+    link: 'https://www.ttn.edu.vn/index.php/mthongbao/tintuc/7737-1011112601',
+  ),
+  NewsModel(
+    id: 'news-8531',
+    title: 'Trường Đại Học Tây Nguyên – 49 năm xây dựng và phát triển: giữ vững truyền thống, khẳng định vị thế, kiến tạo tương lai',
+    summary: 'Trải qua 49 năm xây dựng và phát triển, Trường Đại học Tây Nguyên không ngừng lớn mạnh về mọi mặt, khẳng định vị thế là trung tâm đào tạo, NCKH hàng đầu vùng Tây Nguyên.',
+    content: 'Trải qua 49 năm xây dựng và phát triển, Trường Đại học Tây Nguyên không ngừng lớn mạnh về mọi mặt, khẳng định vị thế là trung tâm đào tạo, nghiên cứu khoa học và chuyển giao công nghệ hàng đầu vùng Tây Nguyên.',
+    category: 'Tin hoạt động',
+    author: 'Ban Biên tập TTN',
+    publishedAt: '09/11/2026',
+    imageUrl: 'https://www.ttn.edu.vn/images/2026tintuc/1009112601.png',
+    link: 'https://www.ttn.edu.vn/index.php/mthongbao/tintuc/7731-1009112601',
+  ),
+  NewsModel(
     id: 'news-8390',
     title: 'Tổ chức Lễ Ký Biên bản hợp tác (MOU) với Công ty Cổ phần Công nghệ sinh học R.E.P',
     summary: 'Chiều ngày 5/11, tại Phòng họp 2.3, Trường Đại học Tây Nguyên tổ chức Lễ ký kết Biên bản ghi nhớ hợp tác (MOU) với Công ty Cổ phần Công nghệ sinh học R.E.P.',

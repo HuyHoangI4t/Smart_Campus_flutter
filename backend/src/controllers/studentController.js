@@ -427,7 +427,7 @@ exports.getSchedule = async (req, res) => {
   if (mssv && !isGuestOrEmail(mssv)) {
     try {
       const [allRows] = await db.query(
-        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc, created_at FROM student_schedules WHERE (mssv = ? OR (mssv = "guest" AND is_custom = 1)) ORDER BY id ASC',
+        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc, created_at FROM student_schedules WHERE mssv = ? ORDER BY id ASC',
         [mssv]
       );
       if (allRows && allRows.length > 0) {
@@ -446,27 +446,36 @@ exports.getSchedule = async (req, res) => {
   }
 
   // 1.1 Fast-Path siêu tốc (1ms):
-  // - Nếu không yêu cầu ép reload và cache còn hạn (dưới 24h)
-  // - HOẶC nếu người dùng vuốt reload nhưng vừa đồng bộ trong vòng 2 phút trước (tránh spam web trường)
-  if (dbSchedules.length > 0 && ((!forceRefresh && isSchedFresh) || (forceRefresh && lastSyncAgeMs < 2 * 60 * 1000))) {
+  // - Nếu không yêu cầu ép reload và cache còn hạn (dưới 2h)
+  // - HOẶC nếu người dùng vuốt reload nhưng vừa đồng bộ trong vòng 10 giây trước (chống spam vuốt liên tục)
+  const RELOAD_DEBOUNCE_MS = 10 * 1000;
+  if (dbSchedules.length > 0 && ((!forceRefresh && isSchedFresh) || (forceRefresh && lastSyncAgeMs < RELOAD_DEBOUNCE_MS))) {
+    // Cơ chế Stale-While-Revalidate: Nếu dữ liệu DB đã quá 30 phút mà sinh viên mở app,
+    // trả về ngay cache DB siêu tốc (1ms) và kích hoạt cào ngầm để cập nhật dữ liệu mới nhất
+    if (!forceRefresh && lastSyncAgeMs > 30 * 60 * 1000 && mssv && !isGuestOrEmail(mssv)) {
+      studentSyncService.syncScheduleForStudent(mssv, studentDk).catch(err => {
+        console.warn('Background syncScheduleForStudent failed:', err.message);
+      });
+    }
+
     const handled = formatDbSchedulesResponse(dbSchedules, customItems, req, res, mssv, true, today, isSunday, requestedWeek, requestedWeekOffset, requestedWeekIndex);
     if (handled) return;
   }
 
-  // 2. Nếu DB chưa có hoặc cache quá 2 phút và người dùng vuốt reload:
-  // Giới hạn thời gian chờ crawler web trường tối đa 2500ms nếu đã có sẵn dữ liệu trong DB
+  // 2. Nếu DB chưa có hoặc cache quá hạn hoặc người dùng vuốt reload:
   let scheduleSyncSuccess = false;
   if (mssv && !isGuestOrEmail(mssv)) {
     let timerId = null;
     try {
       const syncPromise = studentSyncService.syncScheduleForStudent(mssv, studentDk);
+      const timeoutMs = forceRefresh ? 15000 : 5000;
       const timeoutPromise = new Promise((_, reject) => {
-        timerId = setTimeout(() => reject(new Error('TTN Crawler timeout 15000ms')), 15000);
+        timerId = setTimeout(() => reject(new Error(`TTN Crawler timeout ${timeoutMs}ms`)), timeoutMs);
       });
 
       const syncRes = (dbSchedules.length > 0 && !forceRefresh)
         ? await Promise.race([syncPromise, timeoutPromise])
-        : await syncPromise;
+        : await Promise.race([syncPromise, timeoutPromise]);
 
       if (syncRes && syncRes.success) {
         scheduleSyncSuccess = true;
@@ -482,7 +491,7 @@ exports.getSchedule = async (req, res) => {
   if (mssv && !isGuestOrEmail(mssv)) {
     try {
       const [newRows] = await db.query(
-        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc FROM student_schedules WHERE (mssv = ? OR (mssv = "guest" AND is_custom = 1)) ORDER BY id ASC',
+        'SELECT id, mssv, thu, ten_hp, tiet, phong, giang_vien, hoc_ky, is_custom, ghi_chu, loai_lich, week_range, ngay_hoc FROM student_schedules WHERE mssv = ? ORDER BY id ASC',
         [mssv]
       );
       if (newRows && newRows.length > 0) {

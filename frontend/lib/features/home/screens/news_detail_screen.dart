@@ -21,6 +21,9 @@ class NewsDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
+  // [PERF] In-memory cache lưu trữ chi tiết bài viết (0ms khi xem lại)
+  static final Map<String, Map<String, dynamic>> _memoryDetailCache = {};
+
   bool _isLoadingDetail = false;
   bool _hasLoadError = false;
   String? _fetchedContent;
@@ -70,8 +73,40 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
 
     final item = providedItem ?? widget.initialArticle ?? _findArticle(allArticles, targetIdStr);
 
+    // [FAST RENDER] Hiển thị ngay lập tức nội dung có sẵn mà không phải chờ đợi mạng (0ms)
+    if (_fetchedContent == null && item.content != null && item.content!.isNotEmpty) {
+      _fetchedContent = item.content;
+    }
+    if (_fetchedAttachments == null && item.attachments.isNotEmpty) {
+      _fetchedAttachments = item.attachments;
+    }
+    if (_fetchedBlocks == null && item.contentBlocks.isNotEmpty) {
+      _fetchedBlocks = item.contentBlocks;
+    }
+
     if (item.link == null || item.link!.isEmpty || !item.link!.startsWith('http')) {
       return;
+    }
+
+    // 1. Kiểm tra RAM Cache ứng dụng (0ms khi xem lại bài viết)
+    if (!force && _memoryDetailCache.containsKey(item.link)) {
+      final cached = _memoryDetailCache[item.link]!;
+      final cachedImages = cached['images'] as List<String>?;
+      final cachedBlocks = cached['blocks'] as List<ArticleContentBlock>?;
+      // Chỉ dùng cache nếu đã có đầy đủ danh sách ảnh và khối nội dung
+      if (cachedBlocks != null && cachedBlocks.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _fetchedContent = cached['content'] as String?;
+            _fetchedAttachments = cached['attachments'] as List<NewsAttachment>?;
+            _fetchedImages = cachedImages ?? _fetchedImages;
+            _fetchedBlocks = cachedBlocks;
+            _isLoadingDetail = false;
+            _hasLoadError = false;
+          });
+        }
+        return;
+      }
     }
 
     // Tránh fetch lặp lại cùng một link trừ khi force refresh
@@ -108,6 +143,13 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
               .whereType<Map>()
               .map((b) => ArticleContentBlock.fromJson(Map<String, dynamic>.from(b)))
               .toList();
+
+          _memoryDetailCache[item.link!] = {
+            'content': fullContent.isNotEmpty ? fullContent : _fetchedContent,
+            'attachments': attachments.isNotEmpty ? attachments : _fetchedAttachments,
+            'images': images.isNotEmpty ? images : _fetchedImages,
+            'blocks': blocks.isNotEmpty ? blocks : _fetchedBlocks,
+          };
 
           setState(() {
             if (fullContent.isNotEmpty) _fetchedContent = fullContent;
@@ -440,6 +482,58 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                       ..._buildContentBlocks(resolvedBlocks, item.numericIndex)
                     else
                       ..._buildParagraphs(resolvedContent),
+
+                    // Thư viện tất cả hình ảnh trong bài viết (nếu có ảnh chưa hiển thị trong các khối nội dung)
+                    () {
+                      final blockImageUrls = resolvedBlocks.where((b) => b.type == 'image').map((b) => b.url).toSet();
+                      final remainingImages = rawImages.where((url) => !blockImageUrls.contains(url)).toList();
+                      if (remainingImages.isEmpty) return const SizedBox.shrink();
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.photo_library_outlined, color: Color(0xFF2563EB), size: 18),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Hình ảnh trong bài viết (${remainingImages.length})',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          ...remainingImages.map((imgUrl) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: GestureDetector(
+                              onTap: () => _showFullScreenImage(context, imgUrl, null),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: NewsCardImage(
+                                  imageUrl: imgUrl,
+                                  fallbackIndex: item.numericIndex,
+                                  width: double.infinity,
+                                  fit: BoxFit.fitWidth,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          )),
+                        ],
+                      );
+                    }(),
 
                     // Attachments Section
                     if (resolvedAttachments.isNotEmpty) ...[

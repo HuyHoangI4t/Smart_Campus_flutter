@@ -80,15 +80,32 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
-
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <!-- Required to query activities and apps for deep linking (Google Meet, Web, Phone call SOS) -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Hỗ trợ mở link web và deep links (Google Meet, Chrome, Browser) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="meet" />
+        </intent>
+        <!-- Hỗ trợ gọi điện khẩn cấp SOS -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <!-- Nhận diện ứng dụng Google Meet (Gói Meet chuẩn và gói Meet chuyển đổi từ Duo) -->
+        <package android:name="com.google.android.apps.meetings" />
+        <package android:name="com.google.android.apps.tachyon" />
     </queries>
 </manifest>

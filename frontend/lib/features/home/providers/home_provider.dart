@@ -8,9 +8,18 @@ import '../../schedule/providers/schedule_provider.dart';
 import '../models/fallback_campus_news.dart';
 import '../models/news_model.dart';
 
+enum NextClassState {
+  ongoing, // 1. Đang học
+  upcoming, // 2. Sắp tới
+  nextDay, // 3. Ngày mai hoặc thứ gần nhất
+  none, // Chưa có lịch
+}
+
 class NextClassInfo {
   final ScheduleItem? item;
   final bool isOngoing;
+  final bool isUpcoming;
+  final NextClassState stateType;
   final String statusText;
   final String countdownText;
   final String capsuleLabel;
@@ -18,9 +27,11 @@ class NextClassInfo {
   const NextClassInfo({
     this.item,
     this.isOngoing = false,
+    this.isUpcoming = false,
+    this.stateType = NextClassState.none,
     this.statusText = 'Không có tiết học sắp tới',
     this.countdownText = '--:--',
-    this.capsuleLabel = 'NGÀY MAI (THỨ HAI)',
+    this.capsuleLabel = 'CHƯA CÓ LỊCH HỌC',
   });
 
   String get room => item?.room ?? '';
@@ -131,10 +142,12 @@ class HomeNotifier extends Notifier<HomeState> {
 
         final announcements = rawAnn
             .whereType<Map>()
+            .where((item) => !_isFallbackItem(Map<String, dynamic>.from(item)))
             .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
             .toList();
         final news = rawNews
             .whereType<Map>()
+            .where((item) => !_isFallbackItem(Map<String, dynamic>.from(item)))
             .map((item) => NewsModel.fromJson(Map<String, dynamic>.from(item)))
             .toList();
 
@@ -377,7 +390,8 @@ final nextClassProvider = Provider<NextClassInfo>((ref) {
     final item = scheduleState.nextClassItem!;
     final isForToday = item.dayNum == currentDayNum &&
         !scheduleState.nextClassLabel.contains('NGÀY MAI') &&
-        !scheduleState.nextClassLabel.contains('TUẦN');
+        !scheduleState.nextClassLabel.contains('TUẦN') &&
+        !scheduleState.nextClassLabel.startsWith('THỨ');
 
     if (isForToday) {
       if (currentTimeMinutes >= item.startMinutes && currentTimeMinutes < item.endMinutes) {
@@ -385,9 +399,11 @@ final nextClassProvider = Provider<NextClassInfo>((ref) {
         return NextClassInfo(
           item: item,
           isOngoing: true,
+          isUpcoming: false,
+          stateType: NextClassState.ongoing,
           statusText: 'Đang diễn ra',
           countdownText: 'Còn $remaining phút',
-          capsuleLabel: 'HÔM NAY',
+          capsuleLabel: 'ĐANG HỌC',
         );
       } else if (currentTimeMinutes < item.startMinutes) {
         final diff = item.startMinutes - currentTimeMinutes;
@@ -397,20 +413,49 @@ final nextClassProvider = Provider<NextClassInfo>((ref) {
         return NextClassInfo(
           item: item,
           isOngoing: false,
+          isUpcoming: true,
+          stateType: NextClassState.upcoming,
           statusText: 'Sắp diễn ra',
           countdownText: countdownStr,
-          capsuleLabel: 'HÔM NAY',
+          capsuleLabel: 'SẮP TỚI',
         );
       }
       // Nếu đã qua giờ học của tiết này (currentTimeMinutes >= item.endMinutes),
-      // rơi xuống bước 2 để tìm tiết tiếp theo của hôm nay hoặc các ngày kế tiếp!
+      // rơi xuống bước 2 bên dưới để tìm tiết tiếp theo của hôm nay hoặc các ngày kế tiếp!
     } else {
+      // Backend đã chỉ định lớp học tiếp theo (NGÀY MAI hoặc THỨ GẦN NHẤT)
+      String label = scheduleState.nextClassLabel.trim();
+      if (scheduleState.nextClassIsOngoing || label == 'ĐANG HỌC' || label.contains('ĐANG TRONG GIỜ')) {
+        label = 'ĐANG HỌC';
+      } else if (label == 'SẮP TỚI' || label == 'LỚP HỌC KẾ TIẾP') {
+        label = 'SẮP TỚI';
+      } else if (label.isEmpty || label == 'HÔM NAY' || label == 'NGÀY MAI' || label.contains('NGÀY MAI')) {
+        label = 'NGÀY MAI';
+      } else if (label.startsWith('THỨ') || label == 'CN') {
+        final parts = label.split(' ');
+        label = parts.length > 1 ? '${parts[0]} ${parts[1]}'.toUpperCase() : label.toUpperCase();
+      } else {
+        label = 'NGÀY MAI';
+      }
+
+      final bool isOngoing = label == 'ĐANG HỌC';
+      final bool isUpcoming = label == 'SẮP TỚI';
+      final NextClassState stateType = isOngoing
+          ? NextClassState.ongoing
+          : (isUpcoming ? NextClassState.upcoming : NextClassState.nextDay);
+
+      final String countdown = stateType == NextClassState.nextDay
+          ? (label == 'NGÀY MAI' ? 'Ngày mai • ${item.startTime}' : '$label • ${item.startTime}')
+          : scheduleState.nextClassCountdown;
+
       return NextClassInfo(
         item: item,
-        isOngoing: scheduleState.nextClassIsOngoing,
+        isOngoing: isOngoing,
+        isUpcoming: isUpcoming,
+        stateType: stateType,
         statusText: scheduleState.nextClassStatus,
-        countdownText: scheduleState.nextClassCountdown,
-        capsuleLabel: scheduleState.nextClassLabel,
+        countdownText: countdown,
+        capsuleLabel: label,
       );
     }
   }
@@ -430,16 +475,20 @@ final nextClassProvider = Provider<NextClassInfo>((ref) {
   todayClasses.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
 
   for (final cls in todayClasses) {
+    // Trạng thái 1: ĐANG HỌC
     if (currentTimeMinutes >= cls.startMinutes && currentTimeMinutes < cls.endMinutes) {
       final remaining = cls.endMinutes - currentTimeMinutes;
       return NextClassInfo(
         item: cls,
         isOngoing: true,
+        isUpcoming: false,
+        stateType: NextClassState.ongoing,
         statusText: 'Đang diễn ra',
         countdownText: 'Còn $remaining phút',
-        capsuleLabel: 'HÔM NAY',
+        capsuleLabel: 'ĐANG HỌC',
       );
     }
+    // Trạng thái 2: SẮP TỚI
     if (currentTimeMinutes < cls.startMinutes) {
       final diff = cls.startMinutes - currentTimeMinutes;
       final hours = diff ~/ 60;
@@ -448,28 +497,36 @@ final nextClassProvider = Provider<NextClassInfo>((ref) {
       return NextClassInfo(
         item: cls,
         isOngoing: false,
+        isUpcoming: true,
+        stateType: NextClassState.upcoming,
         statusText: 'Sắp diễn ra',
         countdownText: countdownStr,
-        capsuleLabel: 'HÔM NAY',
+        capsuleLabel: 'SẮP TỚI',
       );
     }
   }
 
-  // 2.2. Nếu hôm nay đã hết hoặc không có lớp, tìm lớp gần nhất trong các ngày CÒN LẠI của tuần
-  // Chú ý: CHỈ tìm tịnh tiến về phía trước (không vòng lặp modulo 7 để tránh lấy nhầm lịch quá khứ của tuần này)
-  for (int dayOffset = 1; (currentWeekday + dayOffset) <= 7; dayOffset++) {
-    int checkWeekday = currentWeekday + dayOffset;
+  // 2.2. Trạng thái 3: NGÀY MAI HOẶC NGÀY/THỨ GẦN NHẤT
+  // Nếu hôm nay đã hết hoặc không có lớp, tìm lớp gần nhất trong các ngày tiếp theo
+  for (int dayOffset = 1; dayOffset <= 7; dayOffset++) {
+    int checkWeekday = ((currentWeekday - 1 + dayOffset) % 7) + 1;
     int checkDayNum = _weekdayToDayNum(checkWeekday);
     final nextDayClasses = items.where((e) => e.dayNum == checkDayNum).toList();
     if (nextDayClasses.isNotEmpty) {
       nextDayClasses.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
       final nextClass = nextDayClasses.first;
-      String capsule = dayOffset == 1 ? 'NGÀY MAI' : _weekdayToString(checkWeekday).toUpperCase();
+      final isTomorrow = dayOffset == 1;
+      final String capsule = isTomorrow ? 'NGÀY MAI' : _weekdayToString(checkWeekday).toUpperCase();
+      final String countdown = isTomorrow
+          ? 'Ngày mai • ${nextClass.startTime}'
+          : '${_weekdayToString(checkWeekday)} • ${nextClass.startTime}';
       return NextClassInfo(
         item: nextClass,
         isOngoing: false,
-        statusText: 'Lớp học tiếp theo',
-        countdownText: '${nextClass.startTime} • ${_weekdayToString(checkWeekday)}',
+        isUpcoming: false,
+        stateType: NextClassState.nextDay,
+        statusText: isTomorrow ? 'Lớp học ngày mai' : 'Lớp học ${_weekdayToString(checkWeekday)}',
+        countdownText: countdown,
         capsuleLabel: capsule,
       );
     }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/url_launcher_helper.dart';
 import '../../../core/widgets/nav_header.dart';
 import '../providers/sos_provider.dart';
 
@@ -25,6 +25,15 @@ class _SosScreenState extends ConsumerState<SosScreen> {
     'Chập điện / Hỏa hoạn',
     'Kẹt thang máy',
     'Khác',
+  ];
+
+  final List<String> _quickLocations = const [
+    'Giảng đường',
+    'Nhà học 7',
+    'Thư viện',
+    'Ký túc xá',
+    'Nhà xe SV',
+    'Sân bóng',
   ];
 
   final List<Map<String, String>> _hotlines = const [
@@ -59,27 +68,22 @@ class _SosScreenState extends ConsumerState<SosScreen> {
 
   Future<void> _handleTriggerSos() async {
     final locationText = _locationController.text.trim();
-    if (locationText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng nhập vị trí hiện tại của bạn để đội an ninh tiếp cận nhanh nhất.'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
+    final effectiveLocation = locationText.isNotEmpty
+        ? locationText
+        : 'Khuôn viên trường (Chưa định vị chi tiết)';
 
     await ref.read(sosProvider.notifier).sendSosAlert(
-          location: locationText,
+          location: effectiveLocation,
           incidentType: _selectedIncidentType,
           description: _noteController.text.trim(),
         );
 
     if (!mounted) return;
-    _showSuccessDialog();
+    _showSuccessDialog(effectiveLocation);
   }
 
-  void _showSuccessDialog() {
+  void _showSuccessDialog([String? locationUsed]) {
+    final loc = locationUsed ?? _locationController.text.trim();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -116,7 +120,7 @@ class _SosScreenState extends ConsumerState<SosScreen> {
                 children: [
                   Text('Sự cố: $_selectedIncidentType', style: const TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text('Vị trí: ${_locationController.text.trim()}'),
+                  Text('Vị trí: $loc'),
                 ],
               ),
             ),
@@ -138,10 +142,7 @@ class _SosScreenState extends ConsumerState<SosScreen> {
   }
 
   Future<void> _makePhoneCall(String phoneNumber) async {
-    final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
-    if (await canLaunchUrl(launchUri)) {
-      await launchUrl(launchUri);
-    }
+    await AppUrlLauncher.makePhoneCall(phoneNumber);
   }
 
   @override
@@ -237,7 +238,7 @@ class _SosScreenState extends ConsumerState<SosScreen> {
                       const SizedBox(height: 16),
 
                       const Text(
-                        'VỊ TRÍ HIỆN TẠI CỦA BẠN *',
+                        'VỊ TRÍ HIỆN TẠI CỦA BẠN',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
@@ -246,11 +247,55 @@ class _SosScreenState extends ConsumerState<SosScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
+                      // Quick-select location chips for rapid single-tap input during emergencies
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: _quickLocations.map((loc) {
+                          final isSelected = _locationController.text == loc;
+                          return InkWell(
+                            onTap: () {
+                              setState(() {
+                                _locationController.text = loc;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.primary.withValues(alpha: 0.12)
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Text(
+                                loc,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                  color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 8),
                       TextField(
                         controller: _locationController,
-                        decoration: const InputDecoration(
-                          hintText: 'Ví dụ: Tầng 2, Nhà học số 7, Giảng đường A1...',
-                          prefixIcon: Icon(Icons.location_on_outlined, color: AppColors.primary),
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'Hoặc tự nhập: Tầng 2 Nhà 7, Giảng đường A1...',
+                          prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.primary),
+                          suffixIcon: _locationController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () => setState(() => _locationController.clear()),
+                                )
+                              : null,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -369,20 +414,26 @@ class _SosScreenState extends ConsumerState<SosScreen> {
                               ],
                             ),
                           ),
-                          GestureDetector(
-                            onTap: () => _makePhoneCall(hotline['phone']!),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: AppColors.danger,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                'Gọi ngay',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _makePhoneCall(hotline['phone']!),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                constraints: const BoxConstraints(minHeight: 44, minWidth: 80),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.danger,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  'Gọi ngay',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
                             ),

@@ -25,6 +25,7 @@ class MapState {
   final String searchQuery;
   final CampusLocationItem? selectedLocation;
   final CampusGate selectedGate;
+  final CampusGate? userForcedGate;
   final DijkstraResult? activeRoute;
   final bool isNavigating;
   final double compassHeading;
@@ -42,6 +43,7 @@ class MapState {
     this.searchQuery = '',
     this.selectedLocation,
     this.selectedGate = CampusConstants.defaultGate,
+    this.userForcedGate,
     this.activeRoute,
     this.isNavigating = false,
     this.compassHeading = 0.0,
@@ -137,6 +139,7 @@ class MapState {
     String? searchQuery,
     Object? selectedLocation = const _Sentinel(),
     CampusGate? selectedGate,
+    Object? userForcedGate = const _Sentinel(),
     Object? activeRoute = const _Sentinel(),
     bool? isNavigating,
     double? compassHeading,
@@ -156,6 +159,9 @@ class MapState {
           ? this.selectedLocation
           : selectedLocation as CampusLocationItem?,
       selectedGate: selectedGate ?? this.selectedGate,
+      userForcedGate: userForcedGate is _Sentinel
+          ? this.userForcedGate
+          : userForcedGate as CampusGate?,
       activeRoute: activeRoute is _Sentinel
           ? this.activeRoute
           : activeRoute as DijkstraResult?,
@@ -230,6 +236,7 @@ class MapNotifier extends Notifier<MapState> {
       isMapActive: false,
       isNavigating: false,
       activeRoute: null,
+      userForcedGate: null,
       selectedLocation: null,
       searchQuery: '',
       selectedCategory: 'Tat ca',
@@ -283,16 +290,19 @@ class MapNotifier extends Notifier<MapState> {
 
   void _startCompassListening() {
     _compassSmoother = CompassSmoother(
-      minDegreeChange: 8.0,
-      throttleMs: 450,
+      minDegreeChange: 15.0,
+      throttleMs: 800,
       onSmoothedHeading: (heading) {
-        state = state.copyWith(compassHeading: heading);
+        // [PERF] Chỉ phát state la bàn khi đang dẫn đường để tránh kích hoạt re-render liên tục
+        if (state.isNavigating && (state.compassHeading - heading).abs() > 10.0) {
+          state = state.copyWith(compassHeading: heading);
+        }
       },
     );
 
     try {
       _compassSub = FlutterCompass.events?.listen((event) {
-        if (event.heading != null) {
+        if (event.heading != null && state.isNavigating) {
           _compassSmoother?.update(event.heading!);
         }
       });
@@ -310,7 +320,7 @@ class MapNotifier extends Notifier<MapState> {
         return;
       }
 
-      // 1. Lấy ngay vị trí ban đầu (không cần đợi người dùng di chuyển 3 mét)
+      // 1. Lấy ngay vị trí ban đầu (không cần đợi người dùng di chuyển 5 mét)
       try {
         final initialPos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
@@ -322,11 +332,11 @@ class MapNotifier extends Notifier<MapState> {
         }
       } catch (_) {}
 
-      // 2. Lắng nghe vị trí di chuyển liên tục
+      // 2. Lắng nghe vị trí di chuyển liên tục với bộ lọc 5m loại bỏ nhiễu GPS
       _positionSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 3,
+          distanceFilter: 5,
         ),
       ).listen(
         (pos) {
@@ -351,56 +361,8 @@ class MapNotifier extends Notifier<MapState> {
     }
   }
 
-  /// Tinh toan tuyen duong (noi bo hoac hybrid duong pho OSRM ngoai truong)
-  Future<DijkstraResult> _computeRoute({
-    required LatLng start,
-    required LatLng destination,
-    bool isFromGps = false,
-  }) async {
-    if (!isFromGps || CampusDijkstraRouter.isInsideCampus(start)) {
-      return _router.findShortestRoute(start, destination);
-    }
-
-    final nearestGate = CampusDijkstraRouter.findNearestGate(start, state.gates);
-    final gateCoord = nearestGate.coordinate;
-
-    final directDist = calculateHaversineDistance(
-      start.latitude, start.longitude, gateCoord.latitude, gateCoord.longitude,
-    );
-
-    // Khi ở ngoài trường quá xa hơn 2km -> Lấy vị trí 3 cổng trường làm mốc xuất phát
-    if (directDist > 2000.0) {
-      final gateToUse = (state.selectedGate.id != CampusConstants.defaultGate.id)
-          ? state.selectedGate
-          : nearestGate;
-      final km = (directDist / 1000).toStringAsFixed(1);
-      state = state.copyWith(
-        selectedGate: gateToUse,
-        routingNotice:
-            'Vị trí hiện tại cách trường ${km}km (>2km). Lộ trình xuất phát từ ${gateToUse.name}.',
-        routingError: null,
-      );
-      return _router.findShortestRoute(gateToUse.coordinate, destination);
-    }
-
-    final externalService = ExternalRoutingService(ref.read(dioProvider));
-    final roadResult = await externalService.getWalkingRoadRoute(
-      start: start,
-      end: gateCoord,
-    );
-
-    return _router.findHybridRoute(
-      start: start,
-      destination: destination,
-      availableGates: state.gates,
-      externalRoadCoordinates: roadResult.coordinates,
-      externalRoadDistanceMeters: roadResult.distanceMeters,
-      externalDurationSeconds: roadResult.durationSeconds,
-    );
-  }
-
-  /// Cap nhat khoang cach live khi user di chuyen
-  Future<void> _updateLiveNavigation(LatLng currentPos) async {
+  /// Cap nhat khoang cach live khi user di chuyen (bảo toàn nguyên vẹn 100% các khúc cua đường phố ngoài trường)
+  void _updateLiveNavigation(LatLng currentPos) {
     if (!state.isNavigating) return;
     final destination = state.selectedLocation;
     if (destination == null) return;
@@ -413,54 +375,60 @@ class MapNotifier extends Notifier<MapState> {
       return;
     }
 
-    final nearestGate = CampusDijkstraRouter.findNearestGate(currentPos, state.gates);
+    final isMedical = destination.category == 'Y tế' ||
+        destination.name.toLowerCase().contains('bệnh viện') ||
+        destination.building.toLowerCase().contains('bệnh viện') ||
+        destination.id == 4;
+
+    final currentGate = state.userForcedGate ??
+        CampusDijkstraRouter.getBestGate(
+          origin: currentPos,
+          destination: destination.coordinate,
+          isEntering: true,
+          isMedicalDestination: isMedical,
+          availableGates: state.gates,
+        );
     final dist = calculateHaversineDistance(
-      currentPos.latitude, currentPos.longitude, nearestGate.lat, nearestGate.lng,
+      currentPos.latitude, currentPos.longitude, currentGate.lat, currentGate.lng,
     );
 
     if (dist <= 2000.0) {
-      final route = await _computeRoute(
-        start: currentPos,
-        destination: destination.coordinate,
-        isFromGps: true,
-      );
-      if (route.coordinates.isNotEmpty && state.isNavigating) {
-        state = state.copyWith(activeRoute: route);
+      final currentRoute = state.activeRoute;
+      if (currentRoute != null && currentRoute.coordinates.length > 2) {
+        // Cập nhật vị trí GPS xuất phát mà vẫn bảo toàn 100% các khúc cua đường phố ngoài trường
+        final updatedCoords = <LatLng>[currentPos, ...currentRoute.coordinates.skip(1)];
+        final totalDist = calculateHaversineDistance(
+              currentPos.latitude, currentPos.longitude,
+              currentGate.lat, currentGate.lng,
+            ) + (currentRoute.distanceMeters - (currentRoute.coordinates.length * 10));
+        state = state.copyWith(
+          selectedGate: currentGate,
+          activeRoute: DijkstraResult(
+            coordinates: updatedCoords,
+            distanceMeters: totalDist > 0 ? totalDist : currentRoute.distanceMeters,
+            estimatedWalkingMinutes: (totalDist / 75.0).ceil().clamp(1, 180),
+            isHybrid: true,
+            viaGateName: currentGate.name,
+          ),
+        );
       }
     } else {
       // Khi ở xa > 2km, giữ lộ trình từ cổng đã chọn đến đích
       if (state.activeRoute == null || state.activeRoute!.coordinates.isEmpty) {
-        final gateToUse = state.selectedGate;
-        final route = _router.findShortestRoute(gateToUse.coordinate, destination.coordinate);
+        final route = _router.findShortestRoute(currentGate.insideCoordinate, destination.coordinate);
         if (route.coordinates.isNotEmpty && state.isNavigating) {
-          state = state.copyWith(activeRoute: route);
+          state = state.copyWith(selectedGate: currentGate, activeRoute: route);
         }
       }
     }
   }
 
   /// Tinh lai route (khi graph thay doi hoac doi cong)
-  Future<void> _recalculateRoute() async {
+  void _recalculateRoute() {
     final destination = state.selectedLocation;
     if (destination == null) return;
-
-    final userPos = state.userPosition;
-    final DijkstraResult route;
-    if (userPos != null) {
-      route = await _computeRoute(
-        start: userPos,
-        destination: destination.coordinate,
-        isFromGps: true,
-      );
-    } else {
-      route = await _computeRoute(
-        start: state.selectedGate.coordinate,
-        destination: destination.coordinate,
-        isFromGps: false,
-      );
-    }
-    if (route.coordinates.isNotEmpty) {
-      state = state.copyWith(activeRoute: route);
+    if (state.isNavigating) {
+      startNavigationTo(destination);
     }
   }
 
@@ -523,26 +491,45 @@ class MapNotifier extends Notifier<MapState> {
   }
 
   void selectLocation(CampusLocationItem? location) {
+    if (location == null) {
+      state = state.copyWith(
+        selectedLocation: null,
+        isNavigating: false,
+        activeRoute: null,
+      );
+      return;
+    }
+
+    final isMedical = location.category == 'Y tế' ||
+        location.name.toLowerCase().contains('bệnh viện') ||
+        location.building.toLowerCase().contains('bệnh viện') ||
+        location.id == 4;
+
+    final orig = state.userPosition ?? const LatLng(12.65138, 108.02360);
+    final autoGate = state.userForcedGate ??
+        CampusDijkstraRouter.getBestGate(
+          origin: orig,
+          destination: location.coordinate,
+          isEntering: true,
+          isMedicalDestination: isMedical,
+          availableGates: state.gates,
+        );
+
     state = state.copyWith(
       selectedLocation: location,
+      selectedGate: autoGate,
       isNavigating: false,
       activeRoute: null,
     );
   }
 
   void selectGate(CampusGate gate) {
-    state = state.copyWith(selectedGate: gate);
-    if (state.isNavigating && state.selectedLocation != null) {
-      // Khi chọn cổng mới, tính lại tuyến đường từ cổng đã chọn đến đích
-      final route = _router.findShortestRoute(
-        gate.coordinate,
-        state.selectedLocation!.coordinate,
-      );
-      if (route.coordinates.isNotEmpty) {
-        state = state.copyWith(activeRoute: route, routingError: null);
-      } else {
-        startNavigationTo(state.selectedLocation!);
-      }
+    state = state.copyWith(
+      selectedGate: gate,
+      userForcedGate: gate,
+    );
+    if (state.selectedLocation != null) {
+      startNavigationTo(state.selectedLocation!, forcedGate: gate);
     }
   }
 
@@ -554,41 +541,97 @@ class MapNotifier extends Notifier<MapState> {
     state = state.copyWith(routingNotice: null);
   }
 
-  Future<void> startNavigationTo(CampusLocationItem destination) async {
+  Future<void> startNavigationTo(
+    CampusLocationItem destination, {
+    CampusGate? forcedGate,
+  }) async {
+    final effectiveForcedGate = forcedGate ?? state.userForcedGate;
+    final isMedical = destination.category == 'Y tế' ||
+        destination.name.toLowerCase().contains('bệnh viện') ||
+        destination.building.toLowerCase().contains('bệnh viện') ||
+        destination.id == 4;
+
     final userPos = state.userPosition;
-    final DijkstraResult route;
 
-    if (userPos != null) {
-      route = await _computeRoute(
-        start: userPos,
-        destination: destination.coordinate,
-        isFromGps: true,
+    // 1. Trường hợp người dùng đang ở trong khuôn viên và KHÔNG chỉ định cổng thủ công:
+    // Chạy Dijkstra nội bộ trực tiếp từ vị trí GPS đến đích
+    if (userPos != null && CampusDijkstraRouter.isInsideCampus(userPos) && effectiveForcedGate == null) {
+      final route = _router.findShortestRoute(
+        userPos,
+        destination.coordinate,
       );
-    } else {
-      route = await _computeRoute(
-        start: state.selectedGate.coordinate,
-        destination: destination.coordinate,
-        isFromGps: false,
-      );
-    }
-
-    if (route.coordinates.isEmpty) {
-      if (state.routingError == null) {
+      if (route.coordinates.isEmpty) {
         state = state.copyWith(
           selectedLocation: destination,
           activeRoute: null,
           isNavigating: false,
           routingError: 'Không tìm thấy đường đi bộ đến ${destination.name}',
         );
+        return;
       }
+      state = state.copyWith(
+        selectedLocation: destination,
+        activeRoute: route,
+        isNavigating: true,
+        routingError: null,
+        routingNotice: null,
+      );
       return;
+    }
+
+    // 2. Điểm xuất phát (Origin):
+    // - Nếu có GPS thực tế: dùng userPos (nếu userPos ở trong nhưng người dùng ép cổng: dùng forcedGate.outsideCoordinate)
+    // - Nếu chưa có GPS (hoặc userPos ở trong nhưng ép cổng): dùng forcedGate?.outsideCoordinate ?? LatLng(12.65138, 108.02360) (mặc định LTDDDNT)
+    final LatLng orig;
+    if (effectiveForcedGate != null && userPos != null && CampusDijkstraRouter.isInsideCampus(userPos)) {
+      orig = effectiveForcedGate.outsideCoordinate;
+    } else {
+      orig = userPos ?? (effectiveForcedGate?.outsideCoordinate ?? const LatLng(12.65138, 108.02360));
+    }
+
+    // 3. Tính toán toàn bộ tuyến đường đa chế độ bằng calculateRoute (chuẩn 100% LTDDDNT)
+    state = state.copyWith(isLoadingPaths: true);
+    final externalService = ExternalRoutingService(ref.read(dioProvider));
+
+    final route = await _router.calculateRoute(
+      origin: orig,
+      destination: destination.coordinate,
+      preferredGateId: effectiveForcedGate?.id,
+      availableGates: state.gates,
+      isMedicalDestination: isMedical,
+      externalRoutingService: externalService,
+    );
+
+    if (route.coordinates.isEmpty) {
+      state = state.copyWith(
+        selectedLocation: destination,
+        activeRoute: null,
+        isNavigating: false,
+        isLoadingPaths: false,
+        routingError: 'Không tìm thấy đường đi bộ đến ${destination.name}',
+      );
+      return;
+    }
+
+    final chosenGate = route.gate ?? effectiveForcedGate ?? state.selectedGate;
+    String? kmNotice;
+    if (userPos != null) {
+      final directDist = calculateHaversineDistance(
+        userPos.latitude, userPos.longitude, chosenGate.lat, chosenGate.lng,
+      );
+      if (directDist > 2000.0) {
+        kmNotice = 'Vị trí hiện tại cách trường ${(directDist / 1000).toStringAsFixed(1)}km (>2km). Lộ trình xuất phát từ ${chosenGate.name}.';
+      }
     }
 
     state = state.copyWith(
       selectedLocation: destination,
+      selectedGate: chosenGate,
       activeRoute: route,
       isNavigating: true,
+      isLoadingPaths: false,
       routingError: null,
+      routingNotice: kmNotice,
     );
   }
 
@@ -596,6 +639,7 @@ class MapNotifier extends Notifier<MapState> {
     state = state.copyWith(
       isNavigating: false,
       activeRoute: null,
+      userForcedGate: null,
       routingError: null,
       routingNotice: null,
     );
@@ -609,6 +653,7 @@ class MapNotifier extends Notifier<MapState> {
       selectedLocation: null,
       searchQuery: '',
       selectedCategory: 'Tat ca',
+      userForcedGate: null,
       activeRoute: null,
       routingError: null,
     );

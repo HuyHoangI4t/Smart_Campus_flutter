@@ -10,6 +10,8 @@ class MapLocationDetailCard extends StatelessWidget {
   final String? roomName;
   final VoidCallback onClose;
   final VoidCallback onStartNavigation;
+  final bool isOutsideCampus;
+  final VoidCallback? onOpenGoogleMaps;
 
   const MapLocationDetailCard({
     super.key,
@@ -18,6 +20,8 @@ class MapLocationDetailCard extends StatelessWidget {
     this.roomName,
     required this.onClose,
     required this.onStartNavigation,
+    this.isOutsideCampus = false,
+    this.onOpenGoogleMaps,
   });
 
   @override
@@ -110,18 +114,24 @@ class MapLocationDetailCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               GestureDetector(
                 onTap: onClose,
+                behavior: HitTestBehavior.opaque,
                 child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF1F5F9),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.close, size: 16, color: AppColors.textSecondary),
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF1F5F9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.close, size: 18, color: AppColors.textSecondary),
+                    ),
                   ),
                 ),
               ),
@@ -191,16 +201,16 @@ class MapLocationDetailCard extends StatelessWidget {
           ],
           const SizedBox(height: 14),
 
-          // Nút hành động: "Chỉ đường đi bộ"
+          // Nút hành động: Bắt đầu chỉ đường
           SizedBox(
             width: double.infinity,
             height: 48,
             child: ElevatedButton.icon(
               onPressed: onStartNavigation,
               icon: const Icon(Icons.near_me, color: Colors.white, size: 18),
-              label: const Text(
-                'Chỉ đường đi bộ',
-                style: TextStyle(
+              label: Text(
+                isOutsideCampus ? 'Chỉ đường từ vị trí của bạn' : 'Chỉ đường đi bộ',
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.w800,

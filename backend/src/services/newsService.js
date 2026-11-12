@@ -7,7 +7,39 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 const RSS_ANNOUNCEMENTS_URL = 'https://www.ttn.edu.vn/index.php/svthongbao?format=feed&type=rss';
 const RSS_NEWS_URL = 'https://www.ttn.edu.vn/index.php/mthongbao/tintuc?format=feed&type=rss';
-const RSS_TIMEOUT_MS = 25000; // 25s timeout cho máy chủ trường TTN
+const RSS_TIMEOUT_MS = 8000; // [PERF] Giảm timeout từ 25s xuống 8s để fail-fast và fallback ngay lập tức
+
+// In-memory RAM cache cho chi tiết bài viết (Hot Cache 0.05ms)
+const articleDetailMemoryCache = new Map();
+const DETAIL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 giờ lưu RAM
+
+function buildArticleDetailFromDbRow(articleUrl, row) {
+  let attachments = [];
+  if (row.attachments) {
+    try {
+      attachments = typeof row.attachments === 'string' ? JSON.parse(row.attachments) : row.attachments;
+    } catch (_) {}
+  }
+  const rawParas = (row.content || '').split('\n\n').map(p => p.trim()).filter(p => p.length > 0);
+  const paragraphs = rawParas.length > 0 ? rawParas : [(row.content || row.summary || '').trim()];
+  const images = (row.image_url && row.image_url.startsWith('http')) ? [row.image_url] : [];
+  const contentBlocks = [];
+  if (images.length > 0) {
+    contentBlocks.push({ type: 'image', url: images[0], caption: '' });
+  }
+  for (const p of paragraphs) {
+    contentBlocks.push({ type: 'text', text: p });
+  }
+  return {
+    url: articleUrl,
+    images,
+    paragraphs,
+    contentBlocks,
+    attachments,
+    fullContent: (row.content || row.summary || '').trim(),
+    isCached: true
+  };
+}
 
 function formatRssDate(dateStr) {
   if (!dateStr) return 'Mới cập nhật';
@@ -254,20 +286,29 @@ async function fetchNewsFromRss() {
     includeImage: true,
   });
 
-  // Tự động cào ảnh gốc đầu tiên từ trang chi tiết cho các bài RSS thiếu ảnh hoặc dính ảnh mẫu
-  for (const item of items) {
+  // [PERF] Tải ảnh chi tiết song song (tối đa 4 request cùng lúc) thay vì tuần tự chậm chạp
+  const missingItems = items.filter(item => {
     const isMissingOrSample = !item.imageUrl ||
       item.imageUrl.includes('slideshow') ||
       item.imageUrl.includes('demo') ||
       item.imageUrl.includes('mod_languages');
+    return isMissingOrSample && item.link && item.link.startsWith('http');
+  });
 
-    if (isMissingOrSample && item.link && item.link.startsWith('http')) {
-      try {
-        const detail = await fetchFullArticleDetail(item.link);
-        if (detail && detail.images && detail.images.length > 0) {
-          item.imageUrl = detail.images[0];
-        }
-      } catch (_) {}
+  if (missingItems.length > 0) {
+    const BATCH_SIZE = 4;
+    for (let i = 0; i < missingItems.length; i += BATCH_SIZE) {
+      const batch = missingItems.slice(i, i + BATCH_SIZE);
+      await Promise.allSettled(
+        batch.map(async (item) => {
+          try {
+            const detail = await fetchFullArticleDetail(item.link);
+            if (detail && detail.images && detail.images.length > 0) {
+              item.imageUrl = detail.images[0];
+            }
+          } catch (_) {}
+        })
+      );
     }
   }
 
@@ -278,7 +319,16 @@ async function fetchNewsFromRss() {
 async function preserveCachedFields(items) {
   if (!Array.isArray(items) || items.length === 0) return items;
   try {
-    const [rows] = await db.query('SELECT guid, link, image_url, content FROM news_cache');
+    const guids = items.map(it => it.guid).filter(Boolean);
+    const links = items.map(it => it.link).filter(Boolean);
+    if (guids.length === 0 && links.length === 0) return items;
+
+    // [PERF] Chỉ load các bản ghi có guid/link nằm trong danh sách cần kiểm tra
+    // Tránh Full Table Scan bảng news_cache và không nạp toàn bộ LONGTEXT content vào RAM
+    const [rows] = await db.query(
+      'SELECT guid, link, image_url, content FROM news_cache WHERE guid IN (?) OR link IN (?)',
+      [guids.length > 0 ? guids : ['__none__'], links.length > 0 ? links : ['__none__']]
+    );
     if (!rows || rows.length === 0) return items;
     const dbMap = new Map();
     for (const r of rows) {
@@ -309,7 +359,7 @@ async function saveItemsToDb(items) {
   if (validItems.length === 0) return 0;
 
   let savedCount = 0;
-  const CHUNK_SIZE = 5;
+  const CHUNK_SIZE = 10; // [PERF] Tăng kích thước lô từ 5 lên 10 để tăng tốc độ ghi I/O
 
   for (let i = 0; i < validItems.length; i += CHUNK_SIZE) {
     const chunk = validItems.slice(i, i + CHUNK_SIZE);
@@ -552,6 +602,24 @@ async function getNewsWithFallback(forceRefresh = false) {
     newsMemCache = sorted;
     newsCacheTime = now;
 
+    // Tự động kiểm tra và làm giàu ảnh bài viết nếu có tin tức thiếu ảnh
+    const missingImg = sorted.filter(it => (!it.imageUrl || !it.imageUrl.startsWith('http')) && it.link && it.link.startsWith('http'));
+    if (missingImg.length > 0) {
+      Promise.allSettled(
+        missingImg.slice(0, 5).map(async (item) => {
+          try {
+            const detail = await fetchFullArticleDetail(item.link);
+            if (detail && detail.images && detail.images.length > 0) {
+              item.imageUrl = detail.images[0];
+              await saveArticleDetailToCache(item.link, detail);
+            }
+          } catch (_) {}
+        })
+      ).then(() => {
+        if (newsMemCache) newsMemCache = sortByNewestDate(cached);
+      }).catch(() => {});
+    }
+
     // Khi người dùng vuốt xuống (forceRefresh) hoặc dữ liệu cũ (> 10 phút):
     // Kích hoạt đồng bộ ngầm: Web trường -> Nạp vào DB -> Cập nhật Cache
     if (forceRefresh || (now - newsCacheTime > 10 * 60 * 1000)) {
@@ -600,10 +668,35 @@ async function getNewsWithFallback(forceRefresh = false) {
 async function fetchFullArticleDetail(articleUrl) {
   if (!articleUrl || !articleUrl.startsWith('http')) return null;
 
+  // 1. Kiểm tra RAM Cache (0.05ms)
+  const cachedEntry = articleDetailMemoryCache.get(articleUrl);
+  if (cachedEntry && Date.now() - cachedEntry.time < DETAIL_CACHE_TTL_MS) {
+    if (cachedEntry.data && Array.isArray(cachedEntry.data.contentBlocks) && cachedEntry.data.contentBlocks.length > 0) {
+      return cachedEntry.data;
+    }
+  }
+
+  // 2. Kiểm tra MySQL news_cache: CHỈ dùng khi đã lưu detail_json chứa đầy đủ toàn bộ ảnh và khối nội dung
+  try {
+    const [rows] = await db.query(
+      'SELECT detail_json FROM news_cache WHERE (link = ? OR guid = ?) AND detail_json IS NOT NULL LIMIT 1',
+      [articleUrl, articleUrl]
+    );
+    if (rows && rows.length > 0 && rows[0].detail_json) {
+      const parsed = JSON.parse(rows[0].detail_json);
+      if (parsed && Array.isArray(parsed.images) && Array.isArray(parsed.contentBlocks) && parsed.contentBlocks.length > 0) {
+        articleDetailMemoryCache.set(articleUrl, { data: parsed, time: Date.now() });
+        return parsed;
+      }
+    }
+  } catch (err) {
+    // Tiếp tục cào nếu lỗi query DB
+  }
+
   try {
     const res = await axios.get(articleUrl, {
       httpsAgent,
-      timeout: 25000,
+      timeout: 8000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': 'https://www.ttn.edu.vn/'
@@ -660,6 +753,34 @@ async function fetchFullArticleDetail(articleUrl) {
             url: href,
             isPdf: /\.pdf$/i.test(href) || href.toLowerCase().includes('.pdf')
           });
+        }
+      }
+    });
+
+    // 2.5. Trích xuất toàn bộ ảnh thực tế từ bài viết (bỏ qua biểu tượng, cờ, banner, slideshow, file đính kèm)
+    // Đảm bảo images[0] luôn là ẢNH ĐẦU TIÊN CỦA BÀI VIẾT theo đúng thứ tự xuất hiện trong trang
+    container.find('img').each((j, imgEl) => {
+      const $img = $(imgEl);
+      if ($img.closest('.attachmentsContainer, .attachmentsList, .article-info, .page-header, .social2s_behavior, .s2s_options').length > 0) return;
+
+      let src = $img.attr('src') || '';
+      if (
+        src &&
+        !src.includes('mod_languages') &&
+        !src.includes('Icon') &&
+        !src.includes('cackhoa') &&
+        !src.includes('slideshow') &&
+        !src.includes('demo') &&
+        !src.includes('banner') &&
+        !src.includes('file_icons') &&
+        !src.includes('com_attachments') &&
+        !src.endsWith('.gif')
+      ) {
+        if (!src.startsWith('http')) {
+          src = `https://www.ttn.edu.vn${src.startsWith('/') ? '' : '/'}${src}`;
+        }
+        if (!images.includes(src)) {
+          images.push(src);
         }
       }
     });
@@ -732,6 +853,19 @@ async function fetchFullArticleDetail(articleUrl) {
       }
     });
 
+    // Đảm bảo TẤT CẢ các ảnh có trong mảng images đều xuất hiện trong contentBlocks
+    const existingBlockUrls = new Set(contentBlocks.filter(b => b.type === 'image').map(b => b.url));
+    for (const imgUrl of images) {
+      if (!existingBlockUrls.has(imgUrl)) {
+        existingBlockUrls.add(imgUrl);
+        contentBlocks.push({
+          type: 'image',
+          url: imgUrl,
+          caption: ''
+        });
+      }
+    }
+
     const result = {
       url: articleUrl,
       images,
@@ -741,12 +875,23 @@ async function fetchFullArticleDetail(articleUrl) {
       fullContent: paragraphs.join('\n\n')
     };
 
-    // Tự động lưu cache chi tiết vào DB để các lần truy cập sau phản hồi tức thì 1ms
+    // Lưu vào RAM cache (0.05ms) và MySQL news_cache (1ms)
+    articleDetailMemoryCache.set(articleUrl, { data: result, time: Date.now() });
     saveArticleDetailToCache(articleUrl, result).catch(() => {});
 
     return result;
   } catch (err) {
     console.warn('Lỗi cào chi tiết bài viết:', err.message);
+    // Khi rớt mạng hoàn toàn mới dùng phao cứu sinh từ news_cache
+    try {
+      const [rows] = await db.query(
+        'SELECT content, summary, attachments, image_url, title FROM news_cache WHERE (link = ? OR guid = ?) LIMIT 1',
+        [articleUrl, articleUrl]
+      );
+      if (rows && rows.length > 0 && rows[0].content) {
+        return buildArticleDetailFromDbRow(articleUrl, rows[0]);
+      }
+    } catch (_) {}
     return null;
   }
 }
@@ -755,6 +900,7 @@ async function fetchFullArticleDetail(articleUrl) {
 async function saveArticleDetailToCache(url, detail) {
   if (!url || !detail) return;
   try {
+    articleDetailMemoryCache.set(url, { data: detail, time: Date.now() });
     const fullContent = detail.fullContent || (detail.paragraphs ? detail.paragraphs.join('\n\n') : '');
     const attachments = detail.attachments || [];
     const firstImage = detail.images && detail.images.length > 0 ? detail.images[0] : null;
@@ -774,6 +920,10 @@ async function saveArticleDetailToCache(url, detail) {
       updates.push('image_url = ?');
       params.push(firstImage);
     }
+    if (detail) {
+      updates.push('detail_json = ?');
+      params.push(JSON.stringify(detail));
+    }
 
     if (updates.length > 0) {
       const sql = `UPDATE news_cache SET ${updates.join(', ')} WHERE link = ? OR guid = ?`;
@@ -788,7 +938,9 @@ async function saveArticleDetailToCache(url, detail) {
 // Làm giàu dữ liệu chi tiết toàn văn, ảnh và tệp đính kèm cho danh sách bài viết
 async function enrichItemsWithDetails(items) {
   if (!Array.isArray(items) || items.length === 0) return items;
-  for (const it of items) {
+  // [PERF] Chỉ làm giàu tối đa 5 bài viết mới nhất để tránh spam hàng chục request làm nghẽn mạng trường
+  const targetItems = items.slice(0, 5);
+  for (const it of targetItems) {
     if (it.link && it.link.startsWith('http')) {
       try {
         const detail = await fetchFullArticleDetail(it.link);

@@ -38,6 +38,7 @@ exports.getAllNewsAndAnnouncements = async (req, res) => {
       statusText = 'Offline fallback (Dữ liệu mẫu)';
     }
 
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=1800');
     res.json({
       success: true,
       total: result.length,
@@ -68,6 +69,7 @@ exports.getAnnouncements = async (req, res) => {
   try {
     const forceRefresh = req.query.reload === 'true' || req.query.refresh === 'true' || req.query.reload === '1' || req.query.refresh === '1';
     const announcements = await newsService.getAnnouncementsWithFallback(forceRefresh);
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=1800');
     res.json({
       success: true,
       source: 'Cổng Thông báo sinh viên TTN',
@@ -86,6 +88,7 @@ exports.getNews = async (req, res) => {
   try {
     const forceRefresh = req.query.reload === 'true' || req.query.refresh === 'true' || req.query.reload === '1' || req.query.refresh === '1';
     const news = await newsService.getNewsWithFallback(forceRefresh);
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=1800');
     res.json({
       success: true,
       source: 'Cổng Tin tức TTN.edu.vn',
@@ -96,13 +99,9 @@ exports.getNews = async (req, res) => {
   }
 };
 
-const axios = require('axios');
 const https = require('https');
-const fs = require('fs');
-const path = require('path');
+const axios = require('axios');
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-
-const FALLBACK_IMAGE_PATH = path.resolve(__dirname, '../assets/images.jpg');
 
 /**
  * GET /api/news/image-proxy?url=...
@@ -139,20 +138,9 @@ exports.proxyImage = async (req, res) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     return res.send(Buffer.from(response.data));
   } catch (error) {
-    console.warn(`[Image Proxy] Không thể kết nối tới server trường (${targetUrl}): ${error.message}. Sử dụng ảnh khuôn viên nội bộ.`);
-
-    // Khi cổng trường TTN bảo trì / timeout / rớt mạng:
-    // Trả về ảnh khuôn viên trường mặc định để tránh màn hình app bị khoảng đen / lỗi vỡ ảnh
-    if (fs.existsSync(FALLBACK_IMAGE_PATH)) {
-      res.setHeader('Content-Type', 'image/jpeg');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      return res.sendFile(FALLBACK_IMAGE_PATH);
-    }
-
-    return res.status(404).send('Không thể tải ảnh');
+    console.warn(`[Image Proxy] Không thể kết nối tới server trường (${targetUrl}): ${error.message}.`);
+    // Tuyệt đối không trả về ảnh mẫu dự phòng (images.jpg) theo yêu cầu bắt buộc của người dùng
+    return res.status(404).send('Không thể tải ảnh từ bài viết');
   }
 };
 
@@ -178,6 +166,7 @@ exports.getArticleDetail = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Không thể cào nội dung bài viết' });
     }
 
+    res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
     return res.json({
       success: true,
       data: detail

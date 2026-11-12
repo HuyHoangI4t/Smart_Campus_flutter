@@ -403,8 +403,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   : null,
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                width: 32,
-                height: 32,
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
                   color: canPrev ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(8),
@@ -414,7 +414,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   child: Icon(
                     Icons.chevron_left_rounded,
                     color: canPrev ? AppColors.textForeground : const Color(0xFFCBD5E1),
-                    size: 20,
+                    size: 22,
                   ),
                 ),
               ),
@@ -431,7 +431,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 onTap: () => _showWeekPickerSheet(context, scheduleState, weeks),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  height: 32,
+                  height: 38,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
@@ -441,13 +441,13 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.calendar_month_outlined, size: 14, color: AppColors.primary),
+                      const Icon(Icons.calendar_month_outlined, size: 15, color: AppColors.primary),
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
                           displayTitle,
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF0F172A),
                           ),
@@ -456,7 +456,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Color(0xFF64748B)),
+                      const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Color(0xFF64748B)),
                     ],
                   ),
                 ),
@@ -475,8 +475,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   : null,
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                width: 32,
-                height: 32,
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
                   color: canNext ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(8),
@@ -486,7 +486,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   child: Icon(
                     Icons.chevron_right_rounded,
                     color: canNext ? AppColors.textForeground : const Color(0xFFCBD5E1),
-                    size: 20,
+                    size: 22,
                   ),
                 ),
               ),
@@ -502,8 +502,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 onTap: () => ref.read(scheduleProvider.notifier).selectWeek(curIdx),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(8),
@@ -512,7 +512,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                     child: Text(
                       'Hiện tại',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
                       ),
@@ -829,7 +829,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 const Text(
                   'Tiết 1 - 4 (06:45 – 10:30)',
                   style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textSecondary,
                   ),
@@ -867,7 +867,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 const Text(
                   'Tiết 7 - 10 (13:45 – 17:30)',
                   style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textSecondary,
                   ),

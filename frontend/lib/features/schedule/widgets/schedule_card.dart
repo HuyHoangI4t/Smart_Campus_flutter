@@ -1,6 +1,6 @@
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/url_launcher_helper.dart';
 import '../models/schedule_model.dart';
 import '../models/room_direction_model.dart';
 
@@ -413,14 +413,11 @@ class ScheduleCard extends StatelessWidget {
                         child: InkWell(
                           onTap: () async {
                             if (isOnline) {
-                              final url = item.onlineMeetingUrl;
-                              if (url != null && url.isNotEmpty) {
-                                final uri = Uri.tryParse(url);
-                                if (uri != null && await canLaunchUrl(uri)) {
-                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                  return;
-                                }
-                              }
+                              await AppUrlLauncher.openGoogleMeet(
+                                url: item.onlineMeetingUrl,
+                                code: item.onlineMeetingCode,
+                              );
+                              return;
                             }
                             onSelectDirection(item);
                           },

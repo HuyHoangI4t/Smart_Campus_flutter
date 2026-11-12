@@ -503,32 +503,38 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
     11: { start: 17 * 60 + 30, end: 18 * 60 + 20 },
     12: { start: 18 * 60 + 25, end: 19 * 60 + 15 },
     13: { start: 19 * 60 + 20, end: 20 * 60 + 10 },
+    14: { start: 20 * 60 + 15, end: 21 * 60 + 5 },
+    15: { start: 21 * 60 + 10, end: 22 * 60 },
+    16: { start: 22 * 60 + 5, end: 22 * 60 + 55 },
   };
 
   const parseTimeRange = (timeStr) => {
     const str = timeStr || '';
     const timeMatch = str.match(/(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/);
     if (timeMatch) {
-      return {
-        startMin: parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10),
-        endMin: parseInt(timeMatch[3], 10) * 60 + parseInt(timeMatch[4], 10),
-      };
+      let startMin = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+      let endMin = parseInt(timeMatch[3], 10) * 60 + parseInt(timeMatch[4], 10);
+      if (endMin <= startMin) endMin = startMin + 120;
+      return { startMin, endMin };
     }
     const range = str.match(/(\d+)\s*[-–—]\s*(\d+)/);
     if (range) {
       const s = parseInt(range[1], 10);
       const e = parseInt(range[2], 10);
-      const startMin = PERIOD_TIMES[s]?.start ?? (s >= 6 ? 13 * 60 + 45 : 6 * 60 + 45);
-      const endMin = PERIOD_TIMES[e]?.end ?? (e >= 6 ? 16 * 60 + 30 : 10 * 60 + 30);
+      const startMin = PERIOD_TIMES[s]?.start ?? (s >= 11 ? 17 * 60 + 30 : (s >= 6 ? 13 * 60 + 45 : 6 * 60 + 45));
+      let endMin = PERIOD_TIMES[e]?.end ?? (e >= 11 ? 21 * 60 + 5 : (e >= 6 ? 16 * 60 + 30 : 10 * 60 + 30));
+      if (endMin <= startMin) {
+        endMin = startMin + 120;
+      }
       return { startMin, endMin };
     }
     const single = str.match(/tiết\s*(\d+)/i);
     if (single) {
       const p = parseInt(single[1], 10);
-      return {
-        startMin: PERIOD_TIMES[p]?.start ?? 6 * 60 + 45,
-        endMin: PERIOD_TIMES[p]?.end ?? 10 * 60 + 30,
-      };
+      const startMin = PERIOD_TIMES[p]?.start ?? (p >= 11 ? 17 * 60 + 30 : (p >= 6 ? 13 * 60 + 45 : 6 * 60 + 45));
+      let endMin = PERIOD_TIMES[p]?.end ?? (p >= 11 ? 18 * 60 + 20 : (p >= 6 ? 14 * 60 + 35 : 7 * 60 + 35));
+      if (endMin <= startMin) endMin = startMin + 50;
+      return { startMin, endMin };
     }
     return { startMin: 6 * 60 + 45, endMin: 10 * 60 + 30 };
   };
@@ -615,14 +621,27 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
   let nextClass = null;
   if (inProgress) {
     nextClass = {
+      id: inProgress.id,
+      course: inProgress.course,
       subject: inProgress.course,
+      courseName: inProgress.course,
       room: inProgress.room,
       time: inProgress.time,
+      timeSlot: inProgress.timeSlot || inProgress.time,
       lecturer: inProgress.lecturer,
       day: inProgress.day,
+      dayNum: inProgress.dayNum,
+      date: inProgress.date,
+      dateShort: inProgress.dateShort,
       direction: inProgress.direction,
+      isOnline: inProgress.isOnline || inProgress.direction?.isOnline || false,
+      onlineMeetingCode: inProgress.onlineMeetingCode || inProgress.direction?.meetingCode || null,
+      onlineMeetingUrl: inProgress.onlineMeetingUrl || inProgress.direction?.meetingUrl || null,
+      onlineMeetingInfo: inProgress.onlineMeetingInfo || inProgress.direction?.meetingInfo || null,
+      startMinutes: inProgress.startMinutes,
+      endMinutes: inProgress.endMinutes,
       status: 'IN_PROGRESS',
-      statusLabel: 'ĐANG TRONG GIỜ HỌC',
+      statusLabel: 'ĐANG HỌC',
       dayText: 'Hôm nay',
       isCustom: inProgress.isCustom || false,
       note: inProgress.note || '',
@@ -630,14 +649,27 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
     };
   } else if (upcomingToday) {
     nextClass = {
+      id: upcomingToday.id,
+      course: upcomingToday.course,
       subject: upcomingToday.course,
+      courseName: upcomingToday.course,
       room: upcomingToday.room,
       time: upcomingToday.time,
+      timeSlot: upcomingToday.timeSlot || upcomingToday.time,
       lecturer: upcomingToday.lecturer,
       day: upcomingToday.day,
+      dayNum: upcomingToday.dayNum,
+      date: upcomingToday.date,
+      dateShort: upcomingToday.dateShort,
       direction: upcomingToday.direction,
+      isOnline: upcomingToday.isOnline || upcomingToday.direction?.isOnline || false,
+      onlineMeetingCode: upcomingToday.onlineMeetingCode || upcomingToday.direction?.meetingCode || null,
+      onlineMeetingUrl: upcomingToday.onlineMeetingUrl || upcomingToday.direction?.meetingUrl || null,
+      onlineMeetingInfo: upcomingToday.onlineMeetingInfo || upcomingToday.direction?.meetingInfo || null,
+      startMinutes: upcomingToday.startMinutes,
+      endMinutes: upcomingToday.endMinutes,
       status: 'UPCOMING_TODAY',
-      statusLabel: 'LỚP HỌC KẾ TIẾP',
+      statusLabel: 'SẮP TỚI',
       dayText: 'Hôm nay',
       isCustom: upcomingToday.isCustom || false,
       note: upcomingToday.note || '',
@@ -669,14 +701,27 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
     if (tomorrowSchedule.length > 0) {
       const isNextWeekClass = isSunday && options.nextWeekSchedule && options.nextWeekSchedule.length > 0;
       nextClass = {
+        id: tomorrowSchedule[0].id,
+        course: tomorrowSchedule[0].course,
         subject: tomorrowSchedule[0].course,
+        courseName: tomorrowSchedule[0].course,
         room: tomorrowSchedule[0].room,
         time: tomorrowSchedule[0].time,
+        timeSlot: tomorrowSchedule[0].timeSlot || tomorrowSchedule[0].time,
         lecturer: tomorrowSchedule[0].lecturer,
         day: tomorrowSchedule[0].day,
+        dayNum: tomorrowSchedule[0].dayNum,
+        date: tomorrowSchedule[0].date,
+        dateShort: tomorrowSchedule[0].dateShort,
         direction: tomorrowSchedule[0].direction,
+        isOnline: tomorrowSchedule[0].isOnline || tomorrowSchedule[0].direction?.isOnline || false,
+        onlineMeetingCode: tomorrowSchedule[0].onlineMeetingCode || tomorrowSchedule[0].direction?.meetingCode || null,
+        onlineMeetingUrl: tomorrowSchedule[0].onlineMeetingUrl || tomorrowSchedule[0].direction?.meetingUrl || null,
+        onlineMeetingInfo: tomorrowSchedule[0].onlineMeetingInfo || tomorrowSchedule[0].direction?.meetingInfo || null,
+        startMinutes: tomorrowSchedule[0].startMinutes,
+        endMinutes: tomorrowSchedule[0].endMinutes,
         status: 'NEXT_DAY',
-        statusLabel: isNextWeekClass ? `LỊCH HỌC ${tomorrowSchedule[0].day?.toUpperCase() || 'NGÀY MAI'} (TUẦN MỚI)` : 'NGÀY MAI',
+        statusLabel: 'NGÀY MAI',
         dayText: isNextWeekClass ? `Ngày mai (${tomorrowSchedule[0].day || 'Thứ Hai'})` : 'Ngày mai',
         isCustom: tomorrowSchedule[0].isCustom || false,
         note: tomorrowSchedule[0].note || '',
@@ -688,15 +733,33 @@ function processSchedulePayload(rawTables, weekRangeText, customItems = [], opti
         const nextDayNum = ((currentDayNum - 1 + offset) % 7) + 1;
         const upcomingClasses = groupedByDay[nextDayNum] || [];
         if (upcomingClasses.length > 0) {
+          const rawDayPart = upcomingClasses[0].day ? upcomingClasses[0].day.split(' ')[0] : 'Thứ';
+          let label = rawDayPart.toUpperCase().replace(/\s+/g, ' ').trim();
+          if (!label.startsWith('THỨ') && label !== 'CN') {
+            label = `THỨ ${label}`;
+          }
           nextClass = {
+            id: upcomingClasses[0].id,
+            course: upcomingClasses[0].course,
             subject: upcomingClasses[0].course,
+            courseName: upcomingClasses[0].course,
             room: upcomingClasses[0].room,
             time: upcomingClasses[0].time,
+            timeSlot: upcomingClasses[0].timeSlot || upcomingClasses[0].time,
             lecturer: upcomingClasses[0].lecturer,
             day: upcomingClasses[0].day,
+            dayNum: upcomingClasses[0].dayNum,
+            date: upcomingClasses[0].date,
+            dateShort: upcomingClasses[0].dateShort,
             direction: upcomingClasses[0].direction,
+            isOnline: upcomingClasses[0].isOnline || upcomingClasses[0].direction?.isOnline || false,
+            onlineMeetingCode: upcomingClasses[0].onlineMeetingCode || upcomingClasses[0].direction?.meetingCode || null,
+            onlineMeetingUrl: upcomingClasses[0].onlineMeetingUrl || upcomingClasses[0].direction?.meetingUrl || null,
+            onlineMeetingInfo: upcomingClasses[0].onlineMeetingInfo || upcomingClasses[0].direction?.meetingInfo || null,
+            startMinutes: upcomingClasses[0].startMinutes,
+            endMinutes: upcomingClasses[0].endMinutes,
             status: 'NEXT_DAY',
-            statusLabel: `LỊCH HỌC ${upcomingClasses[0].day?.toUpperCase() || ''}`,
+            statusLabel: label,
             dayText: upcomingClasses[0].day,
             isCustom: upcomingClasses[0].isCustom || false,
             note: upcomingClasses[0].note || '',

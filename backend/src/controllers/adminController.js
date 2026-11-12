@@ -24,34 +24,7 @@ exports.getDashboardStats = async (req, res) => {
   }
 
   try {
-    const [
-      [[userStats]],
-      [[notificationsCount]],
-      [[feedbackStats]],
-      [[sosStats]],
-      [[locationsCount]],
-      [recentFeedback],
-      [recentSos]
-    ] = await Promise.all([
-      db.query("SELECT COUNT(*) AS total, SUM(CASE WHEN role = 'sinh_vien' OR role IS NULL THEN 1 ELSE 0 END) AS students FROM users"),
-      db.query('SELECT COUNT(*) AS total FROM notifications'),
-      db.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'Đã giải quyết' THEN 1 ELSE 0 END) AS resolved FROM feedback"),
-      db.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'Đã xử lý' THEN 1 ELSE 0 END) AS resolved FROM sos_alerts"),
-      db.query('SELECT COUNT(*) AS total FROM map_locations'),
-      db.query('SELECT id, mssv, title, content, category, rating, status, created_at FROM feedback ORDER BY id DESC LIMIT 5'),
-      db.query('SELECT id, mssv, location, message, incident_type, status, created_at FROM sos_alerts ORDER BY id DESC LIMIT 5')
-    ]);
-
-    const usersCount = { total: Number(userStats?.total || 0) };
-    const studentsCount = { total: Number(userStats?.students || 0) };
-    const feedbackCount = { total: Number(feedbackStats?.total || 0) };
-    const resolvedFeedbackCount = { total: Number(feedbackStats?.resolved || 0) };
-    const sosCount = { total: Number(sosStats?.total || 0) };
-    const resolvedSosCount = { total: Number(sosStats?.resolved || 0) };
-
-    // 2. Tổng hợp dữ liệu 7 ngày trong tuần (T2 -> CN) thực tế từ MySQL cho biểu đồ (weekOffset đã được parse ở dòng 17)
-
-    // Tổng hợp dữ liệu 7 ngày trong tuần (T2 -> CN) thực tế từ MySQL cho biểu đồ
+    // Chuẩn bị khoảng thời gian 7 ngày trong tuần trước khi query DB
     const dayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
     const currentWeekDays = [];
     const weekLookup = {};
@@ -106,16 +79,30 @@ exports.getDashboardStats = async (req, res) => {
     const prevStartDate = `${prevWeekDays[0].date} 00:00:00`;
     const prevEndDate = `${prevWeekDays[6].date} 23:59:59`;
 
+    // [PERF] Chạy toàn bộ các truy vấn song song trong 1 lượt Promise.all duy nhất
+    // Kết hợp COUNT và SUM giải quyết để giảm 2 lượt quét bảng feedback và sos_alerts
     const [
+      [[userStats]],
+      [[notificationsCount]],
+      [[feedbackStats]],
+      [[sosStats]],
+      [[locationsCount]],
+      [recentFeedback],
+      [recentSos],
       [feedbackRows],
       [activityRows],
       [prevActivityRows],
-      [sosRows],
-      [resolvedSosRows],
-      [resolvedFeedbackRows]
+      [sosRows]
     ] = await Promise.all([
+      db.query("SELECT COUNT(*) AS total, SUM(CASE WHEN role = 'sinh_vien' OR role IS NULL THEN 1 ELSE 0 END) AS students FROM users"),
+      db.query('SELECT COUNT(*) AS total FROM notifications'),
+      db.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'Đã giải quyết' THEN 1 ELSE 0 END) AS resolved FROM feedback"),
+      db.query("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'Đã xử lý' THEN 1 ELSE 0 END) AS resolved FROM sos_alerts"),
+      db.query('SELECT COUNT(*) AS total FROM map_locations'),
+      db.query('SELECT id, mssv, title, content, category, rating, status, created_at FROM feedback ORDER BY id DESC LIMIT 5'),
+      db.query('SELECT id, mssv, location, message, incident_type, status, created_at FROM sos_alerts ORDER BY id DESC LIMIT 5'),
       db.query(
-        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as f_date, COUNT(*) as cnt FROM feedback WHERE created_at >= ? AND created_at <= ? AND created_at <= NOW() GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')",
+        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as f_date, COUNT(*) as cnt, SUM(CASE WHEN status = 'Đã giải quyết' THEN 1 ELSE 0 END) as resolved_cnt FROM feedback WHERE created_at >= ? AND created_at <= ? AND created_at <= NOW() GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')",
         [startDate, endDate]
       ).catch(() => [[]]),
       db.query(
@@ -127,24 +114,24 @@ exports.getDashboardStats = async (req, res) => {
         [prevStartDate, prevEndDate]
       ).catch(() => [[]]),
       db.query(
-        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as s_date, COUNT(*) as cnt FROM sos_alerts WHERE created_at >= ? AND created_at <= ? AND created_at <= NOW() GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')",
-        [startDate, endDate]
-      ).catch(() => [[]]),
-      db.query(
-        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as s_date, COUNT(*) as cnt FROM sos_alerts WHERE (status = 'Đã xử lý' OR status = 'Đã tiếp nhận & hỗ trợ') AND created_at >= ? AND created_at <= ? AND created_at <= NOW() GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')",
-        [startDate, endDate]
-      ).catch(() => [[]]),
-      db.query(
-        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as f_date, COUNT(*) as cnt FROM feedback WHERE status = 'Đã giải quyết' AND created_at >= ? AND created_at <= ? AND created_at <= NOW() GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')",
+        "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as s_date, COUNT(*) as cnt, SUM(CASE WHEN (status = 'Đã xử lý' OR status = 'Đã tiếp nhận & hỗ trợ') THEN 1 ELSE 0 END) as resolved_cnt FROM sos_alerts WHERE created_at >= ? AND created_at <= ? AND created_at <= NOW() GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')",
         [startDate, endDate]
       ).catch(() => [[]])
     ]);
+
+    const usersCount = { total: Number(userStats?.total || 0) };
+    const studentsCount = { total: Number(userStats?.students || 0) };
+    const feedbackCount = { total: Number(feedbackStats?.total || 0) };
+    const resolvedFeedbackCount = { total: Number(feedbackStats?.resolved || 0) };
+    const sosCount = { total: Number(sosStats?.total || 0) };
+    const resolvedSosCount = { total: Number(sosStats?.resolved || 0) };
 
     if (Array.isArray(feedbackRows)) {
       for (const row of feedbackRows) {
         const dStr = String(row.f_date || '');
         if (weekLookup[dStr] !== undefined) {
           currentWeekDays[weekLookup[dStr]].feedback = Number(row.cnt) || 0;
+          currentWeekDays[weekLookup[dStr]].feedbackResolved = Number(row.resolved_cnt) || 0;
         }
       }
     }
@@ -172,24 +159,7 @@ exports.getDashboardStats = async (req, res) => {
         const dStr = String(row.s_date || '');
         if (weekLookup[dStr] !== undefined) {
           currentWeekDays[weekLookup[dStr]].sos = Number(row.cnt) || 0;
-        }
-      }
-    }
-
-    if (Array.isArray(resolvedSosRows)) {
-      for (const row of resolvedSosRows) {
-        const dStr = String(row.s_date || '');
-        if (weekLookup[dStr] !== undefined) {
-          currentWeekDays[weekLookup[dStr]].sosResolved = Number(row.cnt) || 0;
-        }
-      }
-    }
-
-    if (Array.isArray(resolvedFeedbackRows)) {
-      for (const row of resolvedFeedbackRows) {
-        const dStr = String(row.f_date || '');
-        if (weekLookup[dStr] !== undefined) {
-          currentWeekDays[weekLookup[dStr]].feedbackResolved = Number(row.cnt) || 0;
+          currentWeekDays[weekLookup[dStr]].sosResolved = Number(row.resolved_cnt) || 0;
         }
       }
     }

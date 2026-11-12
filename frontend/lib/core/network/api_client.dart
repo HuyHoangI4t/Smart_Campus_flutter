@@ -113,14 +113,9 @@ final dioProvider = Provider<Dio>((ref) {
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
         }
-        final userData = await storage.getUserData();
-        if (userData != null && userData.isNotEmpty) {
-          try {
-            final mssv = RegExp(r'"(?:student_id|mssv)"\s*:\s*"?([^",\s}]+)"?').firstMatch(userData)?.group(1);
-            if (mssv != null && mssv.isNotEmpty) {
-              options.headers['x-mssv'] = mssv;
-            }
-          } catch (_) {}
+        final mssv = await storage.getMssv();
+        if (mssv != null && mssv.isNotEmpty) {
+          options.headers['x-mssv'] = mssv;
         }
         return handler.next(options);
       },

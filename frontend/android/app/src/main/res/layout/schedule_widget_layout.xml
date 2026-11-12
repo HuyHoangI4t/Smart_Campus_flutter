@@ -62,7 +62,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Lịch sử Đảng Cộng sản VN"
+        android:text="-- Subject Name --"
         android:textColor="#F8FAFC"
         android:textSize="18sp"
         android:textStyle="bold"

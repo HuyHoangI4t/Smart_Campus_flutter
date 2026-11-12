@@ -285,18 +285,34 @@ class ScheduleNotifier extends Notifier<ScheduleState> {
           if (nc['subject'] != null && nc['subject'].toString().isNotEmpty) {
             parsedNextClass = ScheduleItem.fromJson(nc);
             final rawStatus = (nc['status']?.toString() ?? '').toUpperCase();
-            nextIsOngoing = rawStatus == 'IN_PROGRESS' || rawStatus == 'ONGOING';
-            nextLabel = nc['statusLabel']?.toString() ?? (nextIsOngoing ? 'HÔM NAY' : (nc['dayText']?.toString() ?? 'LỊCH HỌC'));
-            nextStatus = nextIsOngoing
-                ? 'Đang diễn ra'
-                : (rawStatus == 'UPCOMING' ? 'Sắp diễn ra' : (nc['dayText']?.toString() ?? 'Lớp học tiếp theo'));
+            final rawLabel = (nc['statusLabel']?.toString() ?? '').trim().toUpperCase();
+            nextIsOngoing = rawStatus == 'IN_PROGRESS' || rawStatus == 'ONGOING' || rawLabel == 'ĐANG HỌC' || rawLabel.contains('ĐANG TRONG GIỜ');
+            final bool isUpcomingToday = rawStatus == 'UPCOMING_TODAY' || rawStatus == 'UPCOMING' || rawLabel == 'SẮP TỚI' || rawLabel == 'LỚP HỌC KẾ TIẾP';
+
+            if (nextIsOngoing) {
+              nextLabel = 'ĐANG HỌC';
+              nextStatus = 'Đang diễn ra';
+            } else if (isUpcomingToday) {
+              nextLabel = 'SẮP TỚI';
+              nextStatus = 'Sắp diễn ra';
+            } else if (rawLabel == 'NGÀY MAI' || rawLabel.contains('NGÀY MAI') || (nc['dayText']?.toString().toLowerCase().contains('ngày mai') ?? false)) {
+              nextLabel = 'NGÀY MAI';
+              nextStatus = 'Lớp học ngày mai';
+            } else if (rawLabel.startsWith('THỨ') || rawLabel == 'CN') {
+              final parts = rawLabel.split(' ');
+              nextLabel = parts.length > 1 ? '${parts[0]} ${parts[1]}' : rawLabel;
+              nextStatus = 'Lớp học $nextLabel';
+            } else {
+              nextLabel = 'NGÀY MAI';
+              nextStatus = 'Lớp học tiếp theo';
+            }
 
             final now = DateTime.now();
             final currentMins = now.hour * 60 + now.minute;
             if (nextIsOngoing) {
               final rem = (parsedNextClass.endMinutes - currentMins).clamp(0, 360);
               nextCountdown = 'Còn $rem phút';
-            } else if (rawStatus == 'UPCOMING') {
+            } else if (isUpcomingToday) {
               final diff = (parsedNextClass.startMinutes - currentMins).clamp(0, 1440);
               final hours = diff ~/ 60;
               final mins = diff % 60;

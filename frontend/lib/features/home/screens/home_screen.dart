@@ -30,11 +30,9 @@ class HomeScreen extends ConsumerWidget {
           ? '${item.startTime} - ${item.endTime} (${item.periodDisplay})'
           : (next.time.isNotEmpty ? next.time : 'Hôm nay nghỉ');
       final statusBadge = next.capsuleLabel.isNotEmpty
-          ? (next.capsuleLabel == 'NGÀY MAI'
-              ? 'Thứ 2 • Ngày mai'
-              : (next.capsuleLabel == 'HÔM NAY'
-                  ? (next.isOngoing ? 'Hôm nay • Đang học' : 'Hôm nay • Sắp tới')
-                  : next.capsuleLabel))
+          ? (next.capsuleLabel == 'HÔM NAY'
+              ? (next.isOngoing ? 'ĐANG HỌC' : 'SẮP TỚI')
+              : next.capsuleLabel)
           : 'LỊCH HỌC';
       final lecturerStr = (item?.lecturer != null && item!.lecturer!.isNotEmpty)
           ? 'GV: ${item.lecturer}'
@@ -601,7 +599,7 @@ class HomeScreen extends ConsumerWidget {
                         const SizedBox(height: 2),
                         Text(
                           alert.date.isNotEmpty ? alert.date : 'Hôm nay',
-                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8)),
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
                       ],
                     ),
@@ -609,7 +607,7 @@ class HomeScreen extends ConsumerWidget {
                   IconButton(
                     icon: const Icon(Icons.close, size: 20, color: Color(0xFF64748B)),
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: const BoxConstraints.tightFor(width: 44, height: 44),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
@@ -1046,7 +1044,7 @@ class HomeScreen extends ConsumerWidget {
                                         ? 'Dữ liệu mẫu'
                                         : (item.category.isNotEmpty ? item.category : 'Thông báo SV'),
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w800,
                                       color: isFallback ? const Color(0xFFD97706) : AppColors.success,
                                     ),
@@ -1070,7 +1068,7 @@ class HomeScreen extends ConsumerWidget {
                                     Text(
                                       '${item.attachments.length} file',
                                       style: const TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.textSecondary,
                                       ),
@@ -1300,36 +1298,43 @@ class HomeScreen extends ConsumerWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: isFallback
-                                      ? const Color(0xFFFEF3C7)
-                                      : const Color(0xFFEFF6FF),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      isFallback ? Icons.warning_amber_rounded : Icons.menu_book_outlined,
-                                      size: 12,
-                                      color: isFallback ? const Color(0xFFD97706) : AppColors.info,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isFallback
-                                          ? 'Dữ liệu mẫu'
-                                          : (item.category.isNotEmpty ? item.category : 'Tin hoạt động'),
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: isFallback
+                                        ? const Color(0xFFFEF3C7)
+                                        : const Color(0xFFEFF6FF),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isFallback ? Icons.warning_amber_rounded : Icons.menu_book_outlined,
+                                        size: 12,
                                         color: isFallback ? const Color(0xFFD97706) : AppColors.info,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          isFallback
+                                              ? 'Dữ liệu mẫu'
+                                              : (item.category.isNotEmpty ? item.category : 'Tin hoạt động'),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: isFallback ? const Color(0xFFD97706) : AppColors.info,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               Text(
                                 dateStr,
                                 style: const TextStyle(
@@ -1369,21 +1374,29 @@ class HomeScreen extends ConsumerWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.public, size: 14, color: AppColors.textMuted),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    item.author ?? 'Ban Biên tập TTN',
-                                    style: const TextStyle(
-                                      fontSize: 11.5,
-                                      color: AppColors.textMuted,
-                                      fontWeight: FontWeight.w500,
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.public, size: 14, color: AppColors.textMuted),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        item.author?.isNotEmpty == true ? item.author! : 'Ban Biên tập TTN',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 11.5,
+                                          color: AppColors.textMuted,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
                                     'Chi tiết bài viết',

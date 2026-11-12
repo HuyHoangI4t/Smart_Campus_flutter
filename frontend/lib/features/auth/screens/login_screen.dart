@@ -277,22 +277,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             const SizedBox(height: 10),
 
-            // Quên mật khẩu?
+            // Quên mật khẩu? (Vùng chạm đạt chuẩn tối thiểu 44pt)
             Align(
               alignment: Alignment.centerRight,
               child: GestureDetector(
                 onTap: () => context.push('/auth/forgot-password'),
-                child: const Text(
-                  'Quên mật khẩu?',
-                  style: TextStyle(
-                    color: Color(0xFF3B82F6),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                  child: Text(
+                    'Quên mật khẩu?',
+                    style: TextStyle(
+                      color: Color(0xFF3B82F6),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 12),
 
             // Nút Đăng Nhập Vào Campus
             SizedBox(
