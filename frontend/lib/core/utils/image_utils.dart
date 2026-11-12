@@ -72,12 +72,13 @@ String getNewsImageUrl(String? imageUrl, [int fallbackIndex = 0]) {
     return '';
   }
 
-  // Trên Web: Cần đi qua proxy backend để tránh lỗi CORS
-  if (kIsWeb) {
+  // Định tuyến qua backend proxy để vượt qua lỗi chứng chỉ SSL (unable to get local issuer certificate)
+  // và tránh lỗi CORS trên Web cũng như lỗi 502 Bad Gateway từ máy chủ TTN
+  if (kIsWeb || cleanUrl.contains('ttn.edu.vn')) {
     return '${ApiEndpoints.activeBaseUrl}${ApiEndpoints.newsImageProxy}?url=${Uri.encodeComponent(cleanUrl)}';
   }
 
-  // Trên Native Mobile (Android/iOS): Trả về link trực tiếp
+  // Link trực tiếp cho các nguồn khác
   return cleanUrl;
 }
 

@@ -97,6 +97,7 @@ class _NewsCardImageState extends State<NewsCardImage> {
       // Trên Flutter Web: dùng Image.network trực tiếp qua browser HTML engine kèm headers
       imageWidget = Image.network(
         _currentUri,
+        key: ValueKey(_currentUri),
         headers: ttnImageHeaders,
         width: widget.width,
         height: widget.height,
@@ -138,6 +139,7 @@ class _NewsCardImageState extends State<NewsCardImage> {
     } else {
       // Trên thiết bị di động (Android / iOS): Dùng CachedNetworkImage với cache trên đĩa kèm headers TTN
       imageWidget = CachedNetworkImage(
+        key: ValueKey(_currentUri),
         imageUrl: _currentUri,
         httpHeaders: ttnImageHeaders,
         width: widget.width,

@@ -14,12 +14,14 @@ async function runFullSync(triggerSource = 'AUTOMATED_CRON') {
   console.log(`\n⏳ [Cron Sync] Bắt đầu đồng bộ dữ liệu từ trường TTN (${triggerSource}) lúc ${startTime.toLocaleTimeString('vi-VN')}...`);
 
   try {
-    // 1. Đồng bộ Thông báo & Tin tức từ RSS trường tuần tự (tránh quá tải kết nối đến server trường)
+    // 1. Đồng bộ Thông báo & Tin tức từ RSS trường tuần tự (kèm làm giàu ảnh gốc và tệp đính kèm)
     let liveAnnouncements = [];
     try {
       liveAnnouncements = await newsService.fetchAnnouncementsFromRss();
       if (liveAnnouncements.length > 0) {
-        await newsService.saveItemsToDb(liveAnnouncements);
+        await newsService.preserveCachedFields(liveAnnouncements);
+        const enriched = await newsService.enrichItemsWithDetails(liveAnnouncements);
+        await newsService.saveItemsToDb(enriched);
       }
     } catch (e) {
       console.warn('Lỗi cào RSS Thông báo trong cron:', e.message);
@@ -29,7 +31,9 @@ async function runFullSync(triggerSource = 'AUTOMATED_CRON') {
     try {
       liveNews = await newsService.fetchNewsFromRss();
       if (liveNews.length > 0) {
-        await newsService.saveItemsToDb(liveNews);
+        await newsService.preserveCachedFields(liveNews);
+        const enriched = await newsService.enrichItemsWithDetails(liveNews);
+        await newsService.saveItemsToDb(enriched);
       }
     } catch (e) {
       console.warn('Lỗi cào RSS Tin tức trong cron:', e.message);

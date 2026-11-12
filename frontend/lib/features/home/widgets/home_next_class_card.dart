@@ -304,21 +304,23 @@ class HomeNextClassCard extends ConsumerWidget {
                           ),
                         ),
                       ],
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          roomDisplay,
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.88),
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
+                      if (!isOnline) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            roomDisplay,
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.88),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 12),

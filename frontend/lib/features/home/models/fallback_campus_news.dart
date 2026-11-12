@@ -12,6 +12,14 @@ const List<NewsModel> defaultFallbackAnnouncements = [
     author: 'Phòng Công tác sinh viên',
     publishedAt: '29/10/2026',
     link: 'https://www.ttn.edu.vn/index.php/svthongbao/7699-1129102602',
+    attachments: [
+      NewsAttachment(
+        title: 'Thong_bao_canh_bao_lua_dao_HB.pdf',
+        url: 'https://www.ttn.edu.vn/attachments/article/7699/Thong_bao_canh_bao_lua_dao_HB.pdf',
+        size: '520 kB',
+        isPdf: true,
+      ),
+    ],
   ),
   NewsModel(
     id: 'ann-ttn-2',
@@ -21,7 +29,15 @@ const List<NewsModel> defaultFallbackAnnouncements = [
     category: 'Học phí & Học vụ',
     author: 'Phòng Kế hoạch - Tài chính',
     publishedAt: '25/10/2026',
-    link: 'https://www.ttn.edu.vn/index.php/svthongbao',
+    link: 'https://www.ttn.edu.vn/index.php/svthongbao/7738-1112112601',
+    attachments: [
+      NewsAttachment(
+        title: 'Gia_han_thoi_gian_nop_hoc_phi_HK1_nam_hoc_2026_2027_khoa_2026.pdf',
+        url: 'https://www.ttn.edu.vn/attachments/article/7738/Gia_han_thoi_gian_nop_hoc_phi_HK1_nam_hoc_2026_2027_khoa_2026.pdf',
+        size: '1.2 MB',
+        isPdf: true,
+      ),
+    ],
   ),
   NewsModel(
     id: 'ann-ttn-3',
@@ -31,7 +47,15 @@ const List<NewsModel> defaultFallbackAnnouncements = [
     category: 'Học bổng SV',
     author: 'Phòng Công tác sinh viên',
     publishedAt: '20/10/2026',
-    link: 'https://www.ttn.edu.vn/index.php/svthongbao',
+    link: 'https://www.ttn.edu.vn/index.php/svthongbao/7697-1129102601',
+    attachments: [
+      NewsAttachment(
+        title: 'Mau_don_dang_ky_HB_Quy_Thien_Tam_2026_2027.docx',
+        url: 'https://www.ttn.edu.vn/attachments/article/7697/Mau_don_dang_ky_HB_Quy_Thien_Tam_2026_2027.docx',
+        size: '48 kB',
+        isPdf: false,
+      ),
+    ],
   ),
   NewsModel(
     id: 'ann-ttn-4',
@@ -41,7 +65,15 @@ const List<NewsModel> defaultFallbackAnnouncements = [
     category: 'Khảo thí & Lịch thi',
     author: 'Phòng Quản lý Đào tạo',
     publishedAt: '15/10/2026',
-    link: 'https://www.ttn.edu.vn/index.php/svthongbao',
+    link: 'https://www.ttn.edu.vn/index.php/svthongbao/7688-1122102603',
+    attachments: [
+      NewsAttachment(
+        title: '58_TB_vv_thi_Nam_hoc_2026_2027.pdf',
+        url: 'https://www.ttn.edu.vn/attachments/article/7688/58._TB_vv_thi_Nam_hoc_2026_-_2027.pdf',
+        size: '890 kB',
+        isPdf: true,
+      ),
+    ],
   ),
   NewsModel(
     id: 'ann-ttn-5',
@@ -52,6 +84,14 @@ const List<NewsModel> defaultFallbackAnnouncements = [
     author: 'Phòng Công tác sinh viên',
     publishedAt: '10/10/2026',
     link: 'https://www.ttn.edu.vn/index.php/svthongbao',
+    attachments: [
+      NewsAttachment(
+        title: 'QD_miengiamhocphi2026.pdf',
+        url: 'https://www.ttn.edu.vn/attachments/article/7697/QD_miengiamhocphi2026.pdf',
+        size: '640 kB',
+        isPdf: true,
+      ),
+    ],
   ),
 ];
 

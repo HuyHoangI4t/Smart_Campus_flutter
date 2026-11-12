@@ -52,7 +52,7 @@ class HomeScreen extends ConsumerWidget {
       final gpa4 = grades.gpa4;
       final gpa10 = grades.summary.gpa10;
       final credits = grades.accumulatedCredits;
-      final progressPercent = (credits / 140 * 100).clamp(0, 100).round();
+      final progressPercent = (credits / 137 * 100).clamp(0, 100).round();
 
       HomeWidgetService.instance.updateGpaWidget(
         gpa: gpa4 > 0 ? gpa4.toStringAsFixed(2) : '0.00',
@@ -662,35 +662,34 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(height: 20),
 
               // Action buttons
+              if (alert.actionScreen != null && alert.actionScreen!.isNotEmpty) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      if (alert.actionScreen == 'feedback') {
+                        context.push('/feedback');
+                      } else if (alert.actionScreen == 'sos') {
+                        context.push('/sos');
+                      }
+                    },
+                    child: const Text(
+                      'Xem chi tiết',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               Row(
                 children: [
-                  if (alert.actionScreen != null && alert.actionScreen!.isNotEmpty) ...[
-                    Expanded(
-                      child: SizedBox(
-                        height: 44,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 0,
-                          ),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            if (alert.actionScreen == 'feedback') {
-                              context.push('/feedback');
-                            } else if (alert.actionScreen == 'sos') {
-                              context.push('/sos');
-                            }
-                          },
-                          child: const Text(
-                            'Xem chi tiết',
-                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
                   // Nút Xóa nhanh thông báo này trong Dialog
                   Expanded(
                     child: SizedBox(
@@ -699,6 +698,7 @@ class HomeScreen extends ConsumerWidget {
                         style: OutlinedButton.styleFrom(
                           backgroundColor: const Color(0xFFFEF2F2),
                           side: const BorderSide(color: Color(0xFFFECACA)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: () {
@@ -707,6 +707,7 @@ class HomeScreen extends ConsumerWidget {
                         },
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.delete_outline, size: 16, color: Color(0xFFDC2626)),
                             SizedBox(width: 4),
@@ -719,19 +720,22 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    height: 44,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: const Color(0xFFF1F5F9),
-                        side: BorderSide.none,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text(
-                        'Đóng',
-                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          side: BorderSide.none,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text(
+                          'Đóng',
+                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+                        ),
                       ),
                     ),
                   ),

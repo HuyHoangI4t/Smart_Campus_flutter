@@ -496,9 +496,10 @@ async function _syncAnnouncementsInBackground() {
   try {
     const live = await fetchAnnouncementsFromRss();
     if (live && live.length > 0) {
-      await saveItemsToDb(live);
-      enrichItemsWithDetails(live).then((enriched) => saveItemsToDb(enriched)).catch(() => {});
-      announcementsMemCache = sortByNewestDate(live);
+      await preserveCachedFields(live);
+      const enriched = await enrichItemsWithDetails(live);
+      await saveItemsToDb(enriched);
+      announcementsMemCache = sortByNewestDate(enriched);
       announcementsCacheTime = Date.now();
     }
   } catch (err) {
@@ -938,8 +939,8 @@ async function saveArticleDetailToCache(url, detail) {
 // Làm giàu dữ liệu chi tiết toàn văn, ảnh và tệp đính kèm cho danh sách bài viết
 async function enrichItemsWithDetails(items) {
   if (!Array.isArray(items) || items.length === 0) return items;
-  // [PERF] Chỉ làm giàu tối đa 5 bài viết mới nhất để tránh spam hàng chục request làm nghẽn mạng trường
-  const targetItems = items.slice(0, 5);
+  // Làm giàu tối đa 10 bài viết mới nhất để lấy đầy đủ tệp đính kèm và ảnh thực tế
+  const targetItems = items.slice(0, 10);
   for (const it of targetItems) {
     if (it.link && it.link.startsWith('http')) {
       try {
